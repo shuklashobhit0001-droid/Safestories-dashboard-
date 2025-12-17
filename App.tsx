@@ -1,10 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { LoginForm } from './components/LoginForm';
 import { HeroPanel } from './components/HeroPanel';
 import { Logo } from './components/Logo';
 import { Footer } from './components/Footer';
+import { Dashboard } from './components/Dashboard';
 
 const App: React.FC = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  if (isLoggedIn) {
+    return <Dashboard onLogout={() => setIsLoggedIn(false)} />;
+  }
+
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row bg-white overflow-hidden">
       {/* Left Section - Form */}
@@ -15,7 +22,7 @@ const App: React.FC = () => {
         
         <div className="flex-grow flex items-center justify-center py-10">
           <div className="w-full max-w-md">
-            <LoginForm />
+            <LoginForm onLogin={() => setIsLoggedIn(true)} />
           </div>
         </div>
 

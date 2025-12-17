@@ -1,12 +1,42 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Input } from './Input';
 import { Button } from './Button';
 import { User, KeyRound } from 'lucide-react';
 
-export const LoginForm: React.FC = () => {
-  const handleSubmit = (e: React.FormEvent) => {
+interface LoginFormProps {
+  onLogin: () => void;
+}
+
+export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login attempted");
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:3002/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        onLogin();
+      } else {
+        setError('Invalid username or password');
+      }
+    } catch (err) {
+      setError('Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -21,6 +51,8 @@ export const LoginForm: React.FC = () => {
           label="Username" 
           placeholder="enter email address or phone no." 
           icon={User}
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
         />
         
         <Input 
@@ -28,8 +60,16 @@ export const LoginForm: React.FC = () => {
           placeholder="enter password" 
           icon={KeyRound} 
           isPassword
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
         />
       </div>
+
+      {error && (
+        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+          {error}
+        </div>
+      )}
 
       <div className="flex justify-end mt-2 mb-8">
         <a 
@@ -40,8 +80,8 @@ export const LoginForm: React.FC = () => {
         </a>
       </div>
 
-      <Button type="submit" fullWidth className="text-lg">
-        Log In
+      <Button type="submit" fullWidth className="text-lg" disabled={loading}>
+        {loading ? 'Logging in...' : 'Log In'}
       </Button>
     </form>
   );
