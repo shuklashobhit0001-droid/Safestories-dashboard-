@@ -10,7 +10,7 @@ export const AllTherapists: React.FC = () => {
 
   const fetchTherapists = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/therapists');
+      const response = await fetch('/api/therapists');
       const data = await response.json();
       setTherapists(data);
     } catch (error) {

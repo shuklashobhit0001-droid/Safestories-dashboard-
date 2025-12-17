@@ -40,7 +40,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
   const fetchDashboardData = async () => {
     try {
-      const statsRes = await fetch('http://localhost:3002/api/dashboard/stats');
+      const statsRes = await fetch('/api/dashboard/stats');
       const statsData = await statsRes.json();
       
       setStats([
@@ -52,7 +52,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         { title: 'No-shows', value: statsData.noShows.toString(), lastMonth: '0' },
       ]);
 
-      const bookingsRes = await fetch('http://localhost:3002/api/dashboard/bookings');
+      const bookingsRes = await fetch('/api/dashboard/bookings');
       const bookingsData = await bookingsRes.json();
       setBookings(bookingsData);
     } catch (error) {

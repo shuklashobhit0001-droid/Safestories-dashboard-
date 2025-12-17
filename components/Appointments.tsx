@@ -18,7 +18,7 @@ export const Appointments: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:3002/api/appointments')
+    fetch('/api/appointments')
       .then(res => res.json())
       .then(data => {
         setAppointments(data);

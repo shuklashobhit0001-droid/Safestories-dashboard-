@@ -16,7 +16,7 @@ export const AllClients: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:3002/api/clients')
+    fetch('/api/clients')
       .then(res => res.json())
       .then(data => {
         setClients(data);
