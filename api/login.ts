@@ -10,7 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { username, password } = req.body;
 
     const result = await pool.query(
-      'SELECT * FROM users WHERE username = $1 AND password = $2',
+      'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND password = $2',
       [username, password]
     );
 
