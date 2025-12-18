@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 
 export const AllTherapists: React.FC = () => {
   const [therapists, setTherapists] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchTherapists();
@@ -17,6 +18,15 @@ export const AllTherapists: React.FC = () => {
       console.error('Error fetching therapists:', error);
     }
   };
+
+  const filteredTherapists = therapists.filter(therapist => {
+    const query = searchQuery.toLowerCase();
+    return (
+      therapist.name.toLowerCase().includes(query) ||
+      therapist.specialization.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <div className="p-8 h-full flex flex-col">
       {/* Header */}
@@ -30,6 +40,8 @@ export const AllTherapists: React.FC = () => {
           <input
             type="text"
             placeholder="Search users by name or specialization..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
@@ -49,14 +61,14 @@ export const AllTherapists: React.FC = () => {
               </tr>
             </thead>
             <tbody className="h-full">
-              {therapists.length === 0 ? (
+              {filteredTherapists.length === 0 ? (
                 <tr className="h-full">
                   <td colSpan={5} className="text-center text-gray-400 align-middle">
                     No therapists found
                   </td>
                 </tr>
               ) : (
-                therapists.map((therapist, index) => (
+                filteredTherapists.map((therapist, index) => (
                   <tr key={index} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4">{therapist.name}</td>
                     <td className="px-6 py-4">{therapist.specialization}</td>
@@ -70,7 +82,7 @@ export const AllTherapists: React.FC = () => {
           </table>
         </div>
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing 1 to 10 of 32 results</span>
+          <span className="text-sm text-gray-600">Showing {filteredTherapists.length} of {therapists.length} results</span>
           <div className="flex gap-2">
             <button className="p-2 border rounded hover:bg-gray-50">←</button>
             <button className="p-2 border rounded hover:bg-gray-50">→</button>

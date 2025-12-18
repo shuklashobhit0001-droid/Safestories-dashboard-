@@ -5,13 +5,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const result = await pool.query(`
       SELECT 
-        booking_start_at,
+        booking_invitee_time,
         booking_resource_name,
         invitee_name,
         invitee_phone,
         invitee_email,
         booking_host_name,
-        booking_mode
+        booking_mode,
+        booking_start_at
       FROM bookings
       ORDER BY booking_start_at DESC
     `);

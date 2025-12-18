@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Search } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 
 interface Client {
@@ -14,6 +14,7 @@ export const AllClients: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetch('/api/clients')
@@ -27,6 +28,16 @@ export const AllClients: React.FC = () => {
         setLoading(false);
       });
   }, []);
+
+  const filteredClients = clients.filter(client => {
+    const query = searchQuery.toLowerCase();
+    return (
+      client.invitee_name.toLowerCase().includes(query) ||
+      client.invitee_phone.toLowerCase().includes(query) ||
+      client.invitee_email.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <div className="p-8 h-full flex flex-col">
       {/* Header */}
@@ -42,6 +53,18 @@ export const AllClients: React.FC = () => {
           <MessageCircle size={18} />
           Send Booking Link
         </button>
+      </div>
+
+      {/* Search Bar */}
+      <div className="relative mb-6">
+        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+        <input
+          type="text"
+          placeholder="Search users by name, phone no or email id..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+        />
       </div>
 
       {/* Clients Table */}
@@ -64,14 +87,14 @@ export const AllClients: React.FC = () => {
                     Loading...
                   </td>
                 </tr>
-              ) : clients.length === 0 ? (
+              ) : filteredClients.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="text-center text-gray-400 py-8">
                     No clients found
                   </td>
                 </tr>
               ) : (
-                clients.map((client, index) => (
+                filteredClients.map((client, index) => (
                   <tr key={index} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm">{client.invitee_name}</td>
                     <td className="px-6 py-4 text-sm">{client.invitee_phone}</td>
@@ -85,7 +108,7 @@ export const AllClients: React.FC = () => {
           </table>
         </div>
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {clients.length} client{clients.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-gray-600">Showing {filteredClients.length} of {clients.length} client{clients.length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
             <button className="p-2 border rounded hover:bg-gray-50">←</button>
             <button className="p-2 border rounded hover:bg-gray-50">→</button>

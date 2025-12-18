@@ -1,7 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from '../../lib/db.js';
+import pool from '../lib/db';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function test() {
   try {
     const result = await pool.query(`
       SELECT 
@@ -17,10 +16,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ORDER BY bookings.booking_start_at ASC
       LIMIT 10
     `);
-
-    res.json(result.rows);
+    
+    console.log('API Result:');
+    console.log(JSON.stringify(result.rows, null, 2));
+    
+    await pool.end();
   } catch (error) {
-    console.error('Error fetching bookings:', error);
-    res.status(500).json({ error: 'Failed to fetch bookings' });
+    console.error('Error:', error);
+    process.exit(1);
   }
 }
+
+test();

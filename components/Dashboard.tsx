@@ -16,8 +16,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('Dec 2025');
+  const [showCustomCalendar, setShowCustomCalendar] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
-  const monthOptions = ['Nov 2025', 'Oct 2025', 'Sep 2025', 'Aug 2025', 'Jul 2025'];
+  const monthOptions = ['Dec 2025', 'Nov 2025', 'Oct 2025', 'Sep 2025', 'Aug 2025', 'Jul 2025', 'Jun 2025', 'May 2025', 'Apr 2025', 'Mar 2025', 'Feb 2025', 'Jan 2025'];
 
   const [stats, setStats] = useState([
     { title: 'Revenue', value: '₹0', lastMonth: '₹0' },
@@ -32,15 +36,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const handleMonthSelect = (month: string) => {
     setSelectedMonth(month);
     setIsDateDropdownOpen(false);
+    setShowCustomCalendar(false);
+    
+    const [monthName, year] = month.split(' ');
+    const monthMap: { [key: string]: number } = {
+      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+    };
+    const monthNum = monthMap[monthName];
+    const start = new Date(parseInt(year), monthNum, 1).toISOString().split('T')[0];
+    const end = new Date(parseInt(year), monthNum + 1, 0).toISOString().split('T')[0];
+    
+    setDateRange({ start, end });
+  };
+
+  const handleCustomDateApply = () => {
+    if (startDate && endDate) {
+      setDateRange({ start: startDate, end: endDate });
+      setSelectedMonth(`${startDate} to ${endDate}`);
+      setShowCustomCalendar(false);
+      setIsDateDropdownOpen(false);
+    }
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    setDateRange({ start, end });
   }, []);
+
+  useEffect(() => {
+    if (dateRange.start && dateRange.end) {
+      fetchDashboardData();
+    }
+  }, [dateRange]);
 
   const fetchDashboardData = async () => {
     try {
-      const statsRes = await fetch('/api/dashboard/stats');
+      const statsRes = await fetch(`/api/dashboard/stats?start=${dateRange.start}&end=${dateRange.end}`);
       const statsData = await statsRes.json();
       
       setStats([
@@ -52,7 +86,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         { title: 'No-shows', value: statsData.noShows.toString(), lastMonth: '0' },
       ]);
 
-      const bookingsRes = await fetch('/api/dashboard/bookings');
+      const bookingsRes = await fetch(`/api/dashboard/bookings?start=${dateRange.start}&end=${dateRange.end}`);
       const bookingsData = await bookingsRes.json();
       setBookings(bookingsData);
     } catch (error) {
@@ -158,24 +192,61 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 )}
               </button>
               {isDateDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg z-10">
-                  <button
-                    onClick={() => {
-                      setIsDateDropdownOpen(false);
-                    }}
-                    className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
-                  >
-                    Custom Dates
-                  </button>
-                  {monthOptions.map((month) => (
-                    <button
-                      key={month}
-                      onClick={() => handleMonthSelect(month)}
-                      className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
-                    >
-                      {month}
-                    </button>
-                  ))}
+                <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
+                  {!showCustomCalendar ? (
+                    <>
+                      <button
+                        onClick={() => setShowCustomCalendar(true)}
+                        className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                      >
+                        Custom Dates
+                      </button>
+                      {monthOptions.map((month) => (
+                        <button
+                          key={month}
+                          onClick={() => handleMonthSelect(month)}
+                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
+                        >
+                          {month}
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="p-4">
+                      <div className="mb-3">
+                        <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                        <input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setShowCustomCalendar(false)}
+                          className="flex-1 px-3 py-2 border rounded text-sm hover:bg-gray-100"
+                        >
+                          Back
+                        </button>
+                        <button
+                          onClick={handleCustomDateApply}
+                          className="flex-1 px-3 py-2 bg-teal-700 text-white rounded text-sm hover:bg-teal-800"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -229,16 +300,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                         <td className="px-6 py-4">{booking.therapy_type}</td>
                         <td className="px-6 py-4">{booking.mode}</td>
                         <td className="px-6 py-4">{booking.therapist_name}</td>
-                        <td className="px-6 py-4">
-                          {new Date(booking.booking_start_at).toLocaleString('en-GB', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true
-                          })}
-                        </td>
+                        <td className="px-6 py-4">{booking.booking_start_at}</td>
                       </tr>
                     ))
                   )}

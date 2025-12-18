@@ -16,6 +16,7 @@ export const Appointments: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetch('/api/appointments')
@@ -30,17 +31,17 @@ export const Appointments: React.FC = () => {
       });
   }, []);
 
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
+
+
+  const filteredAppointments = appointments.filter(apt => {
+    const query = searchQuery.toLowerCase();
+    return (
+      apt.booking_resource_name.toLowerCase().includes(query) ||
+      apt.invitee_name.toLowerCase().includes(query) ||
+      apt.booking_host_name.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <div className="p-8 h-full flex flex-col">
       {/* Header */}
@@ -64,6 +65,8 @@ export const Appointments: React.FC = () => {
         <input
           type="text"
           placeholder="Search appointments by session, client or therapist name..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
         />
       </div>
@@ -89,16 +92,16 @@ export const Appointments: React.FC = () => {
                     Loading...
                   </td>
                 </tr>
-              ) : appointments.length === 0 ? (
+              ) : filteredAppointments.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center text-gray-400 py-8">
                     No appointments found
                   </td>
                 </tr>
               ) : (
-                appointments.map((apt, index) => (
+                filteredAppointments.map((apt, index) => (
                   <tr key={index} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm">{formatDateTime(apt.booking_start_at)}</td>
+                    <td className="px-6 py-4 text-sm">{apt.booking_start_at}</td>
                     <td className="px-6 py-4 text-sm">{apt.booking_resource_name}</td>
                     <td className="px-6 py-4 text-sm">{apt.invitee_name}</td>
                     <td className="px-6 py-4 text-sm">
@@ -114,7 +117,7 @@ export const Appointments: React.FC = () => {
           </table>
         </div>
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {appointments.length} appointment{appointments.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-gray-600">Showing {filteredAppointments.length} of {appointments.length} appointment{appointments.length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
             <button className="p-2 border rounded hover:bg-gray-50">←</button>
             <button className="p-2 border rounded hover:bg-gray-50">→</button>
