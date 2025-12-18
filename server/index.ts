@@ -233,6 +233,48 @@ app.get('/api/appointments', async (req, res) => {
   }
 });
 
+// Get therapies
+app.get('/api/therapies', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT specialization
+      FROM therapists
+      WHERE specialization IS NOT NULL
+    `);
+
+    const therapySet = new Set<string>();
+    result.rows.forEach(row => {
+      const specializations = row.specialization.split(',').map((s: string) => s.trim());
+      specializations.forEach((spec: string) => therapySet.add(spec));
+    });
+
+    const therapies = Array.from(therapySet).sort().map(therapy => ({ therapy_name: therapy }));
+    res.json(therapies);
+  } catch (error) {
+    console.error('Error fetching therapies:', error);
+    res.status(500).json({ error: 'Failed to fetch therapies' });
+  }
+});
+
+// Save booking request
+app.post('/api/booking-requests', async (req, res) => {
+  try {
+    const { clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO booking_requests (client_name, client_whatsapp, client_email, therapy_type, therapist_name, booking_link, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'sent')
+       RETURNING *`,
+      [clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink]
+    );
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error saving booking request:', error);
+    res.status(500).json({ success: false, error: 'Failed to save booking request' });
+  }
+});
+
 // Get all therapists
 app.get('/api/therapists', async (req, res) => {
   try {

@@ -241,7 +241,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
 
   const fetchTherapies = async () => {
     try {
-      const response = await fetch('/api/therapies');
+      const response = await fetch('http://localhost:3002/api/therapies');
       const data = await response.json();
       setTherapies(data);
     } catch (error) {
@@ -251,7 +251,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
 
   const fetchTherapists = async () => {
     try {
-      const response = await fetch('/api/therapists');
+      const response = await fetch('http://localhost:3002/api/therapists');
       const data = await response.json();
       setTherapists(data);
     } catch (error) {
@@ -268,7 +268,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
     try {
       const bookingLink = `https://calendly.com/safestories/${therapyType.toLowerCase().replace(/\s+/g, '-')}`;
       
-      const response = await fetch('/api/booking-requests', {
+      const response = await fetch('http://localhost:3002/api/booking-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
