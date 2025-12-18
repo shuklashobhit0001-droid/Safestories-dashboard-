@@ -70,15 +70,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     if (dateRange.start && dateRange.end) {
       fetchDashboardData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
 
   const fetchDashboardData = async () => {
     try {
       const statsRes = await fetch(`/api/dashboard/stats?start=${dateRange.start}&end=${dateRange.end}`);
+      if (!statsRes.ok) throw new Error('Failed to fetch stats');
       const statsData = await statsRes.json();
       
       setStats([
-        { title: 'Revenue', value: `₹${statsData.revenue.toLocaleString()}`, lastMonth: '₹0' },
+        { title: 'Revenue', value: `₹${Number(statsData.revenue).toLocaleString()}`, lastMonth: '₹0' },
         { title: 'Sessions', value: statsData.sessions.toString(), lastMonth: '0' },
         { title: 'Free Consultations', value: statsData.freeConsultations.toString(), lastMonth: '0' },
         { title: 'Cancelled', value: statsData.cancelled.toString(), lastMonth: '0' },
@@ -87,6 +89,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       ]);
 
       const bookingsRes = await fetch(`/api/dashboard/bookings?start=${dateRange.start}&end=${dateRange.end}`);
+      if (!bookingsRes.ok) throw new Error('Failed to fetch bookings');
       const bookingsData = await bookingsRes.json();
       setBookings(bookingsData);
     } catch (error) {
@@ -160,7 +163,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto relative">
         {activeView === 'clients' ? (
           <AllClients />
         ) : activeView === 'therapists' ? (
@@ -177,78 +180,80 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               <h1 className="text-3xl font-bold mb-1">Dashboard</h1>
               <p className="text-gray-600">Welcome Back, Pooja!</p>
             </div>
-            <div className="relative">
-              <button 
-                onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
-                className="flex items-center gap-2 border rounded-lg px-4 py-2"
-                style={{ backgroundColor: '#2D757938' }}
-              >
-                <PieChart size={18} className="text-gray-600" />
-                <span className="text-sm text-teal-700">{selectedMonth}</span>
-                {isDateDropdownOpen ? (
-                  <ChevronUp size={16} className="text-teal-700" />
-                ) : (
-                  <ChevronDown size={16} className="text-teal-700" />
-                )}
-              </button>
-              {isDateDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
-                  {!showCustomCalendar ? (
-                    <>
-                      <button
-                        onClick={() => setShowCustomCalendar(true)}
-                        className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
-                      >
-                        Custom Dates
-                      </button>
-                      {monthOptions.map((month) => (
-                        <button
-                          key={month}
-                          onClick={() => handleMonthSelect(month)}
-                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
-                        >
-                          {month}
-                        </button>
-                      ))}
-                    </>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <button 
+                  onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+                  className="flex items-center gap-2 border rounded-lg px-4 py-2"
+                  style={{ backgroundColor: '#2D757938' }}
+                >
+                  <PieChart size={18} className="text-gray-600" />
+                  <span className="text-sm text-teal-700">{selectedMonth}</span>
+                  {isDateDropdownOpen ? (
+                    <ChevronUp size={16} className="text-teal-700" />
                   ) : (
-                    <div className="p-4">
-                      <div className="mb-3">
-                        <label className="block text-xs text-gray-600 mb-1">Start Date</label>
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full px-3 py-2 border rounded text-sm"
-                        />
-                      </div>
-                      <div className="mb-3">
-                        <label className="block text-xs text-gray-600 mb-1">End Date</label>
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full px-3 py-2 border rounded text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setShowCustomCalendar(false)}
-                          className="flex-1 px-3 py-2 border rounded text-sm hover:bg-gray-100"
-                        >
-                          Back
-                        </button>
-                        <button
-                          onClick={handleCustomDateApply}
-                          className="flex-1 px-3 py-2 bg-teal-700 text-white rounded text-sm hover:bg-teal-800"
-                        >
-                          Apply
-                        </button>
-                      </div>
-                    </div>
+                    <ChevronDown size={16} className="text-teal-700" />
                   )}
-                </div>
-              )}
+                </button>
+                {isDateDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
+                    {!showCustomCalendar ? (
+                      <>
+                        <button
+                          onClick={() => setShowCustomCalendar(true)}
+                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                        >
+                          Custom Dates
+                        </button>
+                        {monthOptions.map((month) => (
+                          <button
+                            key={month}
+                            onClick={() => handleMonthSelect(month)}
+                            className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
+                          >
+                            {month}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <div className="p-4">
+                        <div className="mb-3">
+                          <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                          <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="w-full px-3 py-2 border rounded text-sm"
+                          />
+                        </div>
+                        <div className="mb-3">
+                          <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                          <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="w-full px-3 py-2 border rounded text-sm"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setShowCustomCalendar(false)}
+                            className="flex-1 px-3 py-2 border rounded text-sm hover:bg-gray-100"
+                          >
+                            Back
+                          </button>
+                          <button
+                            onClick={handleCustomDateApply}
+                            className="flex-1 px-3 py-2 bg-teal-700 text-white rounded text-sm hover:bg-teal-800"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -318,7 +323,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         </div>
         )}
       </div>
-      <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {isModalOpen && <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />}
     </div>
   );
 };

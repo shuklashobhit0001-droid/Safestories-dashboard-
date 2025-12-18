@@ -31,43 +31,66 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/dashboard/stats', async (req, res) => {
   try {
     const { start, end } = req.query;
-    const dateFilter = start && end ? `AND booking_start_at BETWEEN '${start}' AND '${end} 23:59:59'` : '';
+    const hasDateFilter = start && end;
+    
+    const revenue = hasDateFilter
+      ? await pool.query(
+          'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status != $1 AND booking_start_at BETWEEN $2 AND $3',
+          ['cancelled', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status != $1',
+          ['cancelled']
+        );
 
-    const revenue = await pool.query(`
-      SELECT COALESCE(SUM(invitee_payment_amount), 0) as total
-      FROM bookings 
-      WHERE booking_status != 'cancelled' ${dateFilter}
-    `);
+    const sessions = hasDateFilter
+      ? await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+          ['confirmed', 'rescheduled', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2)',
+          ['confirmed', 'rescheduled']
+        );
 
-    const sessions = await pool.query(`
-      SELECT COUNT(*) as total
-      FROM bookings 
-      WHERE booking_status IN ('confirmed', 'rescheduled') ${dateFilter}
-    `);
+    const freeConsultations = hasDateFilter
+      ? await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL) AND booking_start_at BETWEEN $1 AND $2',
+          [start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL)'
+        );
 
-    const freeConsultations = await pool.query(`
-      SELECT COUNT(*) as total
-      FROM bookings 
-      WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL) ${dateFilter}
-    `);
+    const cancelled = hasDateFilter
+      ? await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1 AND booking_start_at BETWEEN $2 AND $3',
+          ['cancelled', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1',
+          ['cancelled']
+        );
 
-    const cancelled = await pool.query(`
-      SELECT COUNT(*) as total
-      FROM bookings 
-      WHERE booking_status = 'cancelled' ${dateFilter}
-    `);
+    const refunds = hasDateFilter
+      ? await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE refund_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+          ['completed', 'processed', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE refund_status IN ($1, $2)',
+          ['completed', 'processed']
+        );
 
-    const refunds = await pool.query(`
-      SELECT COUNT(*) as total
-      FROM bookings 
-      WHERE refund_status IN ('completed', 'processed') ${dateFilter}
-    `);
-
-    const noShows = await pool.query(`
-      SELECT COUNT(*) as total
-      FROM bookings 
-      WHERE booking_status = 'no_show' ${dateFilter}
-    `);
+    const noShows = hasDateFilter
+      ? await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1 AND booking_start_at BETWEEN $2 AND $3',
+          ['no_show', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1',
+          ['no_show']
+        );
 
     res.json({
       revenue: revenue.rows[0].total,
@@ -87,23 +110,36 @@ app.get('/api/dashboard/stats', async (req, res) => {
 app.get('/api/dashboard/bookings', async (req, res) => {
   try {
     const { start, end } = req.query;
-    const dateFilter = start && end 
-      ? `AND booking_start_at BETWEEN '${start}' AND '${end} 23:59:59'`
-      : 'AND booking_start_at >= CURRENT_DATE';
-
-    const result = await pool.query(`
-      SELECT 
-        invitee_name as client_name,
-        booking_resource_name as therapy_type,
-        booking_mode as mode,
-        booking_host_name as therapist_name,
-        booking_invitee_time
-      FROM bookings
-      WHERE booking_status != 'cancelled'
-        ${dateFilter}
-      ORDER BY booking_start_at ASC
-      LIMIT 10
-    `);
+    
+    const result = start && end
+      ? await pool.query(
+          `SELECT 
+            invitee_name as client_name,
+            booking_resource_name as therapy_type,
+            booking_mode as mode,
+            booking_host_name as therapist_name,
+            booking_invitee_time
+          FROM bookings
+          WHERE booking_status != $1
+            AND booking_start_at BETWEEN $2 AND $3
+          ORDER BY booking_start_at ASC
+          LIMIT 10`,
+          ['cancelled', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          `SELECT 
+            invitee_name as client_name,
+            booking_resource_name as therapy_type,
+            booking_mode as mode,
+            booking_host_name as therapist_name,
+            booking_invitee_time
+          FROM bookings
+          WHERE booking_status != $1
+            AND booking_start_at >= CURRENT_DATE
+          ORDER BY booking_start_at ASC
+          LIMIT 10`,
+          ['cancelled']
+        );
 
     const convertToIST = (timeStr: string) => {
       const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
@@ -259,13 +295,13 @@ app.get('/api/therapies', async (req, res) => {
 // Save booking request
 app.post('/api/booking-requests', async (req, res) => {
   try {
-    const { clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink } = req.body;
+    const { clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO booking_requests (client_name, client_whatsapp, client_email, therapy_type, therapist_name, booking_link, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'sent')
+      `INSERT INTO booking_requests (client_name, client_whatsapp, client_email, therapy_type, therapist_name, booking_link, status, is_free_consultation)
+       VALUES ($1, $2, $3, $4, $5, $6, 'sent', $7)
        RETURNING *`,
-      [clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink]
+      [clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation || false]
     );
 
     res.json({ success: true, data: result.rows[0] });

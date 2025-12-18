@@ -24,6 +24,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
   const [therapies, setTherapies] = useState<Therapy[]>([]);
   const [therapists, setTherapists] = useState<Therapist[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isFreeConsultation, setIsFreeConsultation] = useState(false);
 
   const countryCodes = [
     { code: '+1', country: 'USA/Canada' },
@@ -241,7 +242,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
 
   const fetchTherapies = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/therapies');
+      const response = await fetch('/api/therapies');
       const data = await response.json();
       setTherapies(data);
     } catch (error) {
@@ -251,7 +252,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
 
   const fetchTherapists = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/therapists');
+      const response = await fetch('/api/therapists');
       const data = await response.json();
       setTherapists(data);
     } catch (error) {
@@ -268,7 +269,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
     try {
       const bookingLink = `https://calendly.com/safestories/${therapyType.toLowerCase().replace(/\s+/g, '-')}`;
       
-      const response = await fetch('http://localhost:3002/api/booking-requests', {
+      const response = await fetch('/api/booking-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -278,6 +279,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
           therapyType,
           therapistName,
           bookingLink,
+          isFreeConsultation,
         }),
       });
 
@@ -378,6 +380,26 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
               />
             </div>
 
+            {/* Free Consultation Checkbox */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="freeConsultation"
+                checked={isFreeConsultation}
+                onChange={(e) => {
+                  setIsFreeConsultation(e.target.checked);
+                  if (e.target.checked) {
+                    setTherapyType('');
+                    setTherapistName('');
+                  }
+                }}
+                className="w-4 h-4 text-teal-700 border-gray-300 rounded focus:ring-teal-500"
+              />
+              <label htmlFor="freeConsultation" className="text-sm font-medium cursor-pointer">
+                Free Consultation
+              </label>
+            </div>
+
             {/* Select Therapy and Therapist */}
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -388,8 +410,9 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
                   <select 
                     value={therapyType}
                     onChange={(e) => setTherapyType(e.target.value)}
-                    className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 appearance-none bg-white"
-                    required
+                    className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 appearance-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    required={!isFreeConsultation}
+                    disabled={isFreeConsultation}
                   >
                     <option value="">Select</option>
                     {therapies.map((therapy) => (
@@ -413,8 +436,9 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
                   <select 
                     value={therapistName}
                     onChange={(e) => setTherapistName(e.target.value)}
-                    className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 appearance-none bg-white"
-                    required
+                    className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 appearance-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    required={!isFreeConsultation}
+                    disabled={isFreeConsultation}
                   >
                     <option value="">Select</option>
                     {therapists.map((therapist) => (
