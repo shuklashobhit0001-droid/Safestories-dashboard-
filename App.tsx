@@ -4,15 +4,42 @@ import { HeroPanel } from './components/HeroPanel';
 import { Logo } from './components/Logo';
 import { Footer } from './components/Footer';
 import { Dashboard } from './components/Dashboard';
+import { Monitor } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return localStorage.getItem('isLoggedIn') === 'true';
   });
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('isLoggedIn', isLoggedIn.toString());
   }, [isLoggedIn]);
+
+  if (isMobile) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-teal-50 to-teal-100 p-6">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md text-center">
+          <div className="mb-6 flex justify-center">
+            <div className="w-20 h-20 bg-teal-100 rounded-full flex items-center justify-center">
+              <Monitor size={40} className="text-teal-700" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-4">Desktop View Required</h1>
+          <p className="text-gray-600 mb-2">Mobile view is not available yet.</p>
+          <p className="text-gray-600">Please view this application on a desktop or laptop for the best experience.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleLogin = () => {
     setIsLoggedIn(true);
