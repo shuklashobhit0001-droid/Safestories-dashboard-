@@ -1,21 +1,22 @@
 import pool from '../lib/db';
 
-async function checkBooking() {
+async function checkSanjanaBooking() {
   try {
     const result = await pool.query(`
       SELECT 
         invitee_name,
-        booking_invitee_time,
         booking_start_at,
-        booking_host_name
-      FROM bookings
-      WHERE booking_host_name LIKE '%Ishika%'
-      ORDER BY booking_start_at DESC
-      LIMIT 5
+        booking_end_at,
+        booking_invitee_time,
+        NOW() as current_time,
+        booking_end_at >= NOW() as is_upcoming
+      FROM bookings 
+      WHERE invitee_name ILIKE '%sanjana%'
+      LIMIT 1
     `);
     
-    console.log('Bookings with Ishika:');
-    console.table(result.rows);
+    console.log('\n=== Sanjana Booking Data ===');
+    console.log(JSON.stringify(result.rows, null, 2));
     
     await pool.end();
   } catch (error) {
@@ -24,4 +25,4 @@ async function checkBooking() {
   }
 }
 
-checkBooking();
+checkSanjanaBooking();

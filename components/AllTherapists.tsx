@@ -71,7 +71,15 @@ export const AllTherapists: React.FC = () => {
                 filteredTherapists.map((therapist, index) => (
                   <tr key={index} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4">{therapist.name}</td>
-                    <td className="px-6 py-4">{therapist.specialization}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-2">
+                        {therapist.specialization.split(',').map((spec: string, i: number) => (
+                          <span key={i} className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#2D757930', color: '#2D7579' }}>
+                            {spec.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
                     <td className="px-6 py-4">{therapist.contact_info || '-'}</td>
                     <td className="px-6 py-4">{therapist.sessions_booked}</td>
                     <td className="px-6 py-4">{therapist.capacity || '-'}</td>

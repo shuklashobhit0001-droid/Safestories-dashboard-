@@ -267,8 +267,6 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
     setLoading(true);
 
     try {
-      const bookingLink = `https://calendly.com/safestories/${therapyType.toLowerCase().replace(/\s+/g, '-')}`;
-      
       const response = await fetch('/api/booking-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -278,17 +276,13 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
           clientEmail,
           therapyType,
           therapistName,
-          bookingLink,
+          bookingLink: null,
           isFreeConsultation,
         }),
       });
 
       if (response.ok) {
-        const message = `Hi ${clientName}, book your ${therapyType} session with ${therapistName}: ${bookingLink}`;
-        const whatsappUrl = `https://wa.me/${countryCode.replace('+', '')}${clientWhatsapp}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
-        
-        alert('Booking request saved successfully!');
+        alert('Booking request Sent successfully!');
         setClientName('');
         setClientWhatsapp('');
         setClientEmail('');

@@ -135,7 +135,7 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_invitee_time
           FROM bookings
           WHERE booking_status != $1
-            AND booking_start_at >= CURRENT_DATE
+            AND booking_end_at >= NOW()
           ORDER BY booking_start_at ASC
           LIMIT 10`,
           ['cancelled']
@@ -191,13 +191,25 @@ app.get('/api/clients', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
+        invitee_name,
+        invitee_phone,
+        invitee_email,
+        booking_host_name,
+        COUNT(*) as session_count
+      FROM bookings
+      GROUP BY invitee_name, invitee_phone, invitee_email, booking_host_name
+      
+      UNION ALL
+      
+      SELECT 
         client_name as invitee_name,
-        phone_number as invitee_phone,
-        email_id as invitee_email,
-        assigned_therapist as booking_host_name,
-        no_of_sessions as session_count
-      FROM all_clients_table
-      ORDER BY client_name
+        client_whatsapp as invitee_phone,
+        client_email as invitee_email,
+        therapist_name as booking_host_name,
+        0 as session_count
+      FROM booking_requests
+      
+      ORDER BY invitee_name
     `);
 
     res.json(result.rows);

@@ -313,7 +313,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               </table>
             </div>
             <div className="px-6 py-4 border-t flex justify-between items-center">
-              <span className="text-sm text-gray-600">Showing 1 to 10 of 32 results</span>
+              <span className="text-sm text-gray-600">Showing {bookings.length} result{bookings.length !== 1 ? 's' : ''}</span>
               <div className="flex gap-2">
                 <button className="p-2 border rounded hover:bg-gray-50">←</button>
                 <button className="p-2 border rounded hover:bg-gray-50">→</button>

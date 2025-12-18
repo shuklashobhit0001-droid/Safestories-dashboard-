@@ -6,7 +6,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { start, end } = req.query;
     const dateFilter = start && end 
       ? `AND booking_start_at BETWEEN '${start}' AND '${end} 23:59:59'`
-      : 'AND booking_start_at >= CURRENT_DATE';
+      : 'AND booking_end_at >= NOW()';
 
     const result = await pool.query(`
       SELECT 

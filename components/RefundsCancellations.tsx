@@ -1,16 +1,56 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
+
+interface Refund {
+  client_name: string;
+  session_name: string;
+  session_timings: string;
+  refund_status: string;
+  invitee_phone: string;
+  invitee_email: string;
+  refund_amount: number;
+}
 
 export const RefundsCancellations: React.FC = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [refunds, setRefunds] = useState<Refund[]>([]);
 
   const tabs = [
     { id: 'all', label: 'All Cancellations' },
-    { id: 'pending', label: 'Refund Pending' },
-    { id: 'completed', label: 'Refund Completed' },
-    { id: 'failed', label: 'Refund Failed' },
+    { id: 'Pending', label: 'Refund Pending' },
+    { id: 'Completed', label: 'Refund Completed' },
+    { id: 'Failed', label: 'Refund Failed' },
   ];
+
+  useEffect(() => {
+    fetchRefunds();
+  }, [activeTab]);
+
+  const fetchRefunds = async () => {
+    try {
+      const response = await fetch(`/api/refunds?status=${activeTab}`);
+      const data = await response.json();
+      setRefunds(data);
+    } catch (error) {
+      console.error('Error fetching refunds:', error);
+    }
+  };
+
+  const filteredRefunds = refunds.filter(refund => 
+    refund.client_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-IN', { 
+      day: '2-digit', 
+      month: 'short', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   return (
     <div className="p-8 h-full flex flex-col">
@@ -62,16 +102,38 @@ export const RefundsCancellations: React.FC = () => {
               </tr>
             </thead>
             <tbody className="h-full">
-              <tr className="h-full">
-                <td colSpan={4} className="text-center text-gray-400 align-middle">
-                  No refunds or cancellations found
-                </td>
-              </tr>
+              {filteredRefunds.length === 0 ? (
+                <tr className="h-full">
+                  <td colSpan={4} className="text-center text-gray-400 align-middle">
+                    No refunds or cancellations found
+                  </td>
+                </tr>
+              ) : (
+                filteredRefunds.map((refund, index) => (
+                  <tr key={index} className="border-b hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div>{refund.client_name}</div>
+                      <div className="text-xs text-gray-500">{refund.invitee_phone || refund.invitee_email}</div>
+                    </td>
+                    <td className="px-6 py-4">{refund.session_name}</td>
+                    <td className="px-6 py-4">{formatDateTime(refund.session_timings)}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        refund.refund_status === 'Completed' ? 'bg-green-100 text-green-700' :
+                        refund.refund_status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {refund.refund_status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing 1 to 10 of 32 results</span>
+          <span className="text-sm text-gray-600">Showing {filteredRefunds.length} of {refunds.length} results</span>
           <div className="flex gap-2">
             <button className="p-2 border rounded hover:bg-gray-50">←</button>
             <button className="p-2 border rounded hover:bg-gray-50">→</button>
