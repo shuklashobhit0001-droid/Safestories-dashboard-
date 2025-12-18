@@ -1,7 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from '../lib/db.js';
+import pool from '../lib/db';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function testClientsAPI() {
   try {
     const result = await pool.query(`
       SELECT 
@@ -28,9 +27,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ORDER BY created_at DESC NULLS LAST
     `);
 
-    res.json(result.rows);
+    console.log('Query results:');
+    result.rows.forEach((row, index) => {
+      console.log(`${index + 1}. ${row.invitee_name} - ${row.created_at}`);
+    });
+
+    await pool.end();
   } catch (error) {
-    console.error('Error fetching clients:', error);
-    res.status(500).json({ error: 'Failed to fetch clients' });
+    console.error('Error:', error);
+    process.exit(1);
   }
 }
+
+testClientsAPI();

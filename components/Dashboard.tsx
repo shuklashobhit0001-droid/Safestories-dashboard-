@@ -15,7 +15,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [activeView, setActiveView] = useState('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState('Dec 2025');
+  const [selectedMonth, setSelectedMonth] = useState('All Time');
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -59,23 +59,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     }
   };
 
-  useEffect(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-    setDateRange({ start, end });
-  }, []);
+
 
   useEffect(() => {
-    if (dateRange.start && dateRange.end) {
-      fetchDashboardData();
-    }
+    fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
 
   const fetchDashboardData = async () => {
     try {
-      const statsRes = await fetch(`/api/dashboard/stats?start=${dateRange.start}&end=${dateRange.end}`);
+      const statsUrl = dateRange.start && dateRange.end 
+        ? `/api/dashboard/stats?start=${dateRange.start}&end=${dateRange.end}`
+        : '/api/dashboard/stats';
+      const statsRes = await fetch(statsUrl);
       if (!statsRes.ok) throw new Error('Failed to fetch stats');
       const statsData = await statsRes.json();
       
@@ -88,7 +84,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         { title: 'No-shows', value: statsData.noShows.toString(), lastMonth: '0' },
       ]);
 
-      const bookingsRes = await fetch(`/api/dashboard/bookings?start=${dateRange.start}&end=${dateRange.end}`);
+      const bookingsRes = await fetch(`/api/dashboard/bookings`);
       if (!bookingsRes.ok) throw new Error('Failed to fetch bookings');
       const bookingsData = await bookingsRes.json();
       setBookings(bookingsData);
@@ -199,6 +195,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                   <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
                     {!showCustomCalendar ? (
                       <>
+                        <button
+                          onClick={() => {
+                            setSelectedMonth('All Time');
+                            setDateRange({ start: '', end: '' });
+                            setIsDateDropdownOpen(false);
+                          }}
+                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                        >
+                          All Time
+                        </button>
                         <button
                           onClick={() => setShowCustomCalendar(true)}
                           className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"

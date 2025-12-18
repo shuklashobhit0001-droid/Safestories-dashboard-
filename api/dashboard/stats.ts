@@ -4,7 +4,7 @@ import pool from '../../lib/db.js';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { start, end } = req.query;
-    const dateFilter = start && end ? `AND booking_start_at BETWEEN '${start}' AND '${end} 23:59:59'` : '';
+    const dateFilter = start && end ? `AND invitee_created_at BETWEEN '${start}' AND '${end} 23:59:59'` : '';
 
     const revenue = await pool.query(`
       SELECT COALESCE(SUM(invitee_payment_amount), 0) as total
@@ -13,7 +13,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `);
 
     const sessions = await pool.query(`
-      SELECT COUNT(*) as total
+      SELECT COUNT(invitee_created_at) as total
       FROM bookings 
       WHERE booking_status IN ('confirmed', 'rescheduled') ${dateFilter}
     `);
