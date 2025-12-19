@@ -7,13 +7,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink } = req.body;
+    const { clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO booking_requests (client_name, client_whatsapp, client_email, therapy_type, therapist_name, booking_link, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'sent')
+      `INSERT INTO booking_requests (client_name, client_whatsapp, client_email, therapy_type, therapist_name, booking_link, status, is_free_consultation)
+       VALUES ($1, $2, $3, $4, $5, $6, 'sent', $7)
        RETURNING *`,
-      [clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink]
+      [clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation || false]
     );
 
     res.json({ success: true, data: result.rows[0] });
