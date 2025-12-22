@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search } from 'lucide-react';
+import { MessageCircle, Search, Download } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 
 interface Client {
@@ -38,6 +38,30 @@ export const AllClients: React.FC = () => {
     );
   });
 
+  const exportToCSV = () => {
+    const headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Sessions', 'Assigned Therapist'];
+    const rows = filteredClients.map(client => [
+      client.invitee_name,
+      client.invitee_phone,
+      client.invitee_email,
+      client.session_count,
+      client.booking_host_name
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clients_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-8 h-full flex flex-col">
       {/* Header */}
@@ -56,15 +80,24 @@ export const AllClients: React.FC = () => {
       </div>
 
       {/* Search Bar */}
-      <div className="relative mb-6">
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-        <input
-          type="text"
-          placeholder="Search users by name, phone no or email id..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-        />
+      <div className="relative mb-6 flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Search users by name, phone no or email id..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+        </div>
+        <button
+          onClick={exportToCSV}
+          className="bg-teal-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800 whitespace-nowrap text-sm"
+        >
+          <Download size={16} />
+          Export CSV
+        </button>
       </div>
 
       {/* Clients Table */}
