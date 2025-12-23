@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search } from 'lucide-react';
+import { MessageCircle, Search, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
+
+interface Therapist {
+  invitee_name: string;
+  invitee_phone: string;
+  booking_host_name: string;
+  session_count: number;
+}
 
 interface Client {
   invitee_name: string;
@@ -8,6 +15,7 @@ interface Client {
   invitee_email: string;
   booking_host_name: string;
   session_count: number;
+  therapists: Therapist[];
 }
 
 export const AllClients: React.FC = () => {
@@ -15,6 +23,7 @@ export const AllClients: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetch('/api/clients')
@@ -29,14 +38,48 @@ export const AllClients: React.FC = () => {
       });
   }, []);
 
+  const toggleRow = (index: number) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedRows(newExpanded);
+  };
+
   const filteredClients = clients.filter(client => {
     const query = searchQuery.toLowerCase();
     return (
-      client.invitee_name.toLowerCase().includes(query) ||
-      client.invitee_phone.toLowerCase().includes(query) ||
-      client.invitee_email.toLowerCase().includes(query)
+      (client.invitee_name || '').toLowerCase().includes(query) ||
+      (client.invitee_phone || '').toLowerCase().includes(query) ||
+      (client.invitee_email || '').toLowerCase().includes(query)
     );
   });
+
+  const exportToCSV = () => {
+    const headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Sessions', 'Assigned Therapist'];
+    const rows = filteredClients.map(client => [
+      client.invitee_name,
+      client.invitee_phone,
+      client.invitee_email,
+      client.session_count,
+      client.booking_host_name
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clients_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="p-8 h-full flex flex-col">
@@ -56,15 +99,24 @@ export const AllClients: React.FC = () => {
       </div>
 
       {/* Search Bar */}
-      <div className="relative mb-6">
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-        <input
-          type="text"
-          placeholder="Search users by name, phone no or email id..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-        />
+      <div className="relative mb-6 flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Search users by name, phone no or email id..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+        </div>
+        <button
+          onClick={exportToCSV}
+          className="bg-teal-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800 whitespace-nowrap text-sm"
+        >
+          <Download size={16} />
+          Export CSV
+        </button>
       </div>
 
       {/* Clients Table */}
@@ -95,13 +147,48 @@ export const AllClients: React.FC = () => {
                 </tr>
               ) : (
                 filteredClients.map((client, index) => (
-                  <tr key={index} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm">{client.invitee_name}</td>
-                    <td className="px-6 py-4 text-sm">{client.invitee_phone}</td>
-                    <td className="px-6 py-4 text-sm">{client.invitee_email}</td>
-                    <td className="px-6 py-4 text-sm">{client.session_count}</td>
-                    <td className="px-6 py-4 text-sm">{client.booking_host_name}</td>
-                  </tr>
+                  <React.Fragment key={index}>
+                    <tr className="border-b hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          {client.therapists && client.therapists.length > 1 && (
+                            <button
+                              onClick={() => toggleRow(index)}
+                              className="text-gray-500 hover:text-gray-700"
+                            >
+                              {expandedRows.has(index) ? (
+                                <ChevronDown size={16} />
+                              ) : (
+                                <ChevronRight size={16} />
+                              )}
+                            </button>
+                          )}
+                          <span>{client.invitee_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm">{client.invitee_phone}</td>
+                      <td className="px-6 py-4 text-sm">{client.invitee_email}</td>
+                      <td className="px-6 py-4 text-sm">{client.session_count}</td>
+                      <td className="px-6 py-4 text-sm">
+                        {client.therapists && client.therapists.length > 1 ? (
+                          <span className="text-gray-500">Multiple</span>
+                        ) : (
+                          client.booking_host_name
+                        )}
+                      </td>
+                    </tr>
+                    {expandedRows.has(index) && client.therapists && client.therapists.length > 1 && (
+                      client.therapists.map((therapist, tIndex) => (
+                        <tr key={`${index}-${tIndex}`} className="bg-gray-50 border-b">
+                          <td className="px-6 py-4 text-sm pl-16 text-gray-600">{therapist.invitee_name}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{therapist.invitee_phone}</td>
+                          <td className="px-6 py-4 text-sm"></td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{therapist.session_count}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{therapist.booking_host_name}</td>
+                        </tr>
+                      ))
+                    )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Download } from 'lucide-react';
 
 interface Refund {
   client_name: string;
@@ -52,6 +52,30 @@ export const RefundsCancellations: React.FC = () => {
     });
   };
 
+  const exportToCSV = () => {
+    const headers = ['Client Name', 'Contact', 'Cancelled Session', 'Session Date & Time', 'Refund Status'];
+    const rows = filteredRefunds.map(refund => [
+      refund.client_name,
+      refund.invitee_phone || refund.invitee_email,
+      refund.session_name,
+      formatDateTime(refund.session_timings),
+      refund.refund_status
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `refunds_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-8 h-full flex flex-col">
       {/* Header */}
@@ -77,15 +101,24 @@ export const RefundsCancellations: React.FC = () => {
             </button>
           ))}
         </div>
-        <div className="relative w-80">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          <input
-            type="text"
-            placeholder="Search client by name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-          />
+        <div className="flex gap-4">
+          <div className="relative w-80">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              type="text"
+              placeholder="Search client by name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+          <button
+            onClick={exportToCSV}
+            className="bg-teal-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800 whitespace-nowrap text-sm"
+          >
+            <Download size={16} />
+            Export CSV
+          </button>
         </div>
       </div>
 

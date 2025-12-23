@@ -195,7 +195,8 @@ app.get('/api/clients', async (req, res) => {
         invitee_phone,
         invitee_email,
         booking_host_name,
-        COUNT(*) as session_count
+        COUNT(*) as session_count,
+        MAX(invitee_created_at) as created_at
       FROM bookings
       GROUP BY invitee_name, invitee_phone, invitee_email, booking_host_name
       
@@ -206,13 +207,56 @@ app.get('/api/clients', async (req, res) => {
         client_whatsapp as invitee_phone,
         client_email as invitee_email,
         therapist_name as booking_host_name,
-        0 as session_count
+        0 as session_count,
+        created_at
       FROM booking_requests
-      
-      ORDER BY invitee_name
     `);
 
-    res.json(result.rows);
+    // Group by unique client (email OR phone)
+    const clientMap = new Map();
+    const emailToKey = new Map();
+    const phoneToKey = new Map();
+    
+    result.rows.forEach(row => {
+      let key = null;
+      
+      if (row.invitee_email && emailToKey.has(row.invitee_email)) {
+        key = emailToKey.get(row.invitee_email);
+      } else if (row.invitee_phone && phoneToKey.has(row.invitee_phone)) {
+        key = phoneToKey.get(row.invitee_phone);
+      } else {
+        key = `client-${clientMap.size}`;
+        if (row.invitee_email) emailToKey.set(row.invitee_email, key);
+        if (row.invitee_phone) phoneToKey.set(row.invitee_phone, key);
+      }
+      
+      if (!clientMap.has(key)) {
+        clientMap.set(key, {
+          invitee_name: row.invitee_name,
+          invitee_phone: row.invitee_phone,
+          invitee_email: row.invitee_email,
+          session_count: 0,
+          booking_host_name: row.booking_host_name,
+          created_at: row.created_at,
+          therapists: []
+        });
+      }
+      
+      const client = clientMap.get(key);
+      client.session_count += parseInt(row.session_count) || 0;
+      client.therapists.push({
+        invitee_name: row.invitee_name,
+        invitee_phone: row.invitee_phone,
+        booking_host_name: row.booking_host_name,
+        session_count: parseInt(row.session_count) || 0
+      });
+    });
+
+    const clients = Array.from(clientMap.values()).sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    res.json(clients);
   } catch (error) {
     console.error('Error fetching clients:', error);
     res.status(500).json({ error: 'Failed to fetch clients' });
@@ -332,11 +376,15 @@ app.get('/api/therapists', async (req, res) => {
         t.name,
         t.specialization,
         t.contact_info,
-        t.capacity,
-        COUNT(a.session_id) as sessions_booked
+        COUNT(DISTINCT b.booking_id) as total_sessions_lifetime,
+        COUNT(DISTINCT CASE 
+          WHEN EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
+          AND EXTRACT(YEAR FROM b.booking_start_at) = EXTRACT(YEAR FROM CURRENT_DATE)
+          THEN b.booking_id 
+        END) as sessions_this_month
       FROM therapists t
-      LEFT JOIN appointment_table a ON t.therapist_id = a.therapist_id
-      GROUP BY t.therapist_id, t.name, t.specialization, t.contact_info, t.capacity
+      LEFT JOIN bookings b ON TRIM(b.booking_host_name) ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
+      GROUP BY t.therapist_id, t.name, t.specialization, t.contact_info
       ORDER BY t.name ASC
     `);
 

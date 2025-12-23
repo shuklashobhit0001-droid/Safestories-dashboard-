@@ -1,7 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from '../lib/db.js';
+import pool from '../lib/db';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function testClientsGrouping() {
   try {
     const result = await pool.query(`
       SELECT 
@@ -13,18 +12,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         MAX(invitee_created_at) as created_at
       FROM bookings
       GROUP BY invitee_name, invitee_phone, invitee_email, booking_host_name
-      
-      UNION ALL
-      
-      SELECT 
-        client_name as invitee_name,
-        client_whatsapp as invitee_phone,
-        client_email as invitee_email,
-        therapist_name as booking_host_name,
-        0 as session_count,
-        created_at
-      FROM booking_requests
     `);
+
+    console.log('Raw data from DB:');
+    console.log(JSON.stringify(result.rows, null, 2));
 
     // Group by unique client (email OR phone)
     const clientMap = new Map();
@@ -32,17 +23,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const phoneToKey = new Map();
     
     result.rows.forEach(row => {
+      console.log(`\nProcessing: ${row.invitee_name}, ${row.invitee_phone}, ${row.invitee_email}`);
+      
       let key = null;
       
-      // Check if we've seen this email or phone before
       if (row.invitee_email && emailToKey.has(row.invitee_email)) {
         key = emailToKey.get(row.invitee_email);
+        console.log(`Found existing key by email: ${key}`);
       } else if (row.invitee_phone && phoneToKey.has(row.invitee_phone)) {
         key = phoneToKey.get(row.invitee_phone);
+        console.log(`Found existing key by phone: ${key}`);
       } else {
-        // New client - create unique key
         key = `client-${clientMap.size}`;
-        // Map email and phone to this key
+        console.log(`Creating new key: ${key}`);
         if (row.invitee_email) emailToKey.set(row.invitee_email, key);
         if (row.invitee_phone) phoneToKey.set(row.invitee_phone, key);
       }
@@ -67,13 +60,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     });
 
-    const clients = Array.from(clientMap.values()).sort((a, b) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    console.log('\n\nFinal grouped clients:');
+    console.log(JSON.stringify(Array.from(clientMap.values()), null, 2));
 
-    res.json(clients);
+    await pool.end();
   } catch (error) {
-    console.error('Error fetching clients:', error);
-    res.status(500).json({ error: 'Failed to fetch clients' });
+    console.error('Error:', error);
+    process.exit(1);
   }
 }
+
+testClientsGrouping();
