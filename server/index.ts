@@ -275,7 +275,8 @@ app.get('/api/appointments', async (req, res) => {
         invitee_email,
         booking_host_name,
         booking_mode,
-        booking_start_at
+        booking_start_at,
+        booking_joining_link
       FROM bookings
       ORDER BY booking_start_at DESC
     `);

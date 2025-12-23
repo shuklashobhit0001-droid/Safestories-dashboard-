@@ -62,6 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
       client.therapists.push({
+        invitee_name: row.invitee_name,
+        invitee_phone: row.invitee_phone,
         booking_host_name: row.booking_host_name,
         session_count: parseInt(row.session_count) || 0
       });

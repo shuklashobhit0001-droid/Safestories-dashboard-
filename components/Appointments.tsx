@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download } from 'lucide-react';
+import { MessageCircle, Search, Download, MoreVertical, Copy } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
+import { Toast } from './Toast';
 
 interface Appointment {
   booking_start_at: string;
@@ -10,6 +11,7 @@ interface Appointment {
   invitee_email: string;
   booking_host_name: string;
   booking_mode: string;
+  booking_joining_link?: string;
 }
 
 export const Appointments: React.FC = () => {
@@ -17,6 +19,8 @@ export const Appointments: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     fetch('/api/appointments')
@@ -32,6 +36,25 @@ export const Appointments: React.FC = () => {
   }, []);
 
 
+
+  const toggleMenu = (index: number) => {
+    setOpenMenuIndex(openMenuIndex === index ? null : index);
+  };
+
+  const copyAppointmentDetails = (apt: Appointment) => {
+    const details = `${apt.booking_resource_name} <> ${apt.booking_host_name}
+${apt.booking_start_at}
+Time zone: Asia/Kolkata
+${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link: ${apt.booking_joining_link}` : ''}`;
+    
+    navigator.clipboard.writeText(details).then(() => {
+      setToast({ message: 'Appointment details copied to clipboard!', type: 'success' });
+      setOpenMenuIndex(null);
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      setToast({ message: 'Failed to copy details', type: 'error' });
+    });
+  };
 
   const filteredAppointments = appointments.filter(apt => {
     const query = searchQuery.toLowerCase();
@@ -118,18 +141,19 @@ export const Appointments: React.FC = () => {
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapist Name</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center text-gray-400 py-8">
+                  <td colSpan={7} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredAppointments.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center text-gray-400 py-8">
+                  <td colSpan={7} className="text-center text-gray-400 py-8">
                     No appointments found
                   </td>
                 </tr>
@@ -145,6 +169,28 @@ export const Appointments: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-sm">{apt.booking_host_name}</td>
                     <td className="px-6 py-4 text-sm">{apt.booking_mode}</td>
+                    <td className="px-6 py-4 text-sm relative">
+                      <button
+                        onClick={() => toggleMenu(index)}
+                        className="p-1 hover:bg-gray-200 rounded"
+                      >
+                        <MoreVertical size={18} />
+                      </button>
+                      {openMenuIndex === index && (
+                        <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg z-10">
+                          <button 
+                            onClick={() => copyAppointmentDetails(apt)}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
+                          >
+                            <Copy size={16} />
+                            Copy
+                          </button>
+                          <button className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm">
+                            Option 2
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -160,6 +206,13 @@ export const Appointments: React.FC = () => {
         </div>
       </div>
       <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 };

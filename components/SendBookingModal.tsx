@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Send, X } from 'lucide-react';
+import { Toast } from './Toast';
 
 interface SendBookingModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
   const [therapists, setTherapists] = useState<Therapist[]>([]);
   const [loading, setLoading] = useState(false);
   const [isFreeConsultation, setIsFreeConsultation] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const countryCodes = [
     { code: '+1', country: 'USA/Canada' },
@@ -282,19 +284,19 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
       });
 
       if (response.ok) {
-        alert('Booking request Sent successfully!');
+        setToast({ message: 'Booking request Sent successfully!', type: 'success' });
         setClientName('');
         setClientWhatsapp('');
         setClientEmail('');
         setTherapyType('');
         setTherapistName('');
-        onClose();
+        setTimeout(() => onClose(), 2000);
       } else {
-        alert('Failed to save booking request');
+        setToast({ message: 'Failed to save booking request', type: 'error' });
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('An error occurred');
+      setToast({ message: 'An error occurred', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -461,6 +463,13 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
           </button>
         </form>
       </div>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 };
