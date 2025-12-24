@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
+import { TherapistDetailsModal } from './TherapistDetailsModal';
 
 export const AllTherapists: React.FC = () => {
   const [therapists, setTherapists] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTherapist, setSelectedTherapist] = useState<any>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     fetchTherapists();
@@ -26,6 +29,11 @@ export const AllTherapists: React.FC = () => {
       therapist.specialization.toLowerCase().includes(query)
     );
   });
+
+  const openTherapistDetails = (therapist: any) => {
+    setSelectedTherapist(therapist);
+    setIsModalOpen(true);
+  };
 
   return (
     <div className="p-8 h-full flex flex-col">
@@ -70,7 +78,14 @@ export const AllTherapists: React.FC = () => {
               ) : (
                 filteredTherapists.map((therapist, index) => (
                   <tr key={index} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-4">{therapist.name}</td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => openTherapistDetails(therapist)}
+                        className="text-teal-700 hover:underline font-medium text-left"
+                      >
+                        {therapist.name}
+                      </button>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-2">
                         {therapist.specialization.split(',').map((spec: string, i: number) => (
@@ -97,6 +112,11 @@ export const AllTherapists: React.FC = () => {
           </div>
         </div>
       </div>
+      <TherapistDetailsModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        therapist={selectedTherapist}
+      />
     </div>
   );
 };

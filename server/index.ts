@@ -399,6 +399,49 @@ app.get('/api/therapists', async (req, res) => {
   }
 });
 
+// Get therapist details
+app.get('/api/therapist-details', async (req, res) => {
+  try {
+    const { name } = req.query;
+
+    if (!name) {
+      return res.status(400).json({ error: 'Therapist name is required' });
+    }
+
+    // Get unique clients for this therapist
+    const clientsResult = await pool.query(`
+      SELECT DISTINCT 
+        invitee_name,
+        invitee_email,
+        invitee_phone
+      FROM bookings
+      WHERE TRIM(booking_host_name) ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
+      ORDER BY invitee_name
+    `, [name]);
+
+    // Get recent appointments for this therapist
+    const appointmentsResult = await pool.query(`
+      SELECT 
+        invitee_name,
+        booking_resource_name,
+        booking_start_at,
+        booking_invitee_time
+      FROM bookings
+      WHERE TRIM(booking_host_name) ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
+      ORDER BY booking_start_at DESC
+      LIMIT 10
+    `, [name]);
+
+    res.json({
+      clients: clientsResult.rows,
+      appointments: appointmentsResult.rows
+    });
+  } catch (error) {
+    console.error('Error fetching therapist details:', error);
+    res.status(500).json({ error: 'Failed to fetch therapist details' });
+  }
+});
+
 const PORT = 3002;
 app.listen(PORT, () => {
   console.log(`\n✓ API server running on http://localhost:${PORT}`);
