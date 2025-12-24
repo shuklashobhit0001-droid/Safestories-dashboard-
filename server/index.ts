@@ -276,7 +276,8 @@ app.get('/api/appointments', async (req, res) => {
         booking_host_name,
         booking_mode,
         booking_start_at,
-        booking_joining_link
+        booking_joining_link,
+        booking_checkin_url
       FROM bookings
       ORDER BY booking_start_at DESC
     `);
@@ -316,7 +317,9 @@ app.get('/api/appointments', async (req, res) => {
     const appointments = result.rows.map(row => ({
       ...row,
       booking_start_at: convertToIST(row.booking_invitee_time),
-      booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+      booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+      booking_joining_link: row.booking_joining_link,
+      booking_checkin_url: row.booking_checkin_url
     }));
 
     res.json(appointments);

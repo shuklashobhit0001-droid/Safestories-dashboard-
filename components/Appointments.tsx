@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, MoreVertical, Copy } from 'lucide-react';
+import { MessageCircle, Search, Download, MoreVertical, Copy, Send } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { Toast } from './Toast';
 
@@ -12,6 +12,7 @@ interface Appointment {
   booking_host_name: string;
   booking_mode: string;
   booking_joining_link?: string;
+  booking_checkin_url?: string;
 }
 
 export const Appointments: React.FC = () => {
@@ -42,7 +43,7 @@ export const Appointments: React.FC = () => {
   };
 
   const copyAppointmentDetails = (apt: Appointment) => {
-    const details = `${apt.booking_resource_name} <> ${apt.booking_host_name}
+    const details = `${apt.booking_resource_name}
 ${apt.booking_start_at}
 Time zone: Asia/Kolkata
 ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link: ${apt.booking_joining_link}` : ''}`;
@@ -54,6 +55,43 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       console.error('Failed to copy:', err);
       setToast({ message: 'Failed to copy details', type: 'error' });
     });
+  };
+
+  const sendWhatsAppNotification = async (apt: Appointment) => {
+    console.log('Appointment data:', apt);
+    console.log('booking_checkin_url:', apt.booking_checkin_url);
+    
+    const webhookData = {
+      sessionTimings: apt.booking_start_at,
+      sessionName: apt.booking_resource_name,
+      clientName: apt.invitee_name,
+      phone: apt.invitee_phone,
+      email: apt.invitee_email,
+      therapistName: apt.booking_host_name,
+      mode: apt.booking_mode,
+      meetingLink: apt.booking_joining_link || '',
+      checkinUrl: apt.booking_checkin_url || ''
+    };
+    
+    console.log('Webhook data being sent:', webhookData);
+
+    try {
+      const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/0d1db363-bf04-41e5-a667-a9fe1b5ffc83', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookData)
+      });
+
+      if (response.ok) {
+        setToast({ message: 'WhatsApp notification sent successfully!', type: 'success' });
+      } else {
+        setToast({ message: 'Failed to send WhatsApp notification', type: 'error' });
+      }
+    } catch (err) {
+      console.error('Error sending notification:', err);
+      setToast({ message: 'Failed to send WhatsApp notification', type: 'error' });
+    }
+    setOpenMenuIndex(null);
   };
 
   const filteredAppointments = appointments.filter(apt => {
@@ -185,8 +223,12 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                             <Copy size={16} />
                             Copy
                           </button>
-                          <button className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm">
-                            Option 2
+                          <button 
+                            onClick={() => sendWhatsAppNotification(apt)}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
+                          >
+                            <Send size={16} />
+                            Send WhatsApp Notification
                           </button>
                         </div>
                       )}
