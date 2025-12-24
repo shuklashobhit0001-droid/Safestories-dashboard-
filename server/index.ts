@@ -408,14 +408,22 @@ app.get('/api/therapist-details', async (req, res) => {
       return res.status(400).json({ error: 'Therapist name is required' });
     }
 
-    // Get unique clients for this therapist
+    // Get unique clients for this therapist (grouped by email OR phone)
     const clientsResult = await pool.query(`
-      SELECT DISTINCT 
+      WITH client_data AS (
+        SELECT DISTINCT 
+          invitee_name,
+          invitee_email,
+          invitee_phone
+        FROM bookings
+        WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
+      )
+      SELECT 
         invitee_name,
         invitee_email,
-        invitee_phone
-      FROM bookings
-      WHERE TRIM(booking_host_name) ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
+        STRING_AGG(DISTINCT invitee_phone, ', ') as invitee_phone
+      FROM client_data
+      GROUP BY invitee_name, invitee_email
       ORDER BY invitee_name
     `, [name]);
 
@@ -427,7 +435,7 @@ app.get('/api/therapist-details', async (req, res) => {
         booking_start_at,
         booking_invitee_time
       FROM bookings
-      WHERE TRIM(booking_host_name) ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
+      WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
       ORDER BY booking_start_at DESC
       LIMIT 10
     `, [name]);
