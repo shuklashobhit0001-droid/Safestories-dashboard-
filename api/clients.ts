@@ -42,10 +42,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         // New client - create unique key
         key = `client-${clientMap.size}`;
-        // Map email and phone to this key
-        if (row.invitee_email) emailToKey.set(row.invitee_email, key);
-        if (row.invitee_phone) phoneToKey.set(row.invitee_phone, key);
       }
+      
+      // Always map email and phone to this key
+      if (row.invitee_email) emailToKey.set(row.invitee_email, key);
+      if (row.invitee_phone) phoneToKey.set(row.invitee_phone, key);
       
       if (!clientMap.has(key)) {
         clientMap.set(key, {

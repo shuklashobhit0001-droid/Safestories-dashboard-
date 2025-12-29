@@ -12,7 +12,7 @@ app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
 
     const result = await pool.query(
-      'SELECT * FROM users WHERE username = $1 AND password = $2',
+      'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND password = $2',
       [username, password]
     );
 
@@ -447,6 +447,215 @@ app.get('/api/therapist-details', async (req, res) => {
   } catch (error) {
     console.error('Error fetching therapist details:', error);
     res.status(500).json({ error: 'Failed to fetch therapist details' });
+  }
+});
+
+// Get therapist stats
+app.get('/api/therapist-stats', async (req, res) => {
+  try {
+    const { therapist_id, start, end } = req.query;
+
+    if (!therapist_id) {
+      return res.status(400).json({ error: 'Therapist ID is required' });
+    }
+
+    // Get user info to find therapist_id
+    const userResult = await pool.query(
+      'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
+      [therapist_id, 'therapist']
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapist user not found' });
+    }
+
+    const therapistUserId = userResult.rows[0].therapist_id;
+
+    // Get therapist info
+    const therapistResult = await pool.query(
+      'SELECT * FROM therapists WHERE therapist_id = $1',
+      [therapistUserId]
+    );
+
+    const therapist = therapistResult.rows[0] || { name: 'Ishika Mahajan', specialization: 'Individual Therapy' };
+
+    const hasDateFilter = start && end;
+
+    // Get stats from bookings table with date filter
+    const sessions = hasDateFilter
+      ? await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+          [therapistUserId, 'confirmed', 'rescheduled', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status IN ($2, $3)',
+          [therapistUserId, 'confirmed', 'rescheduled']
+        );
+
+    const noShows = hasDateFilter
+      ? await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+          [therapistUserId, 'no_show', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status = $2',
+          [therapistUserId, 'no_show']
+        );
+
+    const cancelled = hasDateFilter
+      ? await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+          [therapistUserId, 'cancelled', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status = $2',
+          [therapistUserId, 'cancelled']
+        );
+
+    // Get upcoming bookings from cache
+    const upcomingResult = await pool.query(`
+      SELECT *
+      FROM therapist_appointments_cache 
+      WHERE therapist_id = $1 
+        AND booking_date > NOW()
+        AND booking_status = 'confirmed'
+      ORDER BY booking_date ASC
+      LIMIT 10
+    `, [therapistUserId]);
+
+    res.json({
+      therapist: {
+        name: therapist.name,
+        specialization: therapist.specialization
+      },
+      stats: {
+        sessions: parseInt(sessions.rows[0].total) || 0,
+        noShows: parseInt(noShows.rows[0].total) || 0,
+        cancelled: parseInt(cancelled.rows[0].total) || 0
+      },
+      upcomingBookings: upcomingResult.rows.map(booking => ({
+        client_name: booking.client_name,
+        therapy_type: booking.session_name,
+        mode: booking.mode,
+        session_timings: booking.session_timings
+      }))
+    });
+
+  } catch (error) {
+    console.error('Therapist stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch therapist stats' });
+  }
+});
+
+// Get therapist clients
+app.get('/api/therapist-clients', async (req, res) => {
+  try {
+    const { therapist_id } = req.query;
+
+    if (!therapist_id) {
+      return res.status(400).json({ error: 'Therapist ID is required' });
+    }
+
+    // Get user info to find therapist_id
+    const userResult = await pool.query(
+      'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
+      [therapist_id, 'therapist']
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapist user not found' });
+    }
+
+    const therapistUserId = userResult.rows[0].therapist_id;
+
+    // Get clients for this therapist from dedicated table
+    const clientsResult = await pool.query(
+      'SELECT * FROM therapist_clients_summary WHERE therapist_id = $1 ORDER BY last_session_date DESC',
+      [therapistUserId]
+    );
+
+    // Group by unique client (email OR phone)
+    const clientMap = new Map();
+    const emailToKey = new Map();
+    const phoneToKey = new Map();
+    
+    clientsResult.rows.forEach(row => {
+      let key = null;
+      
+      if (row.client_email && emailToKey.has(row.client_email)) {
+        key = emailToKey.get(row.client_email);
+      } else if (row.client_phone && phoneToKey.has(row.client_phone)) {
+        key = phoneToKey.get(row.client_phone);
+      } else {
+        key = `client-${clientMap.size}`;
+      }
+      
+      if (row.client_email) emailToKey.set(row.client_email, key);
+      if (row.client_phone) phoneToKey.set(row.client_phone, key);
+      
+      if (!clientMap.has(key)) {
+        clientMap.set(key, {
+          client_name: row.client_name,
+          client_phone: row.client_phone,
+          client_email: row.client_email,
+          total_sessions: 0,
+          therapists: []
+        });
+      }
+      
+      const client = clientMap.get(key);
+      client.total_sessions += parseInt(row.total_sessions) || 0;
+      client.therapists.push({
+        client_name: row.client_name,
+        client_phone: row.client_phone,
+        total_sessions: parseInt(row.total_sessions) || 0
+      });
+    });
+
+    const clients = Array.from(clientMap.values());
+
+    res.json({ clients });
+
+  } catch (error) {
+    console.error('Therapist clients error:', error);
+    res.status(500).json({ error: 'Failed to fetch therapist clients' });
+  }
+});
+
+// Get therapist appointments
+app.get('/api/therapist-appointments', async (req, res) => {
+  try {
+    const { therapist_id } = req.query;
+
+    if (!therapist_id) {
+      return res.status(400).json({ error: 'Therapist ID is required' });
+    }
+
+    // Get user info to find therapist_id
+    const userResult = await pool.query(
+      'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
+      [therapist_id, 'therapist']
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapist user not found' });
+    }
+
+    const therapistUserId = userResult.rows[0].therapist_id;
+
+    // Get appointments for this therapist from cache table
+    const appointmentsResult = await pool.query(
+      'SELECT * FROM therapist_appointments_cache WHERE therapist_id = $1 ORDER BY booking_date DESC',
+      [therapistUserId]
+    );
+
+    res.json({
+      appointments: appointmentsResult.rows
+    });
+
+  } catch (error) {
+    console.error('Therapist appointments error:', error);
+    res.status(500).json({ error: 'Failed to fetch therapist appointments' });
   }
 });
 

@@ -22,6 +22,7 @@ export const Appointments: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
     fetch('/api/appointments')
@@ -38,8 +39,18 @@ export const Appointments: React.FC = () => {
 
 
 
-  const toggleMenu = (index: number) => {
-    setOpenMenuIndex(openMenuIndex === index ? null : index);
+  const toggleMenu = (index: number, event: React.MouseEvent<HTMLButtonElement>) => {
+    if (openMenuIndex === index) {
+      setOpenMenuIndex(null);
+      setMenuPosition(null);
+    } else {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setOpenMenuIndex(index);
+      setMenuPosition({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX - 192 + rect.width
+      });
+    }
   };
 
   const copyAppointmentDetails = (apt: Appointment) => {
@@ -207,31 +218,13 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                     </td>
                     <td className="px-6 py-4 text-sm">{apt.booking_host_name}</td>
                     <td className="px-6 py-4 text-sm">{apt.booking_mode}</td>
-                    <td className="px-6 py-4 text-sm relative">
+                    <td className="px-6 py-4 text-sm">
                       <button
-                        onClick={() => toggleMenu(index)}
+                        onClick={(e) => toggleMenu(index, e)}
                         className="p-1 hover:bg-gray-200 rounded"
                       >
                         <MoreVertical size={18} />
                       </button>
-                      {openMenuIndex === index && (
-                        <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg z-10">
-                          <button 
-                            onClick={() => copyAppointmentDetails(apt)}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
-                          >
-                            <Copy size={16} />
-                            Copy
-                          </button>
-                          <button 
-                            onClick={() => sendWhatsAppNotification(apt)}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
-                          >
-                            <Send size={16} />
-                            Send WhatsApp Notification
-                          </button>
-                        </div>
-                      )}
                     </td>
                   </tr>
                 ))
@@ -239,6 +232,27 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
             </tbody>
           </table>
         </div>
+        {openMenuIndex !== null && menuPosition && (
+          <div 
+            className="fixed w-48 bg-white border rounded-lg shadow-lg z-50"
+            style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
+          >
+            <button 
+              onClick={() => copyAppointmentDetails(filteredAppointments[openMenuIndex])}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
+            >
+              <Copy size={16} />
+              Copy
+            </button>
+            <button 
+              onClick={() => sendWhatsAppNotification(filteredAppointments[openMenuIndex])}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
+            >
+              <Send size={16} />
+              Send WhatsApp Notification
+            </button>
+          </div>
+        )}
         <div className="px-6 py-4 border-t flex justify-between items-center">
           <span className="text-sm text-gray-600">Showing {filteredAppointments.length} of {appointments.length} appointment{appointments.length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">

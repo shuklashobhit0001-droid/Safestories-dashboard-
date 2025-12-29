@@ -4,11 +4,16 @@ import { HeroPanel } from './components/HeroPanel';
 import { Logo } from './components/Logo';
 import { Footer } from './components/Footer';
 import { Dashboard } from './components/Dashboard';
+import { TherapistDashboard } from './components/TherapistDashboard';
 import { Monitor } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return localStorage.getItem('isLoggedIn') === 'true';
+  });
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
   });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -22,7 +27,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('isLoggedIn', isLoggedIn.toString());
-  }, [isLoggedIn]);
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+  }, [isLoggedIn, user]);
 
   if (isMobile) {
     return (
@@ -41,16 +49,25 @@ const App: React.FC = () => {
     );
   }
 
-  const handleLogin = () => {
+  const handleLogin = (userData: any) => {
+    setUser(userData);
     setIsLoggedIn(true);
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
+    setUser(null);
     localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('user');
   };
 
   if (isLoggedIn) {
+    // Role-based dashboard redirect
+    if (user?.role === 'therapist') {
+      return <TherapistDashboard onLogout={handleLogout} user={user} />;
+    }
+    
+    // Default admin dashboard
     return <Dashboard onLogout={handleLogout} />;
   }
 

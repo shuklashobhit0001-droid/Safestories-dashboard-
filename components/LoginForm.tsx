@@ -4,7 +4,7 @@ import { Button } from './Button';
 import { User, KeyRound } from 'lucide-react';
 
 interface LoginFormProps {
-  onLogin: () => void;
+  onLogin: (user: any) => void;
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
@@ -28,7 +28,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
       const data = await response.json();
 
       if (data.success) {
-        onLogin();
+        onLogin(data.user);
       } else {
         setError('Invalid username or password');
       }
