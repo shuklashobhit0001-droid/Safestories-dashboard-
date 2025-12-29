@@ -2,9 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import pool from '../lib/db.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { route } = req.query;
+  // Extract route from URL path
+  const urlPath = req.url?.split('?')[0] || '';
+  const route = urlPath.replace('/api/', '').replace('/api/index', '') || req.query.route as string;
   
-  if (!route || typeof route !== 'string') {
+  if (!route || route === 'index') {
     return res.status(400).json({ error: 'Route parameter required' });
   }
 

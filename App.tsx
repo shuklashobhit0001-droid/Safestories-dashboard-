@@ -50,6 +50,7 @@ const App: React.FC = () => {
   }
 
   const handleLogin = (userData: any) => {
+    console.log('Login user data:', userData);
     setUser(userData);
     setIsLoggedIn(true);
   };
@@ -62,8 +63,9 @@ const App: React.FC = () => {
   };
 
   if (isLoggedIn) {
+    console.log('User role:', user?.role);
     // Role-based dashboard redirect
-    if (user?.role === 'therapist') {
+    if (user?.role?.toLowerCase() === 'therapist') {
       return <TherapistDashboard onLogout={handleLogout} user={user} />;
     }
     
