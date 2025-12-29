@@ -1,5 +1,17 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
+    { "source": "/api/login", "destination": "/api/index?route=login" },
+    { "source": "/api/therapists", "destination": "/api/index?route=therapists" },
+    { "source": "/api/clients", "destination": "/api/index?route=clients" },
+    { "source": "/api/appointments", "destination": "/api/index?route=appointments" },
+    { "source": "/api/therapies", "destination": "/api/index?route=therapies" },
+    { "source": "/api/refunds", "destination": "/api/index?route=refunds" },
+    { "source": "/api/booking-requests", "destination": "/api/index?route=booking-requests" },
+    { "source": "/api/therapist-appointments", "destination": "/api/index?route=therapist-appointments" },
+    { "source": "/api/therapist-clients", "destination": "/api/index?route=therapist-clients" },
+    { "source": "/api/therapist-details", "destination": "/api/index?route=therapist-details" },
+    { "source": "/api/therapist-stats", "destination": "/api/index?route=therapist-stats" },
+    { "source": "/api/dashboard/bookings", "destination": "/api/index?route=dashboard/bookings" },
+    { "source": "/api/dashboard/stats", "destination": "/api/index?route=dashboard/stats" }
   ]
 }
