@@ -476,9 +476,14 @@ app.get('/api/therapist-details', async (req, res) => {
       LIMIT 10
     `, [name]);
 
+    const appointments = appointmentsResult.rows.map(apt => ({
+      ...apt,
+      booking_invitee_time: convertToIST(apt.booking_invitee_time)
+    }));
+
     res.json({
       clients: clientsResult.rows,
-      appointments: appointmentsResult.rows
+      appointments
     });
   } catch (error) {
     console.error('Error fetching therapist details:', error);
