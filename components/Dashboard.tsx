@@ -9,9 +9,10 @@ import { SendBookingModal } from './SendBookingModal';
 
 interface DashboardProps {
   onLogout: () => void;
+  user: any;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [activeView, setActiveView] = useState('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
@@ -76,12 +77,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       const statsData = await statsRes.json();
       
       setStats([
-        { title: 'Revenue', value: `₹${Number(statsData.revenue).toLocaleString()}`, lastMonth: '₹0' },
-        { title: 'Sessions', value: statsData.sessions.toString(), lastMonth: '0' },
-        { title: 'Free Consultations', value: statsData.freeConsultations.toString(), lastMonth: '0' },
-        { title: 'Cancelled', value: statsData.cancelled.toString(), lastMonth: '0' },
-        { title: 'Refunds', value: statsData.refunds.toString(), lastMonth: '0' },
-        { title: 'No-shows', value: statsData.noShows.toString(), lastMonth: '0' },
+        { title: 'Revenue', value: `₹${Number(statsData.revenue || 0).toLocaleString()}`, lastMonth: '₹0' },
+        { title: 'Sessions', value: (statsData.sessions || 0).toString(), lastMonth: '0' },
+        { title: 'Free Consultations', value: (statsData.freeConsultations || 0).toString(), lastMonth: '0' },
+        { title: 'Cancelled', value: (statsData.cancelled || 0).toString(), lastMonth: '0' },
+        { title: 'Refunds', value: (statsData.refunds || 0).toString(), lastMonth: '0' },
+        { title: 'No-shows', value: (statsData.noShows || 0).toString(), lastMonth: '0' },
       ]);
 
       const bookingsRes = await fetch(`/api/dashboard/bookings`);
@@ -150,7 +151,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               <Users size={20} className="text-white" />
             </div>
             <div className="flex-1">
-              <div className="font-semibold text-sm">Pooja Jain</div>
+              <div className="font-semibold text-sm">{user?.full_name || user?.username}</div>
               <div className="text-xs text-gray-600">Role: Admin</div>
             </div>
             <LogOut size={18} className="text-red-500 cursor-pointer" onClick={onLogout} />
@@ -174,7 +175,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           <div className="flex justify-between items-start mb-8">
             <div>
               <h1 className="text-3xl font-bold mb-1">Dashboard</h1>
-              <p className="text-gray-600">Welcome Back, Pooja!</p>
+              <p className="text-gray-600">Welcome Back, {user?.full_name || user?.username}!</p>
             </div>
             <div className="flex items-center gap-4">
               <div className="relative">

@@ -190,7 +190,40 @@ async function handleTherapistAppointments(req: VercelRequest, res: VercelRespon
   if (userResult.rows.length === 0) return res.status(404).json({ error: 'Therapist user not found' });
   const therapistUserId = userResult.rows[0].therapist_id;
   const appointmentsResult = await pool.query('SELECT * FROM therapist_appointments_cache WHERE therapist_id = $1 ORDER BY booking_date DESC', [therapistUserId]);
-  res.json({ appointments: appointmentsResult.rows });
+  
+  const convertToIST = (timeStr: string) => {
+    if (!timeStr) return timeStr;
+    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+    if (!match) return timeStr;
+    const [, date, startTime, endTime, offset] = match;
+    const parseTime = (time: string) => {
+      const [h, rest] = time.split(':');
+      const [m, period] = rest.split(' ');
+      let hour = parseInt(h);
+      if (period === 'PM' && hour !== 12) hour += 12;
+      if (period === 'AM' && hour === 12) hour = 0;
+      const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
+      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+      const istOffset = 330;
+      const diff = istOffset - offsetTotal;
+      let totalMins = hour * 60 + parseInt(m) + diff;
+      const newHour = Math.floor(totalMins / 60) % 24;
+      const newMin = totalMins % 60;
+      const period12 = newHour >= 12 ? 'PM' : 'AM';
+      const hour12 = newHour % 12 || 12;
+      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
+    };
+    const istStart = parseTime(startTime);
+    const istEnd = parseTime(endTime);
+    return `${date} at ${istStart} - ${istEnd} IST`;
+  };
+  
+  const appointments = appointmentsResult.rows.map(apt => ({
+    ...apt,
+    session_timings: convertToIST(apt.session_timings)
+  }));
+  
+  res.json({ appointments });
 }
 
 async function handleTherapistClients(req: VercelRequest, res: VercelResponse) {

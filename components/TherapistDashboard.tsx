@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, MoreVertical, Copy, Send } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, MoreVertical, Copy, Send, Search } from 'lucide-react';
 import { Logo } from './Logo';
 import { Toast } from './Toast';
 
@@ -29,6 +29,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [appointments, setAppointments] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
+  const [clientsLoading, setClientsLoading] = useState(true);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
@@ -69,8 +71,21 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     }
   }, [dateRange, user.id, activeView]);
 
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openMenuIndex !== null) {
+        setOpenMenuIndex(null);
+        setMenuPosition(null);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openMenuIndex]);
+
   const fetchAppointmentsData = async () => {
     try {
+      setAppointmentsLoading(true);
       const response = await fetch(`/api/therapist-appointments?therapist_id=${user.id}`);
       if (response.ok) {
         const data = await response.json();
@@ -79,11 +94,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     } catch (error) {
       console.error('Error fetching appointments data:', error);
       setAppointments([]);
+    } finally {
+      setAppointmentsLoading(false);
     }
   };
 
   const fetchClientsData = async () => {
     try {
+      setClientsLoading(true);
       const response = await fetch(`/api/therapist-clients?therapist_id=${user.id}`);
       if (response.ok) {
         const data = await response.json();
@@ -95,6 +113,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     } catch (error) {
       console.error('Error fetching clients data:', error);
       setClients([]);
+    } finally {
+      setClientsLoading(false);
     }
   };
 
@@ -110,9 +130,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         const data = await response.json();
         
         setStats([
-          { title: 'Sessions', value: data.stats.sessions.toString(), lastMonth: '0' },
-          { title: 'No-shows', value: data.stats.noShows.toString(), lastMonth: '0' },
-          { title: 'Cancelled', value: data.stats.cancelled.toString(), lastMonth: '0' },
+          { title: 'Sessions', value: (data.stats.sessions || 0).toString(), lastMonth: '0' },
+          { title: 'No-shows', value: (data.stats.noShows || 0).toString(), lastMonth: '0' },
+          { title: 'Cancelled', value: (data.stats.cancelled || 0).toString(), lastMonth: '0' },
         ]);
         
         setBookings(data.upcomingBookings || []);
@@ -180,7 +200,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   const renderMyClients = () => (
     <div className="p-8">
-      <div className="flex justify-between items-start mb-8">
+      <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-1">My Clients</h1>
           <p className="text-gray-600">View Client Details, Sessions and more...</p>
@@ -190,17 +210,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       {/* Search Bar */}
       <div className="mb-6">
         <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
             placeholder="Search users by name, phone no or email id..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
       </div>
@@ -214,13 +230,18 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Phone No.</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Email ID</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Sessions</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
               </tr>
             </thead>
             <tbody>
-              {clients.length === 0 ? (
+              {clientsLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-20 text-center text-gray-400">
+                  <td colSpan={4} className="text-center text-gray-400 py-8">
+                    Loading...
+                  </td>
+                </tr>
+              ) : clients.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-center text-gray-400 py-8">
                     No clients found
                   </td>
                 </tr>
@@ -235,7 +256,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   .map((client, index) => (
                     <React.Fragment key={index}>
                       <tr className="border-b hover:bg-gray-50">
-                        <td className="px-6 py-4 font-medium">
+                        <td className="px-6 py-4 text-sm">
                           <div className="flex items-center gap-2">
                             {client.therapists && client.therapists.length > 1 && (
                               <button
@@ -252,25 +273,17 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                             <span>{client.client_name}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4">{client.client_phone}</td>
-                        <td className="px-6 py-4">{client.client_email}</td>
-                        <td className="px-6 py-4">{client.total_sessions}</td>
-                        <td className="px-6 py-4">
-                          {client.therapists && client.therapists.length > 1 ? (
-                            <span className="text-gray-500">Multiple</span>
-                          ) : (
-                            'Ishika Mahajan'
-                          )}
-                        </td>
+                        <td className="px-6 py-4 text-sm">{client.client_phone}</td>
+                        <td className="px-6 py-4 text-sm">{client.client_email}</td>
+                        <td className="px-6 py-4 text-sm">{client.total_sessions}</td>
                       </tr>
                       {expandedRows.has(index) && client.therapists && client.therapists.length > 1 && (
                         client.therapists.map((therapist: any, tIndex: number) => (
                           <tr key={`${index}-${tIndex}`} className="bg-gray-50 border-b">
-                            <td className="px-6 py-4 pl-16 text-gray-600">{therapist.client_name}</td>
-                            <td className="px-6 py-4 text-gray-600">{therapist.client_phone}</td>
-                            <td className="px-6 py-4"></td>
-                            <td className="px-6 py-4 text-gray-600">{therapist.total_sessions}</td>
-                            <td className="px-6 py-4 text-gray-600">Ishika Mahajan</td>
+                            <td className="px-6 py-4 text-sm pl-16 text-gray-600">{therapist.client_name}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{therapist.client_phone}</td>
+                            <td className="px-6 py-4 text-sm"></td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{therapist.total_sessions}</td>
                           </tr>
                         ))
                       )}
@@ -298,7 +311,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   const renderMyAppointments = () => (
     <div className="p-8">
-      <div className="flex justify-between items-start mb-8">
+      <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-1">My Appointments</h1>
           <p className="text-gray-600">View Recently Book Session, Send invite and more...</p>
@@ -308,17 +321,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       {/* Search Bar */}
       <div className="mb-6">
         <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
             placeholder="Search appointments by session, client or therapist name..."
             value={appointmentSearchTerm}
             onChange={(e) => setAppointmentSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
       </div>
@@ -338,9 +347,15 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               </tr>
             </thead>
             <tbody>
-              {appointments.length === 0 ? (
+              {appointmentsLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center text-gray-400">
+                  <td colSpan={7} className="text-center text-gray-400 py-8">
+                    Loading...
+                  </td>
+                </tr>
+              ) : appointments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center text-gray-400 py-8">
                     No appointments found
                   </td>
                 </tr>
@@ -350,19 +365,22 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                     appointmentSearchTerm === '' || 
                     appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
                     appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                    'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
+                    (user.full_name || user.username).toLowerCase().includes(appointmentSearchTerm.toLowerCase())
                   )
                   .map((appointment, index, filteredArray) => (
                     <tr key={index} className="border-b hover:bg-gray-50">
-                      <td className="px-6 py-4">{appointment.session_timings}</td>
-                      <td className="px-6 py-4">{appointment.session_name}</td>
-                      <td className="px-6 py-4 font-medium">{appointment.client_name}</td>
-                      <td className="px-6 py-4">{appointment.contact_info}</td>
-                      <td className="px-6 py-4">{appointment.mode}</td>
-                      <td className="px-6 py-4"></td>
+                      <td className="px-6 py-4 text-sm">{appointment.session_timings}</td>
+                      <td className="px-6 py-4 text-sm">{appointment.session_name}</td>
+                      <td className="px-6 py-4 text-sm">{appointment.client_name}</td>
+                      <td className="px-6 py-4 text-sm">{appointment.contact_info}</td>
+                      <td className="px-6 py-4 text-sm">{appointment.mode}</td>
+                      <td className="px-6 py-4 text-sm"></td>
                       <td className="px-6 py-4">
                         <button
-                          onClick={(e) => toggleMenu(index, e)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleMenu(index, e);
+                          }}
                           className="p-1 hover:bg-gray-200 rounded"
                         >
                           <MoreVertical size={18} />
@@ -378,6 +396,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           <div 
             className="fixed w-48 bg-white border rounded-lg shadow-lg z-50"
             style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
+            onClick={(e) => e.stopPropagation()}
           >
             <button 
               onClick={() => {
@@ -468,7 +487,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               <Users size={20} className="text-white" />
             </div>
             <div className="flex-1">
-              <div className="font-semibold text-sm">Ishika Mahajan</div>
+              <div className="font-semibold text-sm">{user.full_name || user.username}</div>
               <div className="text-xs text-gray-600">Role: Therapist</div>
             </div>
             <LogOut size={18} className="text-red-500 cursor-pointer" onClick={onLogout} />

@@ -84,7 +84,7 @@ export const AllClients: React.FC = () => {
   return (
     <div className="p-8 h-full flex flex-col">
       {/* Header */}
-      <div className="flex justify-between items-start mb-8">
+      <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-1">All Clients</h1>
           <p className="text-gray-600">View Client Details, Sessions and more...</p>

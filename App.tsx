@@ -70,7 +70,7 @@ const App: React.FC = () => {
     }
     
     // Default admin dashboard
-    return <Dashboard onLogout={handleLogout} />;
+    return <Dashboard onLogout={handleLogout} user={user} />;
   }
 
   return (

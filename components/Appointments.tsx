@@ -37,6 +37,18 @@ export const Appointments: React.FC = () => {
       });
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openMenuIndex !== null) {
+        setOpenMenuIndex(null);
+        setMenuPosition(null);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openMenuIndex]);
+
 
 
   const toggleMenu = (index: number, event: React.MouseEvent<HTMLButtonElement>) => {
@@ -220,7 +232,10 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                     <td className="px-6 py-4 text-sm">{apt.booking_mode}</td>
                     <td className="px-6 py-4 text-sm">
                       <button
-                        onClick={(e) => toggleMenu(index, e)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleMenu(index, e);
+                        }}
                         className="p-1 hover:bg-gray-200 rounded"
                       >
                         <MoreVertical size={18} />
@@ -236,6 +251,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
           <div 
             className="fixed w-48 bg-white border rounded-lg shadow-lg z-50"
             style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
+            onClick={(e) => e.stopPropagation()}
           >
             <button 
               onClick={() => copyAppointmentDetails(filteredAppointments[openMenuIndex])}

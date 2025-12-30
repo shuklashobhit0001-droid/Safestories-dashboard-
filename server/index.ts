@@ -33,6 +33,11 @@ app.get('/api/dashboard/stats', async (req, res) => {
     const { start, end } = req.query;
     const hasDateFilter = start && end;
     
+    // Calculate last month date range
+    const now = new Date();
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    
     const revenue = hasDateFilter
       ? await pool.query(
           'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status != $1 AND booking_start_at BETWEEN $2 AND $3',
@@ -92,13 +97,43 @@ app.get('/api/dashboard/stats', async (req, res) => {
           ['no_show']
         );
 
+    const lastMonthSessions = await pool.query(
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+      ['confirmed', 'rescheduled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+    );
+
+    const lastMonthFreeConsultations = await pool.query(
+      'SELECT COUNT(*) as total FROM bookings WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL) AND booking_start_at BETWEEN $1 AND $2',
+      [lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+    );
+
+    const lastMonthCancelled = await pool.query(
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1 AND booking_start_at BETWEEN $2 AND $3',
+      ['cancelled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+    );
+
+    const lastMonthRefunds = await pool.query(
+      'SELECT COUNT(*) as total FROM bookings WHERE refund_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+      ['completed', 'processed', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+    );
+
+    const lastMonthNoShows = await pool.query(
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1 AND booking_start_at BETWEEN $2 AND $3',
+      ['no_show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+    );
+
     res.json({
       revenue: revenue.rows[0].total,
       sessions: sessions.rows[0].total,
+      lastMonthSessions: lastMonthSessions.rows[0].total,
       freeConsultations: freeConsultations.rows[0].total,
+      lastMonthFreeConsultations: lastMonthFreeConsultations.rows[0].total,
       cancelled: cancelled.rows[0].total,
+      lastMonthCancelled: lastMonthCancelled.rows[0].total,
       refunds: refunds.rows[0].total,
+      lastMonthRefunds: lastMonthRefunds.rows[0].total,
       noShows: noShows.rows[0].total,
+      lastMonthNoShows: lastMonthNoShows.rows[0].total,
     });
   } catch (error) {
     console.error('Error fetching stats:', error);
@@ -478,39 +513,60 @@ app.get('/api/therapist-stats', async (req, res) => {
     );
 
     const therapist = therapistResult.rows[0] || { name: 'Ishika Mahajan', specialization: 'Individual Therapy' };
+    const therapistFirstName = therapist.name.split(' ')[0];
 
     const hasDateFilter = start && end;
 
-    // Get stats from bookings table with date filter
+    // Calculate last month date range
+    const now = new Date();
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+    // Get stats from bookings table with date filter using therapist name
     const sessions = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
-          [therapistUserId, 'confirmed', 'rescheduled', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+          [`%${therapistFirstName}%`, 'confirmed', 'rescheduled', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status IN ($2, $3)',
-          [therapistUserId, 'confirmed', 'rescheduled']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3)',
+          [`%${therapistFirstName}%`, 'confirmed', 'rescheduled']
         );
 
     const noShows = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
-          [therapistUserId, 'no_show', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+          [`%${therapistFirstName}%`, 'no_show', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status = $2',
-          [therapistUserId, 'no_show']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2',
+          [`%${therapistFirstName}%`, 'no_show']
         );
 
     const cancelled = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
-          [therapistUserId, 'cancelled', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+          [`%${therapistFirstName}%`, 'cancelled', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_user_id = $1 AND booking_status = $2',
-          [therapistUserId, 'cancelled']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2',
+          [`%${therapistFirstName}%`, 'cancelled']
         );
+
+    const lastMonthSessions = await pool.query(
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+      [`%${therapistFirstName}%`, 'confirmed', 'rescheduled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+    );
+
+    const lastMonthNoShows = await pool.query(
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+      [`%${therapistFirstName}%`, 'no_show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+    );
+
+    const lastMonthCancelled = await pool.query(
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+      [`%${therapistFirstName}%`, 'cancelled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+    );
 
     // Get upcoming bookings from cache
     const upcomingResult = await pool.query(`
@@ -523,6 +579,38 @@ app.get('/api/therapist-stats', async (req, res) => {
       LIMIT 10
     `, [therapistUserId]);
 
+    const convertToIST = (timeStr: string) => {
+      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+      if (!match) return timeStr;
+      
+      const [, date, startTime, endTime, offset] = match;
+      const parseTime = (time: string, dateStr: string, tz: string) => {
+        const [h, rest] = time.split(':');
+        const [m, period] = rest.split(' ');
+        let hour = parseInt(h);
+        if (period === 'PM' && hour !== 12) hour += 12;
+        if (period === 'AM' && hour === 12) hour = 0;
+        
+        const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
+        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+        const istOffset = 330;
+        const diff = istOffset - offsetTotal;
+        
+        let totalMins = hour * 60 + parseInt(m) + diff;
+        const newHour = Math.floor(totalMins / 60) % 24;
+        const newMin = totalMins % 60;
+        
+        const period12 = newHour >= 12 ? 'PM' : 'AM';
+        const hour12 = newHour % 12 || 12;
+        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
+      };
+      
+      const istStart = parseTime(startTime, date, `GMT${offset}`);
+      const istEnd = parseTime(endTime, date, `GMT${offset}`);
+      
+      return `${date} at ${istStart} - ${istEnd} IST`;
+    };
+
     res.json({
       therapist: {
         name: therapist.name,
@@ -531,13 +619,16 @@ app.get('/api/therapist-stats', async (req, res) => {
       stats: {
         sessions: parseInt(sessions.rows[0].total) || 0,
         noShows: parseInt(noShows.rows[0].total) || 0,
-        cancelled: parseInt(cancelled.rows[0].total) || 0
+        cancelled: parseInt(cancelled.rows[0].total) || 0,
+        lastMonthSessions: parseInt(lastMonthSessions.rows[0].total) || 0,
+        lastMonthNoShows: parseInt(lastMonthNoShows.rows[0].total) || 0,
+        lastMonthCancelled: parseInt(lastMonthCancelled.rows[0].total) || 0
       },
       upcomingBookings: upcomingResult.rows.map(booking => ({
         client_name: booking.client_name,
         therapy_type: booking.session_name,
         mode: booking.mode,
-        session_timings: booking.session_timings
+        session_timings: convertToIST(booking.session_timings)
       }))
     });
 
@@ -649,8 +740,45 @@ app.get('/api/therapist-appointments', async (req, res) => {
       [therapistUserId]
     );
 
+    const convertToIST = (timeStr: string) => {
+      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+      if (!match) return timeStr;
+      
+      const [, date, startTime, endTime, offset] = match;
+      const parseTime = (time: string, dateStr: string, tz: string) => {
+        const [h, rest] = time.split(':');
+        const [m, period] = rest.split(' ');
+        let hour = parseInt(h);
+        if (period === 'PM' && hour !== 12) hour += 12;
+        if (period === 'AM' && hour === 12) hour = 0;
+        
+        const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
+        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+        const istOffset = 330;
+        const diff = istOffset - offsetTotal;
+        
+        let totalMins = hour * 60 + parseInt(m) + diff;
+        const newHour = Math.floor(totalMins / 60) % 24;
+        const newMin = totalMins % 60;
+        
+        const period12 = newHour >= 12 ? 'PM' : 'AM';
+        const hour12 = newHour % 12 || 12;
+        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
+      };
+      
+      const istStart = parseTime(startTime, date, `GMT${offset}`);
+      const istEnd = parseTime(endTime, date, `GMT${offset}`);
+      
+      return `${date} at ${istStart} - ${istEnd} IST`;
+    };
+
+    const appointments = appointmentsResult.rows.map(row => ({
+      ...row,
+      session_timings: convertToIST(row.session_timings)
+    }));
+
     res.json({
-      appointments: appointmentsResult.rows
+      appointments: appointments
     });
 
   } catch (error) {
