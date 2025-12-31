@@ -18,7 +18,18 @@ app.post('/api/login', async (req, res) => {
     );
 
     if (result.rows.length > 0) {
-      res.json({ success: true, user: result.rows[0] });
+      const user = result.rows[0];
+      
+      // Log therapist login
+      if (user.role === 'therapist') {
+        await pool.query(
+          `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
+           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+          [user.therapist_id, username, 'login', `${username} logged into dashboard`]
+        );
+      }
+      
+      res.json({ success: true, user });
     } else {
       res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
@@ -502,7 +513,7 @@ app.get('/api/therapist-stats', async (req, res) => {
 
     // Get user info to find therapist_id
     const userResult = await pool.query(
-      'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
+      'SELECT therapist_id, username FROM users WHERE id = $1 AND role = $2',
       [therapist_id, 'therapist']
     );
 
@@ -511,6 +522,7 @@ app.get('/api/therapist-stats', async (req, res) => {
     }
 
     const therapistUserId = userResult.rows[0].therapist_id;
+    const therapistUsername = userResult.rows[0].username;
 
     // Get therapist info
     const therapistResult = await pool.query(
@@ -758,6 +770,127 @@ app.get('/api/therapist-appointments', async (req, res) => {
   } catch (error) {
     console.error('Therapist appointments error:', error);
     res.status(500).json({ error: 'Failed to fetch therapist appointments' });
+  }
+});
+
+// Transfer client endpoint
+app.post('/api/transfer-client', async (req, res) => {
+  try {
+    const {
+      clientName,
+      clientEmail,
+      clientPhone,
+      fromTherapistName,
+      toTherapistId,
+      transferredByAdminId,
+      transferredByAdminName,
+      reason
+    } = req.body;
+
+    // Get new therapist details
+    const therapistResult = await pool.query(
+      'SELECT * FROM therapists WHERE therapist_id = $1',
+      [toTherapistId]
+    );
+
+    if (therapistResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+
+    const newTherapist = therapistResult.rows[0];
+
+    // Get old therapist ID
+    const oldTherapistResult = await pool.query(
+      'SELECT therapist_id FROM therapists WHERE name = $1',
+      [fromTherapistName]
+    );
+
+    const fromTherapistId = oldTherapistResult.rows[0]?.therapist_id || null;
+
+    // Insert transfer record
+    await pool.query(
+      `INSERT INTO client_transfer_history 
+       (client_name, client_email, client_phone, from_therapist_id, from_therapist_name, 
+        to_therapist_id, to_therapist_name, transferred_by_admin_id, transferred_by_admin_name, reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        clientName,
+        clientEmail,
+        clientPhone,
+        fromTherapistId,
+        fromTherapistName,
+        toTherapistId,
+        newTherapist.name,
+        transferredByAdminId,
+        transferredByAdminName,
+        reason
+      ]
+    );
+
+    res.json({ success: true, message: 'Client transferred successfully' });
+  } catch (error) {
+    console.error('Error transferring client:', error);
+    res.status(500).json({ success: false, error: 'Failed to transfer client' });
+  }
+});
+
+// Get audit logs
+app.get('/api/audit-logs', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM audit_logs WHERE is_visible = true ORDER BY timestamp DESC LIMIT 500'
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching audit logs:', error);
+    res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
+// Clear audit logs (soft delete)
+app.post('/api/audit-logs/clear', async (req, res) => {
+  try {
+    await pool.query('UPDATE audit_logs SET is_visible = false WHERE is_visible = true');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error clearing audit logs:', error);
+    res.status(500).json({ error: 'Failed to clear audit logs' });
+  }
+});
+
+// Create audit log
+app.post('/api/audit-logs', async (req, res) => {
+  try {
+    const { therapist_id, therapist_name, action_type, action_description, client_name, ip_address } = req.body;
+    await pool.query(
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error creating audit log:', error);
+    res.status(500).json({ error: 'Failed to create audit log' });
+  }
+});
+
+// Logout endpoint
+app.post('/api/logout', async (req, res) => {
+  try {
+    const { user } = req.body;
+    
+    if (user?.role === 'therapist') {
+      await pool.query(
+        `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+        [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
+      );
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ success: false, error: 'Logout failed' });
   }
 });
 

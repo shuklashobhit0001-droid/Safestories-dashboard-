@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { MessageCircle, Search, Download, ChevronDown, ChevronRight, ArrowRightLeft } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
+import { TransferClientModal } from './TransferClientModal';
 
 interface Therapist {
   invitee_name: string;
@@ -24,6 +25,12 @@ export const AllClients: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [adminUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
 
   useEffect(() => {
     fetch('/api/clients')
@@ -81,6 +88,22 @@ export const AllClients: React.FC = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleTransferClick = (client: Client) => {
+    const actualTherapist = client.therapists && client.therapists.length > 0 
+      ? client.therapists[0].booking_host_name 
+      : client.booking_host_name;
+    setSelectedClient({ ...client, booking_host_name: actualTherapist });
+    setIsTransferModalOpen(true);
+  };
+
+  const handleTransferSuccess = () => {
+    fetch('/api/clients')
+      .then(res => res.json())
+      .then(data => {
+        setClients(data);
+      });
+  };
+
   return (
     <div className="p-8 h-full flex flex-col">
       {/* Header */}
@@ -130,18 +153,19 @@ export const AllClients: React.FC = () => {
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Email ID</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Sessions</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="text-center text-gray-400 py-8">
+                  <td colSpan={6} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center text-gray-400 py-8">
+                  <td colSpan={6} className="text-center text-gray-400 py-8">
                     No clients found
                   </td>
                 </tr>
@@ -176,6 +200,15 @@ export const AllClients: React.FC = () => {
                           client.booking_host_name
                         )}
                       </td>
+                      <td className="px-6 py-4 text-sm">
+                        <button
+                          onClick={() => handleTransferClick(client)}
+                          className="text-orange-600 hover:text-orange-700 flex items-center gap-1 text-sm font-medium"
+                        >
+                          <ArrowRightLeft size={16} />
+                          Transfer
+                        </button>
+                      </td>
                     </tr>
                     {expandedRows.has(index) && client.therapists && client.therapists.length > 1 && (
                       client.therapists.map((therapist, tIndex) => (
@@ -203,6 +236,13 @@ export const AllClients: React.FC = () => {
         </div>
       </div>
       <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <TransferClientModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        client={selectedClient}
+        onTransferSuccess={handleTransferSuccess}
+        adminUser={adminUser}
+      />
     </div>
   );
 };

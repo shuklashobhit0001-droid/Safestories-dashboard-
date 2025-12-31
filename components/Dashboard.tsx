@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText } from 'lucide-react';
 import { Logo } from './Logo';
 import { AllClients } from './AllClients';
 import { AllTherapists } from './AllTherapists';
 import { Appointments } from './Appointments';
 import { RefundsCancellations } from './RefundsCancellations';
 import { SendBookingModal } from './SendBookingModal';
+import { AuditLogs } from './AuditLogs';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -143,6 +144,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <CreditCard size={20} className={activeView === 'refunds' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'refunds' ? 'text-teal-700' : 'text-gray-700'}>Refunds & Cancellations</span>
           </div>
+          <div 
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+            style={{ backgroundColor: activeView === 'audit' ? '#2D75795C' : 'transparent' }}
+            onClick={() => setActiveView('audit')}
+          >
+            <FileText size={20} className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'}>Audit Logs</span>
+          </div>
         </nav>
 
         <div className="p-4 border-t">
@@ -169,6 +178,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <Appointments />
         ) : activeView === 'refunds' ? (
           <RefundsCancellations />
+        ) : activeView === 'audit' ? (
+          <AuditLogs />
         ) : (
         <div className="p-8">
           {/* Header */}

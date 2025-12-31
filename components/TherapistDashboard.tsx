@@ -35,6 +35,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showSOSModal, setShowSOSModal] = useState(false);
+  const [sosConfirmText, setSosConfirmText] = useState('');
+  const [selectedSOSBooking, setSelectedSOSBooking] = useState<any>(null);
 
   const handleMonthSelect = (month: string) => {
     setSelectedMonth(month);
@@ -181,9 +184,20 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     }
   };
 
-  const copyAppointmentDetails = (apt: any) => {
-    const details = `${apt.session_name}\n${apt.session_timings}\nClient: ${apt.client_name}\nContact: ${apt.contact_info}\nMode: ${apt.mode}`;
-    navigator.clipboard.writeText(details).then(() => {
+  const copyAppointmentDetails = async (apt: any) => {
+    const details = `${apt.session_name || apt.therapy_type}\n${apt.session_timings}\nClient: ${apt.client_name}\nContact: ${apt.contact_info || 'N/A'}\nMode: ${apt.mode}`;
+    navigator.clipboard.writeText(details).then(async () => {
+      await fetch('/api/audit-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          therapist_id: user.therapist_id,
+          therapist_name: user.username,
+          action_type: 'copy_appointment',
+          action_description: `${user.username} copied appointment details`,
+          client_name: apt.client_name
+        })
+      });
       setToast({ message: 'Appointment details copied to clipboard!', type: 'success' });
       setOpenMenuIndex(null);
       setMenuPosition(null);
@@ -193,9 +207,47 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     });
   };
 
-  const sendWhatsAppNotification = (apt: any) => {
+  const sendWhatsAppNotification = async (apt: any) => {
+    await fetch('/api/audit-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        therapist_id: user.therapist_id,
+        therapist_name: user.username,
+        action_type: 'send_whatsapp',
+        action_description: `${user.username} sent WhatsApp notification`,
+        client_name: apt.client_name
+      })
+    });
     console.log('Send WhatsApp notification for:', apt);
     setOpenMenuIndex(null);
+  };
+
+  const handleSOSClick = (booking: any) => {
+    setSelectedSOSBooking(booking);
+    setShowSOSModal(true);
+    setOpenMenuIndex(null);
+  };
+
+  const handleSOSConfirm = async () => {
+    if (sosConfirmText === 'Confirm') {
+      await fetch('/api/audit-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          therapist_id: user.therapist_id,
+          therapist_name: user.username,
+          action_type: 'raise_sos',
+          action_description: `${user.username} raised SOS ticket`,
+          client_name: selectedSOSBooking?.client_name
+        })
+      });
+      console.log('SOS ticket raised for:', selectedSOSBooking);
+      setToast({ message: 'SOS ticket raised successfully!', type: 'success' });
+      setShowSOSModal(false);
+      setSosConfirmText('');
+      setSelectedSOSBooking(null);
+    }
   };
 
   const renderMyClients = () => (
@@ -428,6 +480,21 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               <Send size={16} />
               Send WhatsApp Notification
             </button>
+            <button 
+              onClick={() => {
+                const filteredAppts = appointments.filter(appointment => 
+                  appointmentSearchTerm === '' || 
+                  appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                  appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                  'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
+                );
+                handleSOSClick(filteredAppts[openMenuIndex]);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-red-600 border-t"
+            >
+              <span className="font-bold">SOS</span>
+              Raise Ticket
+            </button>
           </div>
         )}
         <div className="px-6 py-4 border-t flex justify-between items-center">
@@ -490,7 +557,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               <div className="font-semibold text-sm">{user.full_name || user.username}</div>
               <div className="text-xs text-gray-600">Role: Therapist</div>
             </div>
-            <LogOut size={18} className="text-red-500 cursor-pointer" onClick={onLogout} />
+            <LogOut size={18} className="text-red-500 cursor-pointer" onClick={async () => {
+              await fetch('/api/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user })
+              });
+              onLogout();
+            }} />
           </div>
         </div>
       </div>
@@ -638,7 +712,15 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                           <td className="px-6 py-4">{booking.mode}</td>
                           <td className="px-6 py-4">{booking.session_timings}</td>
                           <td className="px-6 py-4">
-                            <button className="text-teal-700 hover:text-teal-800 text-sm">View</button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleMenu(index, e);
+                              }}
+                              className="p-1 hover:bg-gray-200 rounded"
+                            >
+                              <MoreVertical size={18} />
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -646,6 +728,35 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   </tbody>
                 </table>
               </div>
+              {openMenuIndex !== null && menuPosition && (
+                <div 
+                  className="fixed w-48 bg-white border rounded-lg shadow-lg z-50"
+                  style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button 
+                    onClick={() => copyAppointmentDetails(bookings[openMenuIndex])}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
+                  >
+                    <Copy size={16} />
+                    Copy
+                  </button>
+                  <button 
+                    onClick={() => sendWhatsAppNotification(bookings[openMenuIndex])}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
+                  >
+                    <Send size={16} />
+                    Send WhatsApp Notification
+                  </button>
+                  <button 
+                    onClick={() => handleSOSClick(bookings[openMenuIndex])}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-red-600 border-t"
+                  >
+                    <span className="font-bold">SOS</span>
+                    Raise Ticket
+                  </button>
+                </div>
+              )}
               <div className="px-6 py-4 border-t flex justify-between items-center">
                 <span className="text-sm text-gray-600">Showing {Math.min(10, bookings.length)} of {bookings.length} results</span>
                 <div className="flex gap-2">
@@ -663,6 +774,59 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           type={toast.type}
           onClose={() => setToast(null)}
         />
+      )}
+      
+      {showSOSModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4 text-red-600">Raise SOS Ticket</h3>
+            <p className="text-gray-600 mb-4">Are you sure you want to raise a ticket for this appointment?</p>
+            
+            {selectedSOSBooking && (
+              <div className="bg-gray-50 p-3 rounded mb-4 text-sm">
+                <p><strong>Client:</strong> {selectedSOSBooking.client_name}</p>
+                <p><strong>Session:</strong> {selectedSOSBooking.session_name || selectedSOSBooking.therapy_type}</p>
+              </div>
+            )}
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Type "Confirm" to proceed:
+              </label>
+              <input
+                type="text"
+                value={sosConfirmText}
+                onChange={(e) => setSosConfirmText(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                placeholder="Type Confirm"
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowSOSModal(false);
+                  setSosConfirmText('');
+                  setSelectedSOSBooking(null);
+                }}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSOSConfirm}
+                disabled={sosConfirmText !== 'Confirm'}
+                className={`flex-1 px-4 py-2 rounded-lg ${
+                  sosConfirmText === 'Confirm'
+                    ? 'bg-red-600 text-white hover:bg-red-700'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                Raise Ticket
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

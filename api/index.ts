@@ -38,6 +38,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleDashboardBookings(req, res);
       case 'dashboard/stats':
         return await handleDashboardStats(req, res);
+      case 'transfer-client':
+        return await handleTransferClient(req, res);
       default:
         return res.status(404).json({ error: 'Route not found' });
     }
@@ -417,4 +419,36 @@ async function handleDashboardStats(req: VercelRequest, res: VercelResponse) {
     revenue: revenue.rows[0].total, sessions: sessions.rows[0].total, freeConsultations: freeConsultations.rows[0].total,
     cancelled: cancelled.rows[0].total, refunds: refunds.rows[0].total, noShows: noShows.rows[0].total
   });
+}
+
+async function handleTransferClient(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  
+  try {
+    const {
+      clientName, clientEmail, clientPhone, fromTherapistName, toTherapistId,
+      transferredByAdminId, transferredByAdminName, reason
+    } = req.body;
+
+    const therapistResult = await pool.query('SELECT * FROM therapists WHERE therapist_id = $1', [toTherapistId]);
+    if (therapistResult.rows.length === 0) return res.status(404).json({ error: 'Therapist not found' });
+
+    const newTherapist = therapistResult.rows[0];
+    const oldTherapistResult = await pool.query('SELECT therapist_id FROM therapists WHERE name = $1', [fromTherapistName]);
+    const fromTherapistId = oldTherapistResult.rows[0]?.therapist_id || null;
+
+    await pool.query(
+      `INSERT INTO client_transfer_history 
+       (client_name, client_email, client_phone, from_therapist_id, from_therapist_name, 
+        to_therapist_id, to_therapist_name, transferred_by_admin_id, transferred_by_admin_name, reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [clientName, clientEmail, clientPhone, fromTherapistId, fromTherapistName,
+       toTherapistId, newTherapist.name, transferredByAdminId, transferredByAdminName, reason]
+    );
+
+    res.json({ success: true, message: 'Client transferred successfully' });
+  } catch (error) {
+    console.error('Error transferring client:', error);
+    res.status(500).json({ success: false, error: 'Failed to transfer client' });
+  }
 }
