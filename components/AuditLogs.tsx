@@ -24,10 +24,11 @@ export const AuditLogs: React.FC = () => {
     try {
       const response = await fetch('/api/audit-logs');
       const data = await response.json();
-      setLogs(data);
+      setLogs(Array.isArray(data) ? data : []);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching logs:', error);
+      setLogs([]);
       setLoading(false);
     }
   };

@@ -40,6 +40,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleDashboardStats(req, res);
       case 'transfer-client':
         return await handleTransferClient(req, res);
+      case 'audit-logs':
+        return await handleAuditLogs(req, res);
+      case 'audit-logs/clear':
+        return await handleClearAuditLogs(req, res);
+      case 'logout':
+        return await handleLogout(req, res);
       default:
         return res.status(404).json({ error: 'Route not found' });
     }
@@ -54,7 +60,15 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
   const { username, password } = req.body;
   const result = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND password = $2', [username, password]);
   if (result.rows.length > 0) {
-    res.json({ success: true, user: result.rows[0] });
+    const user = result.rows[0];
+    if (user.role === 'therapist') {
+      await pool.query(
+        `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+        [user.therapist_id, username, 'login', `${username} logged into dashboard`]
+      );
+    }
+    res.json({ success: true, user });
   } else {
     res.status(401).json({ success: false, message: 'Invalid credentials' });
   }
@@ -451,4 +465,40 @@ async function handleTransferClient(req: VercelRequest, res: VercelResponse) {
     console.error('Error transferring client:', error);
     res.status(500).json({ success: false, error: 'Failed to transfer client' });
   }
+}
+
+async function handleAuditLogs(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    const result = await pool.query('SELECT * FROM audit_logs WHERE is_visible = true ORDER BY timestamp DESC LIMIT 500');
+    return res.json(result.rows);
+  }
+  if (req.method === 'POST') {
+    const { therapist_id, therapist_name, action_type, action_description, client_name, ip_address } = req.body;
+    await pool.query(
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address]
+    );
+    return res.json({ success: true });
+  }
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+async function handleClearAuditLogs(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  await pool.query('UPDATE audit_logs SET is_visible = false WHERE is_visible = true');
+  res.json({ success: true });
+}
+
+async function handleLogout(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  const { user } = req.body;
+  if (user?.role === 'therapist') {
+    await pool.query(
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+      [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
+    );
+  }
+  res.json({ success: true });
 }
