@@ -600,16 +600,21 @@ app.get('/api/therapist-stats', async (req, res) => {
       [`%${therapistFirstName}%`, 'cancelled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
     );
 
-    // Get upcoming bookings from cache
+    // Get upcoming bookings directly from bookings table
     const upcomingResult = await pool.query(`
-      SELECT *
-      FROM therapist_appointments_cache 
-      WHERE therapist_id = $1 
-        AND booking_date > NOW()
-        AND booking_status = 'confirmed'
-      ORDER BY booking_date ASC
+      SELECT 
+        invitee_name as client_name,
+        booking_resource_name as session_name,
+        booking_mode as mode,
+        booking_invitee_time as session_timings,
+        booking_start_at as booking_date
+      FROM bookings
+      WHERE booking_host_name ILIKE $1
+        AND booking_start_at > NOW()
+        AND booking_status != 'cancelled'
+      ORDER BY booking_start_at ASC
       LIMIT 10
-    `, [therapistUserId]);
+    `, [`%${therapistFirstName}%`]);
 
     res.json({
       therapist: {
@@ -627,7 +632,7 @@ app.get('/api/therapist-stats', async (req, res) => {
       upcomingBookings: upcomingResult.rows.map(booking => ({
         client_name: booking.client_name,
         therapy_type: booking.session_name,
-        mode: booking.mode,
+        mode: booking.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
         session_timings: convertToIST(booking.session_timings)
       }))
     });
@@ -659,11 +664,27 @@ app.get('/api/therapist-clients', async (req, res) => {
 
     const therapistUserId = userResult.rows[0].therapist_id;
 
-    // Get clients for this therapist from dedicated table
-    const clientsResult = await pool.query(
-      'SELECT * FROM therapist_clients_summary WHERE therapist_id = $1 ORDER BY last_session_date DESC',
+    // Get therapist info to get the name
+    const therapistResult = await pool.query(
+      'SELECT * FROM therapists WHERE therapist_id = $1',
       [therapistUserId]
     );
+
+    const therapist = therapistResult.rows[0];
+    const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
+
+    // Get clients for this therapist directly from bookings table
+    const clientsResult = await pool.query(`
+      SELECT 
+        invitee_name as client_name,
+        invitee_email as client_email,
+        invitee_phone as client_phone,
+        COUNT(*) as total_sessions
+      FROM bookings
+      WHERE booking_host_name ILIKE $1
+      GROUP BY invitee_name, invitee_email, invitee_phone
+      ORDER BY MAX(booking_start_at) DESC
+    `, [`%${therapistFirstName}%`]);
 
     // Group by unique client (email OR phone)
     const clientMap = new Map();
@@ -734,11 +755,29 @@ app.get('/api/therapist-appointments', async (req, res) => {
 
     const therapistUserId = userResult.rows[0].therapist_id;
 
-    // Get appointments for this therapist from cache table
-    const appointmentsResult = await pool.query(
-      'SELECT * FROM therapist_appointments_cache WHERE therapist_id = $1 ORDER BY booking_date DESC',
+    // Get therapist info to get the name
+    const therapistResult = await pool.query(
+      'SELECT * FROM therapists WHERE therapist_id = $1',
       [therapistUserId]
     );
+
+    const therapist = therapistResult.rows[0];
+    const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
+
+    // Get appointments for this therapist directly from bookings table
+    const appointmentsResult = await pool.query(`
+      SELECT 
+        invitee_name as client_name,
+        invitee_phone as contact_info,
+        booking_resource_name as session_name,
+        booking_invitee_time as session_timings,
+        booking_mode as mode,
+        booking_start_at as booking_date,
+        booking_status
+      FROM bookings
+      WHERE booking_host_name ILIKE $1
+      ORDER BY booking_start_at DESC
+    `, [`%${therapistFirstName}%`]);
 
     const convertToIST = (timeStr: string) => {
       const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
