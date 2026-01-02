@@ -294,16 +294,20 @@ app.get('/api/clients', async (req, res) => {
       
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
-      client.therapists.push({
-        invitee_name: row.invitee_name,
-        invitee_phone: row.invitee_phone,
-        booking_host_name: row.booking_host_name,
-        session_count: parseInt(row.session_count) || 0,
-        latest_booking_date: row.latest_booking_date
-      });
       
-      // Update latest booking date if this therapist has a more recent booking
-      if (new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
+      // Only add to therapists array if session_count > 0
+      if (parseInt(row.session_count) > 0) {
+        client.therapists.push({
+          invitee_name: row.invitee_name,
+          invitee_phone: row.invitee_phone,
+          booking_host_name: row.booking_host_name,
+          session_count: parseInt(row.session_count) || 0,
+          latest_booking_date: row.latest_booking_date
+        });
+      }
+      
+      // Update to show therapist with most recent booking (only if has sessions)
+      if (parseInt(row.session_count) > 0 && new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
         client.latest_booking_date = row.latest_booking_date;
         client.booking_host_name = row.booking_host_name;
       }
