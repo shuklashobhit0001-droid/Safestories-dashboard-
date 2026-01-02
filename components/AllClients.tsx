@@ -194,11 +194,7 @@ export const AllClients: React.FC = () => {
                       <td className="px-6 py-4 text-sm">{client.invitee_email}</td>
                       <td className="px-6 py-4 text-sm">{client.session_count}</td>
                       <td className="px-6 py-4 text-sm">
-                        {client.therapists && client.therapists.length > 1 ? (
-                          <span className="text-gray-500">Multiple</span>
-                        ) : (
-                          client.booking_host_name
-                        )}
+                        {client.booking_host_name}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <button

@@ -243,7 +243,8 @@ app.get('/api/clients', async (req, res) => {
         invitee_email,
         booking_host_name,
         COUNT(*) as session_count,
-        MAX(invitee_created_at) as created_at
+        MAX(invitee_created_at) as created_at,
+        MAX(booking_start_at) as latest_booking_date
       FROM bookings
       GROUP BY invitee_name, invitee_phone, invitee_email, booking_host_name
       
@@ -255,7 +256,8 @@ app.get('/api/clients', async (req, res) => {
         client_email as invitee_email,
         therapist_name as booking_host_name,
         0 as session_count,
-        created_at
+        created_at,
+        created_at as latest_booking_date
       FROM booking_requests
     `);
 
@@ -285,6 +287,7 @@ app.get('/api/clients', async (req, res) => {
           session_count: 0,
           booking_host_name: row.booking_host_name,
           created_at: row.created_at,
+          latest_booking_date: row.latest_booking_date,
           therapists: []
         });
       }
@@ -295,8 +298,15 @@ app.get('/api/clients', async (req, res) => {
         invitee_name: row.invitee_name,
         invitee_phone: row.invitee_phone,
         booking_host_name: row.booking_host_name,
-        session_count: parseInt(row.session_count) || 0
+        session_count: parseInt(row.session_count) || 0,
+        latest_booking_date: row.latest_booking_date
       });
+      
+      // Update latest booking date if this therapist has a more recent booking
+      if (new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
+        client.latest_booking_date = row.latest_booking_date;
+        client.booking_host_name = row.booking_host_name;
+      }
     });
 
     const clients = Array.from(clientMap.values()).sort((a, b) => 
@@ -760,7 +770,9 @@ app.get('/api/therapist-appointments', async (req, res) => {
 
     const appointments = appointmentsResult.rows.map(row => ({
       ...row,
-      session_timings: convertToIST(row.session_timings)
+      session_timings: convertToIST(row.session_timings),
+      mode: row.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
+      booking_status: row.booking_status || 'confirmed'
     }));
 
     res.json({

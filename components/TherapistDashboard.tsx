@@ -231,6 +231,22 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   const handleSOSConfirm = async () => {
     if (sosConfirmText === 'Confirm') {
+      // Send to n8n webhook
+      await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/3e725c04-ed19-4967-8a05-c0a1e8c8441d', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          therapist_id: user.therapist_id,
+          therapist_name: user.username,
+          client_name: selectedSOSBooking?.client_name,
+          session_name: selectedSOSBooking?.session_name || selectedSOSBooking?.therapy_type,
+          session_timings: selectedSOSBooking?.session_timings,
+          contact_info: selectedSOSBooking?.contact_info,
+          mode: selectedSOSBooking?.mode,
+          timestamp: new Date().toISOString()
+        })
+      });
+      
       await fetch('/api/audit-logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -242,7 +258,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           client_name: selectedSOSBooking?.client_name
         })
       });
-      console.log('SOS ticket raised for:', selectedSOSBooking);
       setToast({ message: 'SOS ticket raised successfully!', type: 'success' });
       setShowSOSModal(false);
       setSosConfirmText('');
@@ -425,8 +440,18 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                       <td className="px-6 py-4 text-sm">{appointment.session_name}</td>
                       <td className="px-6 py-4 text-sm">{appointment.client_name}</td>
                       <td className="px-6 py-4 text-sm">{appointment.contact_info}</td>
-                      <td className="px-6 py-4 text-sm">{appointment.mode}</td>
-                      <td className="px-6 py-4 text-sm"></td>
+                      <td className="px-6 py-4 text-sm">
+                        {appointment.mode?.includes('_') 
+                          ? appointment.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                          : appointment.mode || 'Google Meet'
+                        }
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        {appointment.booking_status?.includes('_')
+                          ? appointment.booking_status.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                          : appointment.booking_status || 'Google Meet'
+                        }
+                      </td>
                       <td className="px-6 py-4">
                         <button
                           onClick={(e) => {

@@ -5,6 +5,7 @@ import { Logo } from './components/Logo';
 import { Footer } from './components/Footer';
 import { Dashboard } from './components/Dashboard';
 import { TherapistDashboard } from './components/TherapistDashboard';
+import { ClientDashboard } from './components/ClientDashboard';
 import { Monitor } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -67,6 +68,9 @@ const App: React.FC = () => {
     // Role-based dashboard redirect
     if (user?.role?.toLowerCase() === 'therapist') {
       return <TherapistDashboard onLogout={handleLogout} user={user} />;
+    }
+    if (user?.role?.toLowerCase() === 'client') {
+      return <ClientDashboard onLogout={handleLogout} user={user} />;
     }
     
     // Default admin dashboard
