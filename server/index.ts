@@ -182,7 +182,7 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_invitee_time
           FROM bookings
           WHERE booking_status != $1
-            AND booking_end_at >= NOW()
+            AND booking_start_at >= NOW()
           ORDER BY booking_start_at ASC
           LIMIT 10`,
           ['cancelled']
