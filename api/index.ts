@@ -205,7 +205,14 @@ async function handleTherapistAppointments(req: VercelRequest, res: VercelRespon
   const userResult = await pool.query('SELECT therapist_id FROM users WHERE id = $1 AND role = $2', [therapist_id, 'therapist']);
   if (userResult.rows.length === 0) return res.status(404).json({ error: 'Therapist user not found' });
   const therapistUserId = userResult.rows[0].therapist_id;
-  const appointmentsResult = await pool.query('SELECT * FROM therapist_appointments_cache WHERE therapist_id = $1 ORDER BY booking_date DESC', [therapistUserId]);
+  const therapistResult = await pool.query('SELECT * FROM therapists WHERE therapist_id = $1', [therapistUserId]);
+  const therapist = therapistResult.rows[0];
+  const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
+  const appointmentsResult = await pool.query(`
+    SELECT invitee_name as client_name, invitee_phone as contact_info, booking_resource_name as session_name,
+      booking_invitee_time as session_timings, booking_mode as mode, booking_start_at as booking_date, booking_status
+    FROM bookings WHERE booking_host_name ILIKE $1 ORDER BY booking_start_at DESC
+  `, [`%${therapistFirstName}%`]);
   
   const convertToIST = (timeStr: string) => {
     if (!timeStr) return timeStr;
@@ -236,7 +243,9 @@ async function handleTherapistAppointments(req: VercelRequest, res: VercelRespon
   
   const appointments = appointmentsResult.rows.map(apt => ({
     ...apt,
-    session_timings: convertToIST(apt.session_timings)
+    session_timings: convertToIST(apt.session_timings),
+    mode: apt.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
+    booking_status: apt.booking_status || 'confirmed'
   }));
   
   res.json({ appointments });
@@ -249,7 +258,14 @@ async function handleTherapistClients(req: VercelRequest, res: VercelResponse) {
   const userResult = await pool.query('SELECT therapist_id FROM users WHERE id = $1 AND role = $2', [therapist_id, 'therapist']);
   if (userResult.rows.length === 0) return res.status(404).json({ error: 'Therapist user not found' });
   const therapistUserId = userResult.rows[0].therapist_id;
-  const clientsResult = await pool.query('SELECT * FROM therapist_clients_summary WHERE therapist_id = $1 ORDER BY last_session_date DESC', [therapistUserId]);
+  const therapistResult = await pool.query('SELECT * FROM therapists WHERE therapist_id = $1', [therapistUserId]);
+  const therapist = therapistResult.rows[0];
+  const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
+  const clientsResult = await pool.query(`
+    SELECT invitee_name as client_name, invitee_email as client_email, invitee_phone as client_phone, COUNT(*) as total_sessions
+    FROM bookings WHERE booking_host_name ILIKE $1
+    GROUP BY invitee_name, invitee_email, invitee_phone ORDER BY MAX(booking_start_at) DESC
+  `, [`%${therapistFirstName}%`]);
   const clientMap = new Map();
   const emailToKey = new Map();
   const phoneToKey = new Map();
@@ -329,20 +345,45 @@ async function handleTherapistDetails(req: VercelRequest, res: VercelResponse) {
 
 async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const { therapist_id } = req.query;
+  const { therapist_id, start, end } = req.query;
   if (!therapist_id) return res.status(400).json({ error: 'Therapist ID is required' });
   const userResult = await pool.query('SELECT therapist_id FROM users WHERE id = $1 AND role = $2', [therapist_id, 'therapist']);
   if (userResult.rows.length === 0) return res.status(404).json({ error: 'Therapist user not found' });
   const therapistUserId = userResult.rows[0].therapist_id;
-  const statsResult = await pool.query('SELECT * FROM therapist_dashboard_stats WHERE therapist_id = $1', [therapistUserId]);
-  if (statsResult.rows.length === 0) return res.status(404).json({ error: 'Therapist stats not found' });
-  const stats = statsResult.rows[0];
-  const upcomingResult = await pool.query(`
-    SELECT * FROM therapist_appointments_cache WHERE therapist_id = $1 AND booking_date > NOW() AND booking_status = 'confirmed'
-    ORDER BY booking_date ASC LIMIT 10
-  `, [therapistUserId]);
   const therapistResult = await pool.query('SELECT * FROM therapists WHERE therapist_id = $1', [therapistUserId]);
   const therapist = therapistResult.rows[0] || { name: 'Ishika Mahajan', specialization: 'Individual Therapy' };
+  const therapistFirstName = therapist.name.split(' ')[0];
+  const hasDateFilter = start && end;
+  const now = new Date();
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+  const sessions = hasDateFilter
+    ? await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+        [`%${therapistFirstName}%`, 'confirmed', 'rescheduled', start, `${end} 23:59:59`])
+    : await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3)',
+        [`%${therapistFirstName}%`, 'confirmed', 'rescheduled']);
+  const noShows = hasDateFilter
+    ? await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+        [`%${therapistFirstName}%`, 'no_show', start, `${end} 23:59:59`])
+    : await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2',
+        [`%${therapistFirstName}%`, 'no_show']);
+  const cancelled = hasDateFilter
+    ? await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+        [`%${therapistFirstName}%`, 'cancelled', start, `${end} 23:59:59`])
+    : await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2',
+        [`%${therapistFirstName}%`, 'cancelled']);
+  const lastMonthSessions = await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+    [`%${therapistFirstName}%`, 'confirmed', 'rescheduled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]);
+  const lastMonthNoShows = await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+    [`%${therapistFirstName}%`, 'no_show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]);
+  const lastMonthCancelled = await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
+    [`%${therapistFirstName}%`, 'cancelled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]);
+  const upcomingResult = await pool.query(`
+    SELECT invitee_name as client_name, booking_resource_name as session_name, booking_mode as mode,
+      booking_invitee_time as session_timings, booking_start_at as booking_date
+    FROM bookings WHERE booking_host_name ILIKE $1 AND booking_start_at > NOW() AND booking_status != 'cancelled'
+    ORDER BY booking_start_at ASC LIMIT 10
+  `, [`%${therapistFirstName}%`]);
   
   const convertToIST = (timeStr: string) => {
     if (!timeStr) return timeStr;
@@ -373,21 +414,38 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
   
   res.json({
     therapist: { name: therapist.name, specialization: therapist.specialization },
-    stats: { sessions: parseInt(stats.confirmed_sessions) || 0, noShows: parseInt(stats.no_shows) || 0, cancelled: parseInt(stats.cancelled_sessions) || 0 },
+    stats: {
+      sessions: parseInt(sessions.rows[0].total) || 0,
+      noShows: parseInt(noShows.rows[0].total) || 0,
+      cancelled: parseInt(cancelled.rows[0].total) || 0,
+      lastMonthSessions: parseInt(lastMonthSessions.rows[0].total) || 0,
+      lastMonthNoShows: parseInt(lastMonthNoShows.rows[0].total) || 0,
+      lastMonthCancelled: parseInt(lastMonthCancelled.rows[0].total) || 0
+    },
     upcomingBookings: upcomingResult.rows.map(booking => ({
-      client_name: booking.client_name, therapy_type: booking.session_name, mode: booking.mode, session_timings: convertToIST(booking.session_timings)
+      client_name: booking.client_name,
+      therapy_type: booking.session_name,
+      mode: booking.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
+      session_timings: convertToIST(booking.session_timings)
     }))
   });
 }
 
 async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) {
   const { start, end } = req.query;
-  const dateFilter = start && end ? `AND booking_start_at BETWEEN '${start}' AND '${end} 23:59:59'` : 'AND booking_end_at >= NOW()';
-  const result = await pool.query(`
-    SELECT invitee_name as client_name, booking_resource_name as therapy_type, booking_mode as mode, 
-      booking_host_name as therapist_name, booking_invitee_time
-    FROM bookings WHERE booking_status != 'cancelled' ${dateFilter} ORDER BY booking_start_at ASC LIMIT 10
-  `);
+  const result = start && end
+    ? await pool.query(`
+        SELECT invitee_name as client_name, booking_resource_name as therapy_type, booking_mode as mode,
+          booking_host_name as therapist_name, booking_invitee_time
+        FROM bookings WHERE booking_status != 'cancelled' AND booking_start_at BETWEEN $1 AND $2
+        ORDER BY booking_start_at ASC LIMIT 10
+      `, [start, `${end} 23:59:59`])
+    : await pool.query(`
+        SELECT invitee_name as client_name, booking_resource_name as therapy_type, booking_mode as mode,
+          booking_host_name as therapist_name, booking_invitee_time
+        FROM bookings WHERE booking_status != 'cancelled' AND booking_start_at >= NOW()
+        ORDER BY booking_start_at ASC LIMIT 10
+      `);
   const convertToIST = (timeStr: string) => {
     const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
     if (!match) return timeStr;
