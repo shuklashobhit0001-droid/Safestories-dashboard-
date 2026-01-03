@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Trash2, X, AlertTriangle } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 interface AuditLog {
   log_id: number;
@@ -14,7 +14,6 @@ export const AuditLogs: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showClearModal, setShowClearModal] = useState(false);
 
   useEffect(() => {
     fetchLogs();
@@ -30,16 +29,6 @@ export const AuditLogs: React.FC = () => {
       console.error('Error fetching logs:', error);
       setLogs([]);
       setLoading(false);
-    }
-  };
-
-  const handleClearLogs = async () => {
-    try {
-      await fetch('/api/audit-logs/clear', { method: 'POST' });
-      setShowClearModal(false);
-      fetchLogs();
-    } catch (error) {
-      console.error('Error clearing logs:', error);
     }
   };
 
@@ -81,13 +70,6 @@ export const AuditLogs: React.FC = () => {
           <h1 className="text-3xl font-bold mb-1">Audit Logs</h1>
           <p className="text-gray-600">Track all therapist activities</p>
         </div>
-        <button
-          onClick={() => setShowClearModal(true)}
-          className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
-        >
-          <Trash2 size={18} />
-          Clear Logs
-        </button>
       </div>
 
       <div className="relative mb-6">
@@ -149,38 +131,7 @@ export const AuditLogs: React.FC = () => {
         </div>
       </div>
 
-      {showClearModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-red-600 flex items-center gap-2">
-                <AlertTriangle size={24} />
-                Clear Audit Logs
-              </h3>
-              <button onClick={() => setShowClearModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
-            <p className="text-gray-700 mb-6">
-              Are you sure you want to clear all visible logs? This will hide them from view but keep them in the database for compliance.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowClearModal(false)}
-                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleClearLogs}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                Clear Logs
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };
