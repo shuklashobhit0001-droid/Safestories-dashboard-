@@ -46,6 +46,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleClearAuditLogs(req, res);
       case 'logout':
         return await handleLogout(req, res);
+      case 'session-notes':
+        return await handleSessionNotes(req, res);
       default:
         return res.status(404).json({ error: 'Route not found' });
     }
@@ -79,9 +81,13 @@ async function handleTherapists(req: VercelRequest, res: VercelResponse) {
     SELECT t.therapist_id, t.name, t.specialization, t.contact_info,
       COUNT(DISTINCT b.booking_id) as total_sessions_lifetime,
       COUNT(DISTINCT CASE WHEN EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
-        AND EXTRACT(YEAR FROM b.booking_start_at) = EXTRACT(YEAR FROM CURRENT_DATE) THEN b.booking_id END) as sessions_this_month
+        AND EXTRACT(YEAR FROM b.booking_start_at) = EXTRACT(YEAR FROM CURRENT_DATE) THEN b.booking_id END) as sessions_this_month,
+      COALESCE(SUM(b.invitee_payment_amount), 0) as total_revenue,
+      COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
+        AND EXTRACT(YEAR FROM b.booking_start_at) = EXTRACT(YEAR FROM CURRENT_DATE)
+        THEN b.invitee_payment_amount ELSE 0 END), 0) as revenue_this_month
     FROM therapists t
-    LEFT JOIN bookings b ON TRIM(b.booking_host_name) ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
+    LEFT JOIN bookings b ON (TRIM(b.booking_host_name) ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%' OR TRIM(b.booking_host_name) ILIKE t.name)
     GROUP BY t.therapist_id, t.name, t.specialization, t.contact_info
     ORDER BY t.name ASC
   `);
@@ -126,9 +132,22 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
 
 async function handleAppointments(req: VercelRequest, res: VercelResponse) {
   const result = await pool.query(`
-    SELECT booking_invitee_time, booking_resource_name, invitee_name, invitee_phone, invitee_email, 
-      booking_host_name, booking_mode, booking_start_at, booking_joining_link, booking_checkin_url
-    FROM bookings ORDER BY booking_start_at DESC
+    SELECT 
+      b.booking_id,
+      b.booking_invitee_time,
+      b.booking_resource_name,
+      b.invitee_name,
+      b.invitee_phone,
+      b.invitee_email,
+      b.booking_host_name,
+      b.booking_mode,
+      b.booking_start_at,
+      b.booking_joining_link,
+      b.booking_checkin_url,
+      CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+    FROM bookings b
+    LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+    ORDER BY b.booking_start_at DESC
   `);
   const convertToIST = (timeStr: string) => {
     const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
@@ -156,9 +175,17 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
     return `${date} at ${istStart} - ${istEnd} IST`;
   };
   const appointments = result.rows.map(row => ({
-    ...row, booking_start_at: convertToIST(row.booking_invitee_time),
+    booking_id: row.booking_id,
+    booking_start_at: convertToIST(row.booking_invitee_time),
+    booking_resource_name: row.booking_resource_name,
+    invitee_name: row.invitee_name,
+    invitee_phone: row.invitee_phone,
+    invitee_email: row.invitee_email,
+    booking_host_name: row.booking_host_name,
     booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-    booking_joining_link: row.booking_joining_link, booking_checkin_url: row.booking_checkin_url
+    booking_joining_link: row.booking_joining_link,
+    booking_checkin_url: row.booking_checkin_url,
+    has_session_notes: row.has_session_notes
   }));
   res.json(appointments);
 }
@@ -559,4 +586,13 @@ async function handleLogout(req: VercelRequest, res: VercelResponse) {
     );
   }
   res.json({ success: true });
+}
+
+async function handleSessionNotes(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  const { booking_id } = req.query;
+  if (!booking_id) return res.status(400).json({ error: 'Booking ID is required' });
+  const result = await pool.query('SELECT * FROM client_session_notes WHERE booking_id = $1', [booking_id]);
+  if (result.rows.length === 0) return res.status(404).json({ error: 'Session notes not found' });
+  res.json(result.rows[0]);
 }

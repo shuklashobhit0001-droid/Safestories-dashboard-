@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
+import { Loader } from './Loader';
 
 interface AuditLog {
   log_id: number;
@@ -83,6 +84,9 @@ export const AuditLogs: React.FC = () => {
         />
       </div>
 
+      {loading ? (
+        <Loader />
+      ) : (
       <div className="bg-white rounded-lg border flex-1 flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -130,6 +134,7 @@ export const AuditLogs: React.FC = () => {
           </span>
         </div>
       </div>
+      )}
 
 
     </div>

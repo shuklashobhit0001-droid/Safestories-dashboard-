@@ -1,0 +1,39 @@
+.loader-wrapper {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* LOGO */
+.logo {
+  width: 200px;
+  margin-bottom: 30px;
+}
+
+/* PROGRESS BAR */
+.progress {
+  width: 100%;
+  height: 14px;
+  background: #e6f0ec;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  width: 0%;
+  background: #21615D;
+  border-radius: 20px;
+  animation: fillBar 2.5s linear infinite;
+}
+
+/* PROGRESS FILL */
+@keyframes fillBar {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}

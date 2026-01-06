@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
 import { TherapistDetailsModal } from './TherapistDetailsModal';
+import { Loader } from './Loader';
 
 export const AllTherapists: React.FC = () => {
   const [therapists, setTherapists] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTherapist, setSelectedTherapist] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchTherapists();
@@ -14,11 +16,14 @@ export const AllTherapists: React.FC = () => {
 
   const fetchTherapists = async () => {
     try {
+      setLoading(true);
       const response = await fetch('/api/therapists');
       const data = await response.json();
       setTherapists(data);
     } catch (error) {
       console.error('Error fetching therapists:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -56,6 +61,9 @@ export const AllTherapists: React.FC = () => {
       </div>
 
       {/* Therapists Table */}
+      {loading ? (
+        <Loader />
+      ) : (
       <div className="bg-white rounded-lg border flex-1 flex flex-col">
         <div className="overflow-x-auto flex-1">
           <table className="w-full h-full">
@@ -112,6 +120,7 @@ export const AllTherapists: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
       <TherapistDetailsModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

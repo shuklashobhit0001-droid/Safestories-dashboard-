@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell } from 'lucide-react';
 import { Logo } from './Logo';
 import { AllClients } from './AllClients';
 import { AllTherapists } from './AllTherapists';
@@ -7,6 +7,7 @@ import { Appointments } from './Appointments';
 import { RefundsCancellations } from './RefundsCancellations';
 import { SendBookingModal } from './SendBookingModal';
 import { AuditLogs } from './AuditLogs';
+import { Loader } from './Loader';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -22,6 +23,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [loading, setLoading] = useState(true);
 
   const monthOptions = ['Dec 2025', 'Nov 2025', 'Oct 2025', 'Sep 2025', 'Aug 2025', 'Jul 2025', 'Jun 2025', 'May 2025', 'Apr 2025', 'Mar 2025', 'Feb 2025', 'Jan 2025'];
 
@@ -70,6 +72,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
   const fetchDashboardData = async () => {
     try {
+      setLoading(true);
       const statsUrl = dateRange.start && dateRange.end 
         ? `/api/dashboard/stats?start=${dateRange.start}&end=${dateRange.end}`
         : '/api/dashboard/stats';
@@ -92,6 +95,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       setBookings(bookingsData);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -152,6 +157,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <FileText size={20} className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'}>Audit Logs</span>
           </div>
+          <div 
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+            style={{ backgroundColor: activeView === 'notifications' ? '#2D75795C' : 'transparent' }}
+            onClick={() => setActiveView('notifications')}
+          >
+            <Bell size={20} className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'}>Notifications</span>
+          </div>
         </nav>
 
         <div className="p-4 border-t">
@@ -180,6 +193,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <RefundsCancellations />
         ) : activeView === 'audit' ? (
           <AuditLogs />
+        ) : activeView === 'notifications' ? (
+          <div className="p-8">
+            <h1 className="text-3xl font-bold mb-1">Notifications</h1>
+            <p className="text-gray-600">View and manage notifications</p>
+            <div className="mt-8 bg-white rounded-lg border p-8 text-center text-gray-400">
+              No notifications yet
+            </div>
+          </div>
+        ) : loading ? (
+          <Loader />
         ) : (
         <div className="p-8">
           {/* Header */}
@@ -280,8 +303,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             {stats.map((stat, index) => (
               <div key={index} className="bg-white rounded-lg p-6 border">
                 <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
-                <div className="text-3xl font-bold mb-1">{stat.value}</div>
-                <div className="text-xs text-gray-500">Last month: {stat.lastMonth}</div>
+                <div className="text-3xl font-bold">{stat.value}</div>
               </div>
             ))}
           </div>

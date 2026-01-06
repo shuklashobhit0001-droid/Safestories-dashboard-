@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, MoreVertical, Copy, Send, AlertTriangle, X } from 'lucide-react';
+import { MessageCircle, Search, Download, MoreVertical, Copy, Send, AlertTriangle, X, FileText } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { Toast } from './Toast';
+import { Loader } from './Loader';
 
 interface Appointment {
+  booking_id?: number;
   booking_start_at: string;
   booking_resource_name: string;
   invitee_name: string;
@@ -13,6 +15,7 @@ interface Appointment {
   booking_mode: string;
   booking_joining_link?: string;
   booking_checkin_url?: string;
+  has_session_notes?: boolean;
 }
 
 export const Appointments: React.FC = () => {
@@ -125,6 +128,26 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
   };
 
   const handleSOSClick = (apt: Appointment) => {
+    const timeMatch = apt.booking_start_at.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+    if (timeMatch) {
+      const [, dateStr, , endTimeStr] = timeMatch;
+      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+      const now = new Date();
+      const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
+      
+      if (now < endDateTime) {
+        setToast({ message: 'SOS ticket can only be raised after the session ends', type: 'error' });
+        setOpenMenuIndex(null);
+        return;
+      }
+      
+      if (hoursSinceEnd > 24) {
+        setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
+        setOpenMenuIndex(null);
+        return;
+      }
+    }
+    
     setSelectedSOSBooking(apt);
     setShowSOSModal(true);
     setOpenMenuIndex(null);
@@ -163,6 +186,30 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       setShowSOSModal(false);
       setSosConfirmText('');
     }
+  };
+
+  const handleSessionNotesReminder = async (apt: Appointment) => {
+    if (apt.has_session_notes) {
+      setToast({ message: 'Session notes already filled for this appointment', type: 'error' });
+      setOpenMenuIndex(null);
+      return;
+    }
+
+    // TODO: Add webhook URL here
+    // await fetch('YOUR_WEBHOOK_URL', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({
+    //     booking_id: apt.booking_id,
+    //     therapist_name: apt.booking_host_name,
+    //     client_name: apt.invitee_name,
+    //     session_name: apt.booking_resource_name,
+    //     session_timings: apt.booking_start_at
+    //   })
+    // });
+
+    setToast({ message: 'Reminder sent to therapist to fill session notes', type: 'success' });
+    setOpenMenuIndex(null);
   };
 
   const filteredAppointments = appointments.filter(apt => {
@@ -239,6 +286,9 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       </div>
 
       {/* Appointments Table */}
+      {loading ? (
+        <Loader />
+      ) : (
       <div className="bg-white rounded-lg border flex-1 flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -322,6 +372,17 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
               <AlertTriangle size={16} />
               SOS Raise Ticket
             </button>
+            <button 
+              onClick={() => handleSessionNotesReminder(filteredAppointments[openMenuIndex])}
+              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 ${
+                filteredAppointments[openMenuIndex].has_session_notes 
+                  ? 'text-gray-400 cursor-not-allowed' 
+                  : 'hover:bg-gray-100 text-blue-600'
+              }`}
+            >
+              <FileText size={16} />
+              Send Session Notes Reminder
+            </button>
           </div>
         )}
         <div className="px-6 py-4 border-t flex justify-between items-center">
@@ -332,6 +393,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
           </div>
         </div>
       </div>
+      )}
       <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
       {toast && (
         <Toast

@@ -295,6 +295,11 @@ app.get('/api/clients', async (req, res) => {
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
       
+      // Fill empty email with existing email from same client
+      if (row.invitee_email && !client.invitee_email) {
+        client.invitee_email = row.invitee_email;
+      }
+      
       // Only add to therapists array if session_count > 0
       if (parseInt(row.session_count) > 0) {
         client.therapists.push({
@@ -329,18 +334,21 @@ app.get('/api/appointments', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
-        booking_invitee_time,
-        booking_resource_name,
-        invitee_name,
-        invitee_phone,
-        invitee_email,
-        booking_host_name,
-        booking_mode,
-        booking_start_at,
-        booking_joining_link,
-        booking_checkin_url
-      FROM bookings
-      ORDER BY booking_start_at DESC
+        b.booking_id,
+        b.booking_invitee_time,
+        b.booking_resource_name,
+        b.invitee_name,
+        b.invitee_phone,
+        b.invitee_email,
+        b.booking_host_name,
+        b.booking_mode,
+        b.booking_start_at,
+        b.booking_joining_link,
+        b.booking_checkin_url,
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+      FROM bookings b
+      LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+      ORDER BY b.booking_start_at DESC
     `);
 
     const convertToIST = (timeStr: string) => {
@@ -376,11 +384,17 @@ app.get('/api/appointments', async (req, res) => {
     };
 
     const appointments = result.rows.map(row => ({
-      ...row,
+      booking_id: row.booking_id,
       booking_start_at: convertToIST(row.booking_invitee_time),
+      booking_resource_name: row.booking_resource_name,
+      invitee_name: row.invitee_name,
+      invitee_phone: row.invitee_phone,
+      invitee_email: row.invitee_email,
+      booking_host_name: row.booking_host_name,
       booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
       booking_joining_link: row.booking_joining_link,
-      booking_checkin_url: row.booking_checkin_url
+      booking_checkin_url: row.booking_checkin_url,
+      has_session_notes: row.has_session_notes
     }));
 
     res.json(appointments);
@@ -446,9 +460,19 @@ app.get('/api/therapists', async (req, res) => {
           WHEN EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
           AND EXTRACT(YEAR FROM b.booking_start_at) = EXTRACT(YEAR FROM CURRENT_DATE)
           THEN b.booking_id 
-        END) as sessions_this_month
+        END) as sessions_this_month,
+        COALESCE(SUM(b.invitee_payment_amount), 0) as total_revenue,
+        COALESCE(SUM(CASE 
+          WHEN EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
+          AND EXTRACT(YEAR FROM b.booking_start_at) = EXTRACT(YEAR FROM CURRENT_DATE)
+          THEN b.invitee_payment_amount 
+          ELSE 0 
+        END), 0) as revenue_this_month
       FROM therapists t
-      LEFT JOIN bookings b ON TRIM(b.booking_host_name) ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
+      LEFT JOIN bookings b ON (
+        TRIM(b.booking_host_name) ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
+        OR TRIM(b.booking_host_name) ILIKE t.name
+      )
       GROUP BY t.therapist_id, t.name, t.specialization, t.contact_info
       ORDER BY t.name ASC
     `);
@@ -717,6 +741,12 @@ app.get('/api/therapist-clients', async (req, res) => {
       
       const client = clientMap.get(key);
       client.total_sessions += parseInt(row.total_sessions) || 0;
+      
+      // Fill empty email with existing email from same client
+      if (row.client_email && !client.client_email) {
+        client.client_email = row.client_email;
+      }
+      
       client.therapists.push({
         client_name: row.client_name,
         client_phone: row.client_phone,
@@ -946,6 +976,31 @@ app.post('/api/logout', async (req, res) => {
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({ success: false, error: 'Logout failed' });
+  }
+});
+
+// Get session notes
+app.get('/api/session-notes', async (req, res) => {
+  try {
+    const { booking_id } = req.query;
+    
+    if (!booking_id) {
+      return res.status(400).json({ error: 'Booking ID is required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM client_session_notes WHERE booking_id = $1',
+      [booking_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session notes not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching session notes:', error);
+    res.status(500).json({ error: 'Failed to fetch session notes' });
   }
 });
 

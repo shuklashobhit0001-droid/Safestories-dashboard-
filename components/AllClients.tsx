@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MessageCircle, Search, Download, ChevronDown, ChevronRight, ArrowRightLeft } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { TransferClientModal } from './TransferClientModal';
+import { Loader } from './Loader';
 
 interface Therapist {
   invitee_name: string;
@@ -143,6 +144,9 @@ export const AllClients: React.FC = () => {
       </div>
 
       {/* Clients Table */}
+      {loading ? (
+        <Loader />
+      ) : (
       <div className="bg-white rounded-lg border flex-1 flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -231,6 +235,7 @@ export const AllClients: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
       <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
       <TransferClientModal
         isOpen={isTransferModalOpen}

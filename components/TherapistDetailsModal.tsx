@@ -23,6 +23,8 @@ interface TherapistDetailsModalProps {
     contact_info: string | null;
     total_sessions_lifetime: number;
     sessions_this_month: number;
+    total_revenue: number;
+    revenue_this_month: number;
   } | null;
 }
 
@@ -97,6 +99,14 @@ export const TherapistDetailsModal: React.FC<TherapistDetailsModalProps> = ({ is
             <div className="bg-gray-50 p-4 rounded-lg">
               <p className="text-sm text-gray-600">Sessions This Month</p>
               <p className="text-2xl font-bold text-teal-700">{therapist.sessions_this_month}</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Total Revenue</p>
+              <p className="text-2xl font-bold text-teal-700">₹{Number(therapist.total_revenue || 0).toLocaleString()}</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Revenue This Month</p>
+              <p className="text-2xl font-bold text-teal-700">₹{Number(therapist.revenue_this_month || 0).toLocaleString()}</p>
             </div>
           </div>
         </div>

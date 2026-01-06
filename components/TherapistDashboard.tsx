@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, MoreVertical, Copy, Send, Search } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, MoreVertical, Copy, Send, Search, FileText } from 'lucide-react';
 import { Logo } from './Logo';
 import { Toast } from './Toast';
+import { Loader } from './Loader';
 
 interface TherapistDashboardProps {
   onLogout: () => void;
@@ -38,6 +39,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [sosConfirmText, setSosConfirmText] = useState('');
   const [selectedSOSBooking, setSelectedSOSBooking] = useState<any>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
 
   const handleMonthSelect = (month: string) => {
     setSelectedMonth(month);
@@ -123,6 +125,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   const fetchTherapistData = async () => {
     try {
+      setDashboardLoading(true);
       // Fetch therapist-specific stats and bookings
       const statsUrl = dateRange.start && dateRange.end 
         ? `/api/therapist-stats?therapist_id=${user.id}&start=${dateRange.start}&end=${dateRange.end}`
@@ -157,6 +160,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         { title: 'Cancelled', value: '0', lastMonth: '0' },
       ]);
       setBookings([]);
+    } finally {
+      setDashboardLoading(false);
     }
   };
 
@@ -224,6 +229,26 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleSOSClick = (booking: any) => {
+    const timeMatch = booking.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+    if (timeMatch) {
+      const [, dateStr, , endTimeStr] = timeMatch;
+      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+      const now = new Date();
+      const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
+      
+      if (now < endDateTime) {
+        setToast({ message: 'SOS ticket can only be raised after the session ends', type: 'error' });
+        setOpenMenuIndex(null);
+        return;
+      }
+      
+      if (hoursSinceEnd > 24) {
+        setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
+        setOpenMenuIndex(null);
+        return;
+      }
+    }
+    
     setSelectedSOSBooking(booking);
     setShowSOSModal(true);
     setOpenMenuIndex(null);
@@ -243,6 +268,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           session_timings: selectedSOSBooking?.session_timings,
           contact_info: selectedSOSBooking?.contact_info,
           mode: selectedSOSBooking?.mode,
+          booking_id: selectedSOSBooking?.booking_id,
           timestamp: new Date().toISOString()
         })
       });
@@ -265,8 +291,18 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     }
   };
 
+  const handleFillSessionNotes = (appointment: any) => {
+    // TODO: Add functionality later
+    console.log('Fill session notes for:', appointment);
+    setOpenMenuIndex(null);
+  };
+
   const renderMyClients = () => (
     <div className="p-8">
+      {clientsLoading ? (
+        <Loader />
+      ) : (
+      <>
       <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-1">My Clients</h1>
@@ -373,11 +409,17 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 
   const renderMyAppointments = () => (
     <div className="p-8">
+      {appointmentsLoading ? (
+        <Loader />
+      ) : (
+      <>
       <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-1">My Appointments</h1>
@@ -520,6 +562,21 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               <span className="font-bold">SOS</span>
               Raise Ticket
             </button>
+            <button 
+              onClick={() => {
+                const filteredAppts = appointments.filter(appointment => 
+                  appointmentSearchTerm === '' || 
+                  appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                  appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                  'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
+                );
+                handleFillSessionNotes(filteredAppts[openMenuIndex]);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-teal-600"
+            >
+              <FileText size={16} />
+              Fill Session Notes
+            </button>
           </div>
         )}
         <div className="px-6 py-4 border-t flex justify-between items-center">
@@ -535,6 +592,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 
@@ -602,6 +661,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           renderMyAppointments()
         ) : (
           <div className="p-8">
+            {dashboardLoading ? (
+              <Loader />
+            ) : (
+            <>
             {/* Header */}
             <div className="flex justify-between items-start mb-8">
               <div>
@@ -700,8 +763,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               {stats.map((stat, index) => (
                 <div key={index} className="bg-white rounded-lg p-6 border">
                   <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
-                  <div className="text-3xl font-bold mb-1">{stat.value}</div>
-                  <div className="text-xs text-gray-500">Last month: {stat.lastMonth}</div>
+                  <div className="text-3xl font-bold">{stat.value}</div>
                 </div>
               ))}
             </div>
@@ -780,6 +842,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                     <span className="font-bold">SOS</span>
                     Raise Ticket
                   </button>
+                  <button 
+                    onClick={() => handleFillSessionNotes(bookings[openMenuIndex])}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-teal-600"
+                  >
+                    <FileText size={16} />
+                    Fill Session Notes
+                  </button>
                 </div>
               )}
               <div className="px-6 py-4 border-t flex justify-between items-center">
@@ -790,9 +859,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 </div>
               </div>
             </div>
+          </>
+          )}
           </div>
-        )}
-      </div>
+        )
+        }
       {toast && (
         <Toast
           message={toast.message}
@@ -853,6 +924,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
