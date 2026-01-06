@@ -144,6 +144,7 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
       b.booking_start_at,
       b.booking_joining_link,
       b.booking_checkin_url,
+      b.therapist_id,
       CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
     FROM bookings b
     LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
@@ -185,6 +186,7 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
     booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
     booking_joining_link: row.booking_joining_link,
     booking_checkin_url: row.booking_checkin_url,
+    therapist_id: row.therapist_id,
     has_session_notes: row.has_session_notes
   }));
   res.json(appointments);

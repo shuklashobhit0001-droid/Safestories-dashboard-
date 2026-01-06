@@ -16,6 +16,7 @@ interface Appointment {
   booking_joining_link?: string;
   booking_checkin_url?: string;
   has_session_notes?: boolean;
+  therapist_id?: string;
 }
 
 export const Appointments: React.FC = () => {
@@ -121,26 +122,42 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
   };
 
   const handleSessionNotesReminder = async (apt: Appointment) => {
+    console.log('Full appointment object:', apt);
+    console.log('Therapist ID:', apt.therapist_id);
+    
     if (apt.has_session_notes) {
       setToast({ message: 'Session notes already filled for this appointment', type: 'error' });
       setOpenMenuIndex(null);
       return;
     }
 
-    // TODO: Add webhook URL here
-    // await fetch('YOUR_WEBHOOK_URL', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({
-    //     booking_id: apt.booking_id,
-    //     therapist_name: apt.booking_host_name,
-    //     client_name: apt.invitee_name,
-    //     session_name: apt.booking_resource_name,
-    //     session_timings: apt.booking_start_at
-    //   })
-    // });
+    const webhookData = {
+      bookingId: apt.booking_id,
+      therapistId: apt.therapist_id,
+      therapistName: apt.booking_host_name,
+      clientName: apt.invitee_name,
+      sessionName: apt.booking_resource_name,
+      sessionTimings: apt.booking_start_at
+    };
 
-    setToast({ message: 'Reminder sent to therapist to fill session notes', type: 'success' });
+    console.log('Session notes reminder data:', webhookData);
+
+    try {
+      const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/fd13ea75-06b4-49e5-8188-75a88a9aaade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookData)
+      });
+
+      if (response.ok) {
+        setToast({ message: 'Reminder sent to therapist to fill session notes', type: 'success' });
+      } else {
+        setToast({ message: 'Failed to send reminder', type: 'error' });
+      }
+    } catch (err) {
+      console.error('Error sending reminder:', err);
+      setToast({ message: 'Failed to send reminder', type: 'error' });
+    }
     setOpenMenuIndex(null);
   };
 
