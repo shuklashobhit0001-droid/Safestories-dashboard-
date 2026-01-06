@@ -424,7 +424,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                           <tr key={`${index}-${tIndex}`} className="bg-gray-50 border-b">
                             <td className="px-6 py-4 text-sm pl-16 text-gray-600">{therapist.client_name}</td>
                             <td className="px-6 py-4 text-sm text-gray-600">{therapist.client_phone}</td>
-                            <td className="px-6 py-4 text-sm"></td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{client.client_email}</td>
                             <td className="px-6 py-4 text-sm text-gray-600">{therapist.total_sessions}</td>
                           </tr>
                         ))

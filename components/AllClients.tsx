@@ -215,7 +215,7 @@ export const AllClients: React.FC = () => {
                         <tr key={`${index}-${tIndex}`} className="bg-gray-50 border-b">
                           <td className="px-6 py-4 text-sm pl-16 text-gray-600">{therapist.invitee_name}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{therapist.invitee_phone}</td>
-                          <td className="px-6 py-4 text-sm"></td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{client.invitee_email}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{therapist.session_count}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{therapist.booking_host_name}</td>
                         </tr>
