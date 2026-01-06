@@ -627,6 +627,7 @@ app.get('/api/therapist-stats', async (req, res) => {
     // Get upcoming bookings directly from bookings table
     const upcomingResult = await pool.query(`
       SELECT 
+        booking_id,
         invitee_name as client_name,
         booking_resource_name as session_name,
         booking_mode as mode,
@@ -654,6 +655,7 @@ app.get('/api/therapist-stats', async (req, res) => {
         lastMonthCancelled: parseInt(lastMonthCancelled.rows[0].total) || 0
       },
       upcomingBookings: upcomingResult.rows.map(booking => ({
+        booking_id: booking.booking_id,
         client_name: booking.client_name,
         therapy_type: booking.session_name,
         mode: booking.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
@@ -797,6 +799,7 @@ app.get('/api/therapist-appointments', async (req, res) => {
     // Get appointments for this therapist directly from bookings table
     const appointmentsResult = await pool.query(`
       SELECT 
+        booking_id,
         invitee_name as client_name,
         invitee_phone as contact_info,
         booking_resource_name as session_name,
@@ -842,7 +845,10 @@ app.get('/api/therapist-appointments', async (req, res) => {
     };
 
     const appointments = appointmentsResult.rows.map(row => ({
-      ...row,
+      booking_id: row.booking_id,
+      client_name: row.client_name,
+      contact_info: row.contact_info,
+      session_name: row.session_name,
       session_timings: convertToIST(row.session_timings),
       mode: row.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
       booking_status: row.booking_status || 'confirmed'
