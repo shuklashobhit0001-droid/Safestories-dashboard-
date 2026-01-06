@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, MoreVertical, Copy, Send, AlertTriangle, X, FileText } from 'lucide-react';
+import { MessageCircle, Search, Download, MoreVertical, Copy, Send, X, FileText } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { Toast } from './Toast';
 import { Loader } from './Loader';
@@ -26,13 +26,6 @@ export const Appointments: React.FC = () => {
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
-  const [showSOSModal, setShowSOSModal] = useState(false);
-  const [sosConfirmText, setSosConfirmText] = useState('');
-  const [selectedSOSBooking, setSelectedSOSBooking] = useState<Appointment | null>(null);
-  const [adminUser] = useState(() => {
-    const savedUser = localStorage.getItem('user');
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
 
   useEffect(() => {
     fetch('/api/appointments')
@@ -125,67 +118,6 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       setToast({ message: 'Failed to send WhatsApp notification', type: 'error' });
     }
     setOpenMenuIndex(null);
-  };
-
-  const handleSOSClick = (apt: Appointment) => {
-    const timeMatch = apt.booking_start_at.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
-    if (timeMatch) {
-      const [, dateStr, , endTimeStr] = timeMatch;
-      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-      const now = new Date();
-      const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
-      
-      if (now < endDateTime) {
-        setToast({ message: 'SOS ticket can only be raised after the session ends', type: 'error' });
-        setOpenMenuIndex(null);
-        return;
-      }
-      
-      if (hoursSinceEnd > 24) {
-        setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
-        setOpenMenuIndex(null);
-        return;
-      }
-    }
-    
-    setSelectedSOSBooking(apt);
-    setShowSOSModal(true);
-    setOpenMenuIndex(null);
-  };
-
-  const handleSOSConfirm = async () => {
-    if (sosConfirmText === 'Confirm') {
-      await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/3e725c04-ed19-4967-8a05-c0a1e8c8441d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          therapist_id: adminUser?.id,
-          therapist_name: adminUser?.username,
-          client_name: selectedSOSBooking?.invitee_name,
-          session_name: selectedSOSBooking?.booking_resource_name,
-          session_timings: selectedSOSBooking?.booking_start_at,
-          contact_info: selectedSOSBooking?.invitee_phone,
-          mode: selectedSOSBooking?.booking_mode,
-          timestamp: new Date().toISOString()
-        })
-      });
-
-      await fetch('/api/audit-logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          therapist_id: adminUser?.id,
-          therapist_name: adminUser?.username,
-          action_type: 'sos_ticket',
-          action_description: `${adminUser?.username} raised SOS ticket`,
-          client_name: selectedSOSBooking?.invitee_name
-        })
-      });
-
-      setToast({ message: 'SOS ticket raised successfully!', type: 'success' });
-      setShowSOSModal(false);
-      setSosConfirmText('');
-    }
   };
 
   const handleSessionNotesReminder = async (apt: Appointment) => {
@@ -366,13 +298,6 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
               Send WhatsApp Notification
             </button>
             <button 
-              onClick={() => handleSOSClick(filteredAppointments[openMenuIndex])}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-red-600"
-            >
-              <AlertTriangle size={16} />
-              SOS Raise Ticket
-            </button>
-            <button 
               onClick={() => handleSessionNotesReminder(filteredAppointments[openMenuIndex])}
               className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 ${
                 filteredAppointments[openMenuIndex].has_session_notes 
@@ -401,51 +326,6 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
           type={toast.type}
           onClose={() => setToast(null)}
         />
-      )}
-      {showSOSModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-red-600 flex items-center gap-2">
-                <AlertTriangle size={24} />
-                Raise SOS Ticket
-              </h3>
-              <button onClick={() => { setShowSOSModal(false); setSosConfirmText(''); }} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">Client: {selectedSOSBooking?.invitee_name}</p>
-              <p className="text-sm text-gray-600 mb-2">Session: {selectedSOSBooking?.booking_resource_name}</p>
-              <p className="text-sm text-gray-600 mb-4">Time: {selectedSOSBooking?.booking_start_at}</p>
-            </div>
-            <p className="text-gray-700 mb-4">
-              Type <span className="font-bold">"Confirm"</span> to raise an SOS ticket for this session.
-            </p>
-            <input
-              type="text"
-              value={sosConfirmText}
-              onChange={(e) => setSosConfirmText(e.target.value)}
-              placeholder="Type Confirm"
-              className="w-full px-4 py-2 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-red-500"
-            />
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setShowSOSModal(false); setSosConfirmText(''); }}
-                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSOSConfirm}
-                disabled={sosConfirmText !== 'Confirm'}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-              >
-                Raise Ticket
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
