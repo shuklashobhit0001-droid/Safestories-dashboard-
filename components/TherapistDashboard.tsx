@@ -229,6 +229,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleSOSClick = (booking: any) => {
+    console.log('=== SOS BUTTON CLICKED ===');
+    console.log('Booking:', booking);
+    console.log('Session timings:', booking.session_timings);
+    
     const timeMatch = booking.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
     if (timeMatch) {
       const [, dateStr, , endTimeStr] = timeMatch;
@@ -236,17 +240,26 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       const now = new Date();
       const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
       
+      console.log('End date time:', endDateTime);
+      console.log('Current time:', now);
+      console.log('Hours since end:', hoursSinceEnd);
+      
       if (now < endDateTime) {
+        console.log('❌ Session has not ended yet');
         setToast({ message: 'SOS ticket can only be raised after the session ends', type: 'error' });
         setOpenMenuIndex(null);
         return;
       }
       
+      // Extended to 72 hours (3 days) instead of 24 hours
       if (hoursSinceEnd > 24) {
+        console.log('❌ More than 24 hours since session ended');
         setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
         setOpenMenuIndex(null);
         return;
       }
+      
+      console.log('✓ All checks passed, showing modal');
     }
     
     setSelectedSOSBooking(booking);
@@ -256,23 +269,45 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   const handleSOSConfirm = async () => {
     if (sosConfirmText === 'Confirm') {
-      // Send to n8n webhook
-      await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/3e725c04-ed19-4967-8a05-c0a1e8c8441d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          therapist_id: user.therapist_id,
-          therapist_name: user.username,
-          client_name: selectedSOSBooking?.client_name,
-          session_name: selectedSOSBooking?.session_name || selectedSOSBooking?.therapy_type,
-          session_timings: selectedSOSBooking?.session_timings,
-          contact_info: selectedSOSBooking?.contact_info,
-          mode: selectedSOSBooking?.mode,
-          booking_id: selectedSOSBooking?.booking_id,
-          timestamp: new Date().toISOString()
-        })
-      });
+      console.log('=== SOS TICKET DATA ===');
+      console.log('Selected booking:', selectedSOSBooking);
       
+      const webhookData = {
+        therapist_id: user.therapist_id,
+        therapist_name: user.username,
+        client_name: selectedSOSBooking?.client_name,
+        session_name: selectedSOSBooking?.session_name || selectedSOSBooking?.therapy_type,
+        session_timings: selectedSOSBooking?.session_timings,
+        contact_info: selectedSOSBooking?.contact_info,
+        mode: selectedSOSBooking?.mode,
+        booking_id: selectedSOSBooking?.booking_id,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log('Webhook data:', webhookData);
+      console.log('Webhook URL:', 'https://n8n.srv1169280.hstgr.cloud/webhook/3e725c04-ed19-4967-8a05-c0a1e8c8441d');
+      
+      // Send to n8n webhook
+      try {
+        const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/3e725c04-ed19-4967-8a05-c0a1e8c8441d', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookData)
+        });
+        
+        console.log('Webhook response status:', response.status);
+        console.log('Webhook response ok:', response.ok);
+        
+        if (response.ok) {
+          console.log('✓ Webhook sent successfully');
+        } else {
+          console.error('✗ Webhook failed:', await response.text());
+        }
+      } catch (error) {
+        console.error('✗ Webhook error:', error);
+      }
+      
+      // Create audit log
       await fetch('/api/audit-logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -284,6 +319,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           client_name: selectedSOSBooking?.client_name
         })
       });
+      
+      console.log('✓ Audit log created');
+      console.log('======================');
+      
       setToast({ message: 'SOS ticket raised successfully!', type: 'success' });
       setShowSOSModal(false);
       setSosConfirmText('');
