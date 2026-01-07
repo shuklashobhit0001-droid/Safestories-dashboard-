@@ -48,6 +48,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleLogout(req, res);
       case 'session-notes':
         return await handleSessionNotes(req, res);
+      case 'notifications':
+        return await handleNotifications(req, res);
       default:
         return res.status(404).json({ error: 'Route not found' });
     }
@@ -538,6 +540,12 @@ async function handleTransferClient(req: VercelRequest, res: VercelResponse) {
     const oldTherapistResult = await pool.query('SELECT therapist_id FROM therapists WHERE name = $1', [fromTherapistName]);
     const fromTherapistId = oldTherapistResult.rows[0]?.therapist_id || null;
 
+    const clientResult = await pool.query(
+      'SELECT invitee_uuid FROM bookings WHERE invitee_email = $1 OR invitee_phone = $2 LIMIT 1',
+      [clientEmail, clientPhone]
+    );
+    const clientId = clientResult.rows[0]?.invitee_uuid || null;
+
     await pool.query(
       `INSERT INTO client_transfer_history 
        (client_name, client_email, client_phone, from_therapist_id, from_therapist_name, 
@@ -546,6 +554,25 @@ async function handleTransferClient(req: VercelRequest, res: VercelResponse) {
       [clientName, clientEmail, clientPhone, fromTherapistId, fromTherapistName,
        toTherapistId, newTherapist.name, transferredByAdminId, transferredByAdminName, reason]
     );
+
+    const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/efc4396f-401b-4d46-bfdb-e990a3ac3846';
+    
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client: { id: clientId, name: clientName, email: clientEmail, phone: clientPhone },
+          fromTherapist: { name: fromTherapistName, id: fromTherapistId },
+          toTherapist: { name: newTherapist.name, id: toTherapistId },
+          admin: { id: transferredByAdminId, name: transferredByAdminName },
+          reason: reason || 'No reason provided',
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (webhookError) {
+      console.error('Webhook error:', webhookError);
+    }
 
     res.json({ success: true, message: 'Client transferred successfully' });
   } catch (error) {
@@ -597,4 +624,47 @@ async function handleSessionNotes(req: VercelRequest, res: VercelResponse) {
   const result = await pool.query('SELECT * FROM client_session_notes WHERE booking_id = $1', [booking_id]);
   if (result.rows.length === 0) return res.status(404).json({ error: 'Session notes not found' });
   res.json(result.rows[0]);
+}
+
+async function handleNotifications(req: VercelRequest, res: VercelResponse) {
+  const urlPath = req.url?.split('?')[0] || '';
+  const pathParts = urlPath.split('/');
+  
+  if (req.method === 'GET') {
+    const { user_id, user_role } = req.query;
+    if (!user_id || !user_role) return res.status(400).json({ error: 'User ID and role required' });
+    
+    const result = await pool.query(
+      'SELECT * FROM notifications WHERE user_id = $1 AND user_role = $2 ORDER BY created_at DESC LIMIT 50',
+      [user_id, user_role]
+    );
+    return res.json(result.rows);
+  }
+  
+  if (req.method === 'PUT') {
+    if (pathParts.includes('mark-all-read')) {
+      const { user_id, user_role } = req.body;
+      await pool.query(
+        'UPDATE notifications SET is_read = true WHERE user_id = $1 AND user_role = $2',
+        [user_id, user_role]
+      );
+      return res.json({ success: true });
+    }
+    
+    const notificationId = pathParts[pathParts.indexOf('notifications') + 1];
+    if (notificationId && pathParts.includes('read')) {
+      await pool.query('UPDATE notifications SET is_read = true WHERE notification_id = $1', [notificationId]);
+      return res.json({ success: true });
+    }
+  }
+  
+  if (req.method === 'DELETE') {
+    const notificationId = pathParts[pathParts.indexOf('notifications') + 1];
+    if (notificationId) {
+      await pool.query('DELETE FROM notifications WHERE notification_id = $1', [notificationId]);
+      return res.json({ success: true });
+    }
+  }
+  
+  return res.status(405).json({ error: 'Method not allowed' });
 }

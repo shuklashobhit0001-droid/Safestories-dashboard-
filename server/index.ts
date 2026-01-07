@@ -441,6 +441,17 @@ app.post('/api/booking-requests', async (req, res) => {
       [clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation || false]
     );
 
+    // Notify all admins
+    const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
+    for (const admin of admins.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [admin.id, 'admin', 'booking_request', 'New Booking Request', 
+         `New booking request from ${clientName} for ${therapyType || 'consultation'}`, result.rows[0].request_id]
+      );
+    }
+
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error saving booking request:', error);
@@ -868,6 +879,8 @@ app.get('/api/therapist-appointments', async (req, res) => {
 
 // Transfer client endpoint
 app.post('/api/transfer-client', async (req, res) => {
+  console.log('Transfer client API called');
+  
   try {
     const {
       clientName,
@@ -879,6 +892,8 @@ app.post('/api/transfer-client', async (req, res) => {
       transferredByAdminName,
       reason
     } = req.body;
+
+    console.log('Transfer data:', { clientName, fromTherapistName, toTherapistId });
 
     // Get new therapist details
     const therapistResult = await pool.query(
@@ -920,6 +935,77 @@ app.post('/api/transfer-client', async (req, res) => {
       ]
     );
 
+    console.log('Database insert successful');
+
+    // Trigger n8n webhook
+    const webhookData = {
+      clientName,
+      clientEmail,
+      clientPhone,
+      fromTherapist: fromTherapistName,
+      fromTherapistId: fromTherapistId || 'N/A',
+      toTherapist: newTherapist.name,
+      toTherapistId: toTherapistId,
+      transferredBy: transferredByAdminName,
+      reason: reason || 'No reason provided',
+      timestamp: new Date().toISOString()
+    };
+    const webhookUrl = `https://n8n.srv1169280.hstgr.cloud/webhook/efc4396f-401b-4d46-bfdb-e990a3ac3846?${new URLSearchParams(webhookData as any).toString()}`;
+    console.log('Calling webhook:', webhookUrl);
+    
+    try {
+      const webhookResponse = await fetch(webhookUrl, {
+        method: 'GET'
+      });
+      console.log('Webhook status:', webhookResponse.status);
+      const webhookResponseData = await webhookResponse.text();
+      console.log('Webhook response:', webhookResponseData);
+    } catch (webhookError) {
+      console.error('Webhook error:', webhookError);
+    }
+
+    // Notify new therapist
+    const newTherapistUser = await pool.query(
+      "SELECT id FROM users WHERE therapist_id = $1 AND role = 'therapist'",
+      [toTherapistId]
+    );
+    if (newTherapistUser.rows.length > 0) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, user_role, notification_type, title, message)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [newTherapistUser.rows[0].id, 'therapist', 'client_transfer', 'New Client Assigned',
+         `Client ${clientName} has been transferred to you from ${fromTherapistName}`]
+      );
+    }
+
+    // Notify old therapist
+    if (fromTherapistId) {
+      const oldTherapistUser = await pool.query(
+        "SELECT id FROM users WHERE therapist_id = $1 AND role = 'therapist'",
+        [fromTherapistId]
+      );
+      if (oldTherapistUser.rows.length > 0) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, user_role, notification_type, title, message)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [oldTherapistUser.rows[0].id, 'therapist', 'client_transfer', 'Client Transferred',
+           `Client ${clientName} has been transferred to ${newTherapist.name}`]
+        );
+      }
+    }
+
+    // Notify all admins
+    const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
+    for (const admin of admins.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, user_role, notification_type, title, message)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [admin.id, 'admin', 'client_transfer', 'Client Transferred',
+         `${transferredByAdminName} transferred ${clientName} from ${fromTherapistName} to ${newTherapist.name}`]
+      );
+    }
+
+    console.log('Sending success response');
     res.json({ success: true, message: 'Client transferred successfully' });
   } catch (error) {
     console.error('Error transferring client:', error);
@@ -1009,6 +1095,87 @@ app.get('/api/session-notes', async (req, res) => {
   } catch (error) {
     console.error('Error fetching session notes:', error);
     res.status(500).json({ error: 'Failed to fetch session notes' });
+  }
+});
+
+// Get notifications
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const { user_id, user_role } = req.query;
+    
+    if (!user_id || !user_role) {
+      return res.status(400).json({ error: 'User ID and role required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM notifications WHERE user_id = $1 AND user_role = $2 ORDER BY created_at DESC LIMIT 50',
+      [user_id, user_role]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+// Mark notification as read
+app.put('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE notifications SET is_read = true WHERE notification_id = $1', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+// Mark all notifications as read
+app.put('/api/notifications/mark-all-read', async (req, res) => {
+  try {
+    const { user_id, user_role } = req.body;
+    await pool.query(
+      'UPDATE notifications SET is_read = true WHERE user_id = $1 AND user_role = $2',
+      [user_id, user_role]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking all as read:', error);
+    res.status(500).json({ error: 'Failed to mark all as read' });
+  }
+});
+
+// Delete notification
+app.delete('/api/notifications/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM notifications WHERE notification_id = $1', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting notification:', error);
+    res.status(500).json({ error: 'Failed to delete notification' });
+  }
+});
+
+// Create notification for all admins
+app.post('/api/notifications/create-admin', async (req, res) => {
+  try {
+    const { notification_type, title, message, related_id } = req.body;
+    const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
+    
+    for (const admin of admins.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [admin.id, 'admin', notification_type, title, message, related_id]
+      );
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error creating admin notifications:', error);
+    res.status(500).json({ error: 'Failed to create notifications' });
   }
 });
 

@@ -305,14 +305,14 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
               className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
             >
               <Copy size={16} />
-              Copy
+              Copy to Clipboard
             </button>
             <button 
               onClick={() => sendWhatsAppNotification(filteredAppointments[openMenuIndex])}
               className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
             >
               <Send size={16} />
-              Send WhatsApp Notification
+              Send Manual Reminder
             </button>
             <button 
               onClick={() => handleSessionNotesReminder(filteredAppointments[openMenuIndex])}

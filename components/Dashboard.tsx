@@ -7,6 +7,7 @@ import { Appointments } from './Appointments';
 import { RefundsCancellations } from './RefundsCancellations';
 import { SendBookingModal } from './SendBookingModal';
 import { AuditLogs } from './AuditLogs';
+import { Notifications } from './Notifications';
 import { Loader } from './Loader';
 
 interface DashboardProps {
@@ -194,13 +195,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         ) : activeView === 'audit' ? (
           <AuditLogs />
         ) : activeView === 'notifications' ? (
-          <div className="p-8">
-            <h1 className="text-3xl font-bold mb-1">Notifications</h1>
-            <p className="text-gray-600">View and manage notifications</p>
-            <div className="mt-8 bg-white rounded-lg border p-8 text-center text-gray-400">
-              No notifications yet
-            </div>
-          </div>
+          <Notifications userRole="admin" userId={user?.id} />
         ) : loading ? (
           <Loader />
         ) : (

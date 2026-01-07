@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, MoreVertical, Copy, Send, Search, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, MoreVertical, Copy, Send, Search, FileText, Bell, X } from 'lucide-react';
 import { Logo } from './Logo';
+import { Notifications } from './Notifications';
 import { Toast } from './Toast';
 import { Loader } from './Loader';
 
@@ -40,6 +41,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [sosConfirmText, setSosConfirmText] = useState('');
   const [selectedSOSBooking, setSelectedSOSBooking] = useState<any>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [showSessionNotesModal, setShowSessionNotesModal] = useState(false);
+  const [sessionNotesData, setSessionNotesData] = useState<any>(null);
+  const [sessionNotesLoading, setSessionNotesLoading] = useState(false);
 
   const handleMonthSelect = (month: string) => {
     setSelectedMonth(month);
@@ -235,18 +239,20 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     
     const timeMatch = booking.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
     if (timeMatch) {
-      const [, dateStr, , endTimeStr] = timeMatch;
+      const [, dateStr, startTimeStr, endTimeStr] = timeMatch;
       const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+      const startDateTime = new Date(`${dateStr} ${startTimeStr}`);
       const now = new Date();
       const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
       
-      console.log('End date time:', endDateTime);
+      console.log('Start date time:', endDateTime);
       console.log('Current time:', now);
+      console.log('End date time:', endDateTime);
       console.log('Hours since end:', hoursSinceEnd);
       
-      if (now < endDateTime) {
-        console.log('❌ Session has not ended yet');
-        setToast({ message: 'SOS ticket can only be raised after the session ends', type: 'error' });
+      if (now < startDateTime) {
+        console.log('❌ Session has not started yet');
+        setToast({ message: 'SOS ticket can only be raised after the session starts', type: 'error' });
         setOpenMenuIndex(null);
         return;
       }
@@ -320,6 +326,18 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         })
       });
       
+      // Notify all admins
+      await fetch('/api/notifications/create-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notification_type: 'sos_ticket',
+          title: 'SOS Ticket Raised',
+          message: `${user.username} raised an SOS ticket for client ${selectedSOSBooking?.client_name}`,
+          related_id: selectedSOSBooking?.booking_id
+        })
+      });
+      
       console.log('✓ Audit log created');
       console.log('======================');
       
@@ -334,6 +352,28 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     // TODO: Add functionality later
     console.log('Fill session notes for:', appointment);
     setOpenMenuIndex(null);
+  };
+
+  const handleViewSessionNotes = async (appointment: any) => {
+    console.log('View session notes for booking_id:', appointment.booking_id);
+    setSessionNotesLoading(true);
+    setShowSessionNotesModal(true);
+    setOpenMenuIndex(null);
+    
+    try {
+      const response = await fetch(`/api/session-notes?booking_id=${appointment.booking_id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSessionNotesData(data);
+      } else {
+        setSessionNotesData({ error: 'Session notes not found for this appointment' });
+      }
+    } catch (error) {
+      console.error('Error fetching session notes:', error);
+      setSessionNotesData({ error: 'Failed to load session notes' });
+    } finally {
+      setSessionNotesLoading(false);
+    }
   };
 
   const renderMyClients = () => (
@@ -569,7 +609,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
             >
               <Copy size={16} />
-              Copy
+              Copy to Clipboard
             </button>
             <button 
               onClick={() => {
@@ -584,7 +624,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
             >
               <Send size={16} />
-              Send WhatsApp Notification
+              Send Manual Reminder
             </button>
             <button 
               onClick={() => {
@@ -600,6 +640,21 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             >
               <span className="font-bold">SOS</span>
               Raise Ticket
+            </button>
+            <button 
+              onClick={() => {
+                const filteredAppts = appointments.filter(appointment => 
+                  appointmentSearchTerm === '' || 
+                  appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                  appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                  'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
+                );
+                handleViewSessionNotes(filteredAppts[openMenuIndex]);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-blue-600"
+            >
+              <FileText size={16} />
+              View Session Notes
             </button>
             <button 
               onClick={() => {
@@ -669,6 +724,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <Calendar size={20} className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>My Appointments</span>
           </div>
+          <div 
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+            style={{ backgroundColor: activeView === 'notifications' ? '#2D75795C' : 'transparent' }}
+            onClick={() => setActiveView('notifications')}
+          >
+            <Bell size={20} className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'}>Notifications</span>
+          </div>
         </nav>
 
         <div className="p-4 border-t">
@@ -698,6 +761,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           renderMyClients()
         ) : activeView === 'appointments' ? (
           renderMyAppointments()
+        ) : activeView === 'notifications' ? (
+          <Notifications userRole="therapist" userId={user.therapist_id} />
         ) : (
           <div className="p-8">
             {dashboardLoading ? (
@@ -865,14 +930,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                     className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
                   >
                     <Copy size={16} />
-                    Copy
+                    Copy to Clipboard
                   </button>
                   <button 
                     onClick={() => sendWhatsAppNotification(bookings[openMenuIndex])}
                     className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
                   >
                     <Send size={16} />
-                    Send WhatsApp Notification
+                    Send Manual Reminder
                   </button>
                   <button 
                     onClick={() => handleSOSClick(bookings[openMenuIndex])}
@@ -880,6 +945,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   >
                     <span className="font-bold">SOS</span>
                     Raise Ticket
+                  </button>
+                  <button 
+                    onClick={() => handleViewSessionNotes(bookings[openMenuIndex])}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-blue-600"
+                  >
+                    <FileText size={16} />
+                    View Session Notes
                   </button>
                   <button 
                     onClick={() => handleFillSessionNotes(bookings[openMenuIndex])}
@@ -959,6 +1031,106 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               >
                 Raise Ticket
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showSessionNotesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-blue-600">Session Notes</h3>
+              <button
+                onClick={() => {
+                  setShowSessionNotesModal(false);
+                  setSessionNotesData(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {sessionNotesLoading ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <p className="mt-2 text-gray-600">Loading session notes...</p>
+                </div>
+              ) : sessionNotesData?.error ? (
+                <div className="text-center py-8">
+                  <p className="text-red-600">{sessionNotesData.error}</p>
+                </div>
+              ) : sessionNotesData ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+                      <p className="text-sm text-gray-900">{sessionNotesData.client_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Session Timing</label>
+                      <p className="text-sm text-gray-900">{sessionNotesData.session_timing || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Therapist</label>
+                      <p className="text-sm text-gray-900">{sessionNotesData.host_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Session Status</label>
+                      <p className="text-sm text-gray-900">{sessionNotesData.session_status || 'N/A'}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="border-t pt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Concerns Discussed</label>
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.concerns_discussed || 'N/A'}</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Somatic Cues</label>
+                    <p className="text-sm text-gray-900">{sessionNotesData.somatic_cues?.join(', ') || 'N/A'}</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Interventions Used</label>
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.interventions_used || 'N/A'}</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Client Participation</label>
+                    <p className="text-sm text-gray-900">{sessionNotesData.client_participation || 'N/A'}</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Goal Progress</label>
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.goal_progress || 'N/A'}</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Self Harm Mention</label>
+                    <p className="text-sm text-gray-900">{sessionNotesData.self_harm_mention || 'N/A'}</p>
+                  </div>
+                  
+                  {sessionNotesData.self_harm_details && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Self Harm Details</label>
+                      <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.self_harm_details}</p>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Next Session Plan</label>
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.next_session_plan || 'N/A'}</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Homework Suggested</label>
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.homework_suggested || 'N/A'}</p>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
