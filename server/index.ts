@@ -24,7 +24,7 @@ app.post('/api/login', async (req, res) => {
       if (user.role === 'therapist') {
         await pool.query(
           `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
-           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+           VALUES ($1, $2, $3, $4, timezone('Asia/Kolkata', NOW()))`,
           [user.therapist_id, username, 'login', `${username} logged into dashboard`]
         );
       }
@@ -974,7 +974,7 @@ app.post('/api/transfer-client', async (req, res) => {
     // Log client transfer
     await pool.query(
       `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, timestamp)
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+       VALUES ($1, $2, $3, $4, $5, timezone('Asia/Kolkata', NOW()))`,
       [transferredByAdminId, transferredByAdminName, 'client_transfer', 
        `Transferred ${clientName} from ${fromTherapistName} to ${newTherapist.name}`, clientName]
     );
@@ -1087,7 +1087,7 @@ app.post('/api/audit-logs', async (req, res) => {
     const { therapist_id, therapist_name, action_type, action_description, client_name, ip_address } = req.body;
     await pool.query(
       `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+       VALUES ($1, $2, $3, $4, $5, $6, timezone('Asia/Kolkata', NOW()))`,
       [therapist_id, therapist_name, action_type, action_description, client_name, ip_address]
     );
     res.json({ success: true });
@@ -1105,7 +1105,7 @@ app.post('/api/logout', async (req, res) => {
     if (user?.role === 'therapist') {
       await pool.query(
         `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
-         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+         VALUES ($1, $2, $3, $4, timezone('Asia/Kolkata', NOW()))`,
         [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
       );
     }
@@ -1174,7 +1174,7 @@ app.post('/api/session-notes', async (req, res) => {
     // Log session note update
     await pool.query(
       `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, timestamp)
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+       VALUES ($1, $2, $3, $4, $5, timezone('Asia/Kolkata', NOW()))`,
       [therapist_id, therapist_name, 'session_notes', 
        `${existing.rows.length > 0 ? 'Updated' : 'Added'} session notes for ${client_name}`, client_name]
     );
@@ -1204,7 +1204,7 @@ app.post('/api/bookings/cancel', async (req, res) => {
     // Log cancellation
     await pool.query(
       `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, timestamp)
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+       VALUES ($1, $2, $3, $4, $5, timezone('Asia/Kolkata', NOW()))`,
       [therapist_id, therapist_name, 'booking_cancel', 
        `Cancelled booking for ${client_name}${reason ? ': ' + reason : ''}`, client_name]
     );
