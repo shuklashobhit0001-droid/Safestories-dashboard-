@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, MoreVertical, Copy, Send, X, FileText, ExternalLink } from 'lucide-react';
+import { MessageCircle, Search, Download, MoreVertical, Copy, Send, X, FileText } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { Toast } from './Toast';
 import { Loader } from './Loader';
@@ -273,20 +273,19 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapist Name</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Form Link</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="text-center text-gray-400 py-8">
+                  <td colSpan={8} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredAppointments.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center text-gray-400 py-8">
+                  <td colSpan={8} className="text-center text-gray-400 py-8">
                     No appointments found
                   </td>
                 </tr>
@@ -303,21 +302,6 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                     <td className="px-6 py-4 text-sm">{apt.booking_host_name}</td>
                     <td className="px-6 py-4 text-sm">{apt.booking_mode}</td>
                     <td className="px-6 py-4 text-sm">{apt.session_status || 'Scheduled'}</td>
-                    <td className="px-6 py-4 text-sm">
-                      {apt.paperform_link ? (
-                        <a
-                          href={apt.paperform_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-teal-600 hover:text-teal-800 flex items-center gap-1"
-                        >
-                          <ExternalLink size={16} />
-                          Open
-                        </a>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
                     <td className="px-6 py-4 text-sm">
                       <button
                         onClick={(e) => {
