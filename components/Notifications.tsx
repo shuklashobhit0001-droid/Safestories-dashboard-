@@ -21,6 +21,8 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [notificationToDelete, setNotificationToDelete] = useState<number | null>(null);
 
   useEffect(() => {
     fetchNotifications();
@@ -71,6 +73,13 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
     } catch (error) {
       console.error('Error deleting notification:', error);
     }
+    setDeleteModalOpen(false);
+    setNotificationToDelete(null);
+  };
+
+  const handleDeleteClick = (notificationId: number) => {
+    setNotificationToDelete(notificationId);
+    setDeleteModalOpen(true);
   };
 
   const markAllAsRead = async () => {
@@ -185,7 +194,7 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
                   </button>
                 )}
                 <button
-                  onClick={() => deleteNotification(notification.notification_id)}
+                  onClick={() => handleDeleteClick(notification.notification_id)}
                   className="p-2 hover:bg-gray-100 rounded-lg text-red-600"
                   title="Delete"
                 >
@@ -194,6 +203,32 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {deleteModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Delete Notification</h3>
+            <p className="text-gray-600 mb-6">Are you sure you want to delete this notification?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setNotificationToDelete(null);
+                }}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+              >
+                No
+              </button>
+              <button
+                onClick={() => notificationToDelete && deleteNotification(notificationToDelete)}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
