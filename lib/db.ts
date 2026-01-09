@@ -11,6 +11,10 @@ const pool = new Pool({
   password: process.env.PGPASSWORD || 'admin123',
 });
 
+pool.on('connect', (client) => {
+  client.query("SET timezone = 'Asia/Kolkata'");
+});
+
 pool.on('error', (err) => {
   console.error('Unexpected database error:', err);
 });
