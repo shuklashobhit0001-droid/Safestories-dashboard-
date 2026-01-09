@@ -7,7 +7,9 @@
     "dev": "concurrently \"vite\" \"tsx server/index.ts\"",
     "server": "tsx server/index.ts",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "notify:new": "tsx scripts/notifyNewBookings.ts",
+    "notify:all": "tsx scripts/notifyExistingBookings.ts"
   },
   "dependencies": {
     "@types/pg": "^8.16.0",

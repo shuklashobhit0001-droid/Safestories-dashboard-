@@ -63,7 +63,8 @@ export const AllClients: React.FC = () => {
     return (
       (client.invitee_name || '').toLowerCase().includes(query) ||
       (client.invitee_phone || '').toLowerCase().includes(query) ||
-      (client.invitee_email || '').toLowerCase().includes(query)
+      (client.invitee_email || '').toLowerCase().includes(query) ||
+      (client.booking_host_name || '').toLowerCase().includes(query)
     );
   });
 
@@ -134,7 +135,7 @@ export const AllClients: React.FC = () => {
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
-            placeholder="Search users by name, phone no or email id..."
+            placeholder="Search users by name, phone no, email id or therapist..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"

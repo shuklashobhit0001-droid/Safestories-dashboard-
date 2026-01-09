@@ -81,11 +81,10 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
   if (result.rows.length > 0) {
     const user = result.rows[0];
     if (user.role === 'therapist') {
-      const istTime = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString();
       await pool.query(
         `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [user.therapist_id, username, 'login', `${username} logged into dashboard`, istTime]
+         VALUES ($1, $2, $3, $4, NOW())`,
+        [user.therapist_id, username, 'login', `${username} logged into dashboard`]
       );
     }
     res.json({ success: true, user });
@@ -680,11 +679,10 @@ async function handleAuditLogs(req: VercelRequest, res: VercelResponse) {
   }
   if (req.method === 'POST') {
     const { therapist_id, therapist_name, action_type, action_description, client_name, ip_address } = req.body;
-    const istTime = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString();
     await pool.query(
       `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address, istTime]
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address]
     );
     return res.json({ success: true });
   }
@@ -701,11 +699,10 @@ async function handleLogout(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const { user } = req.body;
   if (user?.role === 'therapist') {
-    const istTime = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString();
     await pool.query(
       `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [user.therapist_id, user.username, 'logout', `${user.username} logged out`, istTime]
+       VALUES ($1, $2, $3, $4, NOW())`,
+      [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
     );
   }
   res.json({ success: true });

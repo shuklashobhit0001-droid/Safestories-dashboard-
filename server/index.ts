@@ -450,7 +450,7 @@ app.get('/api/therapies', async (req, res) => {
 // Save booking request
 app.post('/api/booking-requests', async (req, res) => {
   try {
-    const { clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation } = req.body;
+    const { clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation, adminId } = req.body;
 
     const result = await pool.query(
       `INSERT INTO booking_requests (client_name, client_whatsapp, client_email, therapy_type, therapist_name, booking_link, status, is_free_consultation)
@@ -458,17 +458,6 @@ app.post('/api/booking-requests', async (req, res) => {
        RETURNING *`,
       [clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation || false]
     );
-
-    // Notify all admins
-    const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
-    for (const admin of admins.rows) {
-      await pool.query(
-        `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [admin.id, 'admin', 'booking_request', 'New Booking Request', 
-         `New booking request from ${clientName} for ${therapyType || 'consultation'}`, result.rows[0].request_id]
-      );
-    }
 
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
@@ -1038,16 +1027,7 @@ app.post('/api/transfer-client', async (req, res) => {
       }
     }
 
-    // Notify all admins
-    const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
-    for (const admin of admins.rows) {
-      await pool.query(
-        `INSERT INTO notifications (user_id, user_role, notification_type, title, message)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [admin.id, 'admin', 'client_transfer', 'Client Transferred',
-         `${transferredByAdminName} transferred ${clientName} from ${fromTherapistName} to ${newTherapist.name}`]
-      );
-    }
+
 
     console.log('Sending success response');
     res.json({ success: true, message: 'Client transferred successfully' });
