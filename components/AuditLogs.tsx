@@ -15,6 +15,8 @@ export const AuditLogs: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     fetchLogs();
@@ -42,6 +44,10 @@ export const AuditLogs: React.FC = () => {
       log.client_name?.toLowerCase().includes(query)
     );
   });
+
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedLogs = filteredLogs.slice(startIndex, startIndex + itemsPerPage);
 
   const formatTimestamp = (timestamp: string) => {
     if (!timestamp) return 'Invalid Date';
@@ -115,7 +121,7 @@ export const AuditLogs: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredLogs.map((log) => (
+                paginatedLogs.map((log) => (
                   <tr key={log.log_id} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm">{formatTimestamp(log.timestamp)}</td>
                     <td className="px-6 py-4 text-sm">{log.therapist_name}</td>
@@ -130,10 +136,26 @@ export const AuditLogs: React.FC = () => {
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-4 border-t">
+        <div className="px-6 py-4 border-t flex justify-between items-center">
           <span className="text-sm text-gray-600">
-            Showing {filteredLogs.length} of {logs.length} log{logs.length !== 1 ? 's' : ''}
+            Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredLogs.length)} of {filteredLogs.length} log{filteredLogs.length !== 1 ? 's' : ''}
           </span>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ←
+            </button>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              →
+            </button>
+          </div>
         </div>
       </div>
       )}
