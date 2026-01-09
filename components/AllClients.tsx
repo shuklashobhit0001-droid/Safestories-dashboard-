@@ -28,6 +28,8 @@ export const AllClients: React.FC = () => {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [adminUser] = useState(() => {
     const savedUser = localStorage.getItem('user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -64,6 +66,10 @@ export const AllClients: React.FC = () => {
       (client.invitee_email || '').toLowerCase().includes(query)
     );
   });
+
+  const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedClients = filteredClients.slice(startIndex, startIndex + itemsPerPage);
 
   const exportToCSV = () => {
     const headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Sessions', 'Assigned Therapist'];
@@ -174,7 +180,7 @@ export const AllClients: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredClients.map((client, index) => (
+                paginatedClients.map((client, index) => (
                   <React.Fragment key={index}>
                     <tr className="border-b hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm">
@@ -228,10 +234,22 @@ export const AllClients: React.FC = () => {
           </table>
         </div>
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {filteredClients.length} of {clients.length} client{clients.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredClients.length)} of {filteredClients.length} client{filteredClients.length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
-            <button className="p-2 border rounded hover:bg-gray-50">←</button>
-            <button className="p-2 border rounded hover:bg-gray-50">→</button>
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ←
+            </button>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              →
+            </button>
           </div>
         </div>
       </div>

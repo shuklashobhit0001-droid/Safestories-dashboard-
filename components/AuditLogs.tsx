@@ -52,7 +52,8 @@ export const AuditLogs: React.FC = () => {
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
+      timeZone: 'Asia/Kolkata'
     });
   };
 

@@ -2,7 +2,7 @@ import pool from './db.js';
 
 interface CreateNotificationParams {
   userId: string;
-  userRole: 'admin' | 'therapist';
+  userRole: 'admin' | 'therapist' | 'client';
   notificationType: string;
   title: string;
   message: string;
@@ -36,5 +36,23 @@ export async function notifyAllAdmins(notificationType: string, title: string, m
     }
   } catch (error) {
     console.error('Error notifying admins:', error);
+  }
+}
+
+export async function notifyTherapist(therapistId: string, notificationType: string, title: string, message: string, relatedId?: string) {
+  try {
+    const therapist = await pool.query("SELECT id FROM users WHERE therapist_id = $1 AND role = 'therapist'", [therapistId]);
+    if (therapist.rows.length > 0) {
+      await createNotification({
+        userId: therapist.rows[0].id,
+        userRole: 'therapist',
+        notificationType,
+        title,
+        message,
+        relatedId
+      });
+    }
+  } catch (error) {
+    console.error('Error notifying therapist:', error);
   }
 }

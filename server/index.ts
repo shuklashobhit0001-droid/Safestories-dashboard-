@@ -346,6 +346,7 @@ app.get('/api/appointments', async (req, res) => {
         b.booking_joining_link,
         b.booking_checkin_url,
         b.therapist_id,
+        b.booking_status,
         CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
@@ -384,20 +385,37 @@ app.get('/api/appointments', async (req, res) => {
       return `${date} at ${istStart} - ${istEnd} IST`;
     };
 
-    const appointments = result.rows.map(row => ({
-      booking_id: row.booking_id,
-      booking_start_at: convertToIST(row.booking_invitee_time),
-      booking_resource_name: row.booking_resource_name,
-      invitee_name: row.invitee_name,
-      invitee_phone: row.invitee_phone,
-      invitee_email: row.invitee_email,
-      booking_host_name: row.booking_host_name,
-      booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-      booking_joining_link: row.booking_joining_link,
-      booking_checkin_url: row.booking_checkin_url,
-      therapist_id: row.therapist_id,
-      has_session_notes: row.has_session_notes
-    }));
+    const appointments = result.rows.map(row => {
+      let status = 'Scheduled';
+      const now = new Date();
+      const sessionDate = new Date(row.booking_start_at);
+      
+      if (row.booking_status === 'cancelled') {
+        status = 'Cancelled';
+      } else if (row.booking_status === 'no_show') {
+        status = 'No Show';
+      } else if (row.has_session_notes) {
+        status = 'Completed';
+      } else if (sessionDate < now) {
+        status = 'Pending Notes';
+      }
+      
+      return {
+        booking_id: row.booking_id,
+        booking_start_at: convertToIST(row.booking_invitee_time),
+        booking_resource_name: row.booking_resource_name,
+        invitee_name: row.invitee_name,
+        invitee_phone: row.invitee_phone,
+        invitee_email: row.invitee_email,
+        booking_host_name: row.booking_host_name,
+        booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+        booking_joining_link: row.booking_joining_link,
+        booking_checkin_url: row.booking_checkin_url,
+        therapist_id: row.therapist_id,
+        has_session_notes: row.has_session_notes,
+        session_status: status
+      };
+    });
 
     res.json(appointments);
   } catch (error) {
@@ -812,17 +830,19 @@ app.get('/api/therapist-appointments', async (req, res) => {
     // Get appointments for this therapist directly from bookings table
     const appointmentsResult = await pool.query(`
       SELECT 
-        booking_id,
-        invitee_name as client_name,
-        invitee_phone as contact_info,
-        booking_resource_name as session_name,
-        booking_invitee_time as session_timings,
-        booking_mode as mode,
-        booking_start_at as booking_date,
-        booking_status
-      FROM bookings
-      WHERE booking_host_name ILIKE $1
-      ORDER BY booking_start_at DESC
+        b.booking_id,
+        b.invitee_name as client_name,
+        b.invitee_phone as contact_info,
+        b.booking_resource_name as session_name,
+        b.booking_invitee_time as session_timings,
+        b.booking_mode as mode,
+        b.booking_start_at as booking_date,
+        b.booking_status,
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+      FROM bookings b
+      LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+      WHERE b.booking_host_name ILIKE $1
+      ORDER BY b.booking_start_at DESC
     `, [`%${therapistFirstName}%`]);
 
     const convertToIST = (timeStr: string) => {
@@ -857,15 +877,31 @@ app.get('/api/therapist-appointments', async (req, res) => {
       return `${date} at ${istStart} - ${istEnd} IST`;
     };
 
-    const appointments = appointmentsResult.rows.map(row => ({
-      booking_id: row.booking_id,
-      client_name: row.client_name,
-      contact_info: row.contact_info,
-      session_name: row.session_name,
-      session_timings: convertToIST(row.session_timings),
-      mode: row.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
-      booking_status: row.booking_status || 'confirmed'
-    }));
+    const appointments = appointmentsResult.rows.map(row => {
+      let status = 'Scheduled';
+      const now = new Date();
+      const sessionDate = new Date(row.booking_date);
+      
+      if (row.booking_status === 'cancelled') {
+        status = 'Cancelled';
+      } else if (row.booking_status === 'no_show') {
+        status = 'No Show';
+      } else if (row.has_session_notes) {
+        status = 'Completed';
+      } else if (sessionDate < now) {
+        status = 'Pending Notes';
+      }
+      
+      return {
+        booking_id: row.booking_id,
+        client_name: row.client_name,
+        contact_info: row.contact_info,
+        session_name: row.session_name,
+        session_timings: convertToIST(row.session_timings),
+        mode: row.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
+        booking_status: status
+      };
+    });
 
     res.json({
       appointments: appointments
@@ -933,6 +969,14 @@ app.post('/api/transfer-client', async (req, res) => {
         transferredByAdminName,
         reason
       ]
+    );
+
+    // Log client transfer
+    await pool.query(
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, timestamp)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+      [transferredByAdminId, transferredByAdminName, 'client_transfer', 
+       `Transferred ${clientName} from ${fromTherapistName} to ${newTherapist.name}`, clientName]
     );
 
     console.log('Database insert successful');
@@ -1095,6 +1139,155 @@ app.get('/api/session-notes', async (req, res) => {
   } catch (error) {
     console.error('Error fetching session notes:', error);
     res.status(500).json({ error: 'Failed to fetch session notes' });
+  }
+});
+
+// Save/Update session notes
+app.post('/api/session-notes', async (req, res) => {
+  try {
+    const { booking_id, therapist_id, therapist_name, client_name, notes } = req.body;
+    
+    if (!booking_id || !therapist_id || !notes) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Check if notes exist
+    const existing = await pool.query(
+      'SELECT note_id FROM client_session_notes WHERE booking_id = $1',
+      [booking_id]
+    );
+
+    if (existing.rows.length > 0) {
+      // Update existing notes
+      await pool.query(
+        'UPDATE client_session_notes SET notes = $1, updated_at = CURRENT_TIMESTAMP WHERE booking_id = $2',
+        [notes, booking_id]
+      );
+    } else {
+      // Insert new notes
+      await pool.query(
+        'INSERT INTO client_session_notes (booking_id, therapist_id, notes) VALUES ($1, $2, $3)',
+        [booking_id, therapist_id, notes]
+      );
+    }
+
+    // Log session note update
+    await pool.query(
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, timestamp)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+      [therapist_id, therapist_name, 'session_notes', 
+       `${existing.rows.length > 0 ? 'Updated' : 'Added'} session notes for ${client_name}`, client_name]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving session notes:', error);
+    res.status(500).json({ error: 'Failed to save session notes' });
+  }
+});
+
+// Cancel booking
+app.post('/api/bookings/cancel', async (req, res) => {
+  try {
+    const { booking_id, therapist_id, therapist_name, client_name, reason } = req.body;
+    
+    if (!booking_id) {
+      return res.status(400).json({ error: 'Booking ID is required' });
+    }
+
+    // Update booking status
+    await pool.query(
+      'UPDATE bookings SET booking_status = $1 WHERE booking_id = $2',
+      ['cancelled', booking_id]
+    );
+
+    // Log cancellation
+    await pool.query(
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, timestamp)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')`,
+      [therapist_id, therapist_name, 'booking_cancel', 
+       `Cancelled booking for ${client_name}${reason ? ': ' + reason : ''}`, client_name]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error cancelling booking:', error);
+    res.status(500).json({ error: 'Failed to cancel booking' });
+  }
+});
+
+// Get refunds and cancellations
+app.get('/api/refunds', async (req, res) => {
+  try {
+    const { status } = req.query;
+    
+    let query = `
+      SELECT 
+        invitee_name as client_name,
+        booking_resource_name as session_name,
+        booking_invitee_time as session_timings,
+        COALESCE(refund_status, 'Pending') as refund_status,
+        invitee_phone,
+        invitee_email,
+        refund_amount
+      FROM bookings
+      WHERE booking_status = 'cancelled'
+    `;
+    
+    const params: any[] = [];
+    
+    if (status && status !== 'all') {
+      query += ' AND LOWER(refund_status) = LOWER($1)';
+      params.push(status);
+    }
+    
+    query += ' ORDER BY invitee_cancelled_at DESC';
+    
+    const result = await pool.query(query, params);
+    
+    const convertToIST = (timeStr: string) => {
+      if (!timeStr) return 'N/A';
+      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+      if (!match) return timeStr;
+      
+      const [, date, startTime, endTime, offset] = match;
+      const parseTime = (time: string, dateStr: string, tz: string) => {
+        const [h, rest] = time.split(':');
+        const [m, period] = rest.split(' ');
+        let hour = parseInt(h);
+        if (period === 'PM' && hour !== 12) hour += 12;
+        if (period === 'AM' && hour === 12) hour = 0;
+        
+        const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
+        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+        const istOffset = 330;
+        const diff = istOffset - offsetTotal;
+        
+        let totalMins = hour * 60 + parseInt(m) + diff;
+        const newHour = Math.floor(totalMins / 60) % 24;
+        const newMin = totalMins % 60;
+        
+        const period12 = newHour >= 12 ? 'PM' : 'AM';
+        const hour12 = newHour % 12 || 12;
+        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
+      };
+      
+      const istStart = parseTime(startTime, date, `GMT${offset}`);
+      const istEnd = parseTime(endTime, date, `GMT${offset}`);
+      
+      return `${date} at ${istStart} - ${istEnd} IST`;
+    };
+    
+    const refunds = result.rows.map(row => ({
+      ...row,
+      session_timings: convertToIST(row.session_timings),
+      refund_status: row.refund_status || 'Pending'
+    }));
+    
+    res.json(refunds);
+  } catch (error) {
+    console.error('Error fetching refunds:', error);
+    res.status(500).json({ error: 'Failed to fetch refunds' });
   }
 });
 

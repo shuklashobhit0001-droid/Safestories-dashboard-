@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, MoreVertical, Copy, Send, X, FileText } from 'lucide-react';
+import { MessageCircle, Search, Download, MoreVertical, Copy, Send, X, FileText, ExternalLink } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { Toast } from './Toast';
 import { Loader } from './Loader';
@@ -17,6 +17,8 @@ interface Appointment {
   booking_checkin_url?: string;
   has_session_notes?: boolean;
   therapist_id?: string;
+  session_status?: string;
+  paperform_link?: string;
 }
 
 export const Appointments: React.FC = () => {
@@ -27,11 +29,14 @@ export const Appointments: React.FC = () => {
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
   useEffect(() => {
     fetch('/api/appointments')
       .then(res => res.json())
       .then(data => {
+        console.log('Appointments data:', data);
         setAppointments(data);
         setLoading(false);
       })
@@ -84,23 +89,40 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
     });
   };
 
-  const sendWhatsAppNotification = async (apt: Appointment) => {
-    console.log('Appointment data:', apt);
-    console.log('booking_checkin_url:', apt.booking_checkin_url);
+  const handleReminderClick = (apt: Appointment) => {
+    // Check if meeting has ended
+    const timeMatch = apt.booking_start_at?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+    if (timeMatch) {
+      const [, dateStr, , endTimeStr] = timeMatch;
+      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+      const now = new Date();
+      
+      if (now > endDateTime) {
+        setToast({ message: 'Cannot send reminder after meeting has ended', type: 'error' });
+        setOpenMenuIndex(null);
+        return;
+      }
+    }
+    
+    setSelectedAppointment(apt);
+    setShowReminderModal(true);
+    setOpenMenuIndex(null);
+  };
+
+  const sendWhatsAppNotification = async () => {
+    if (!selectedAppointment) return;
     
     const webhookData = {
-      sessionTimings: apt.booking_start_at,
-      sessionName: apt.booking_resource_name,
-      clientName: apt.invitee_name,
-      phone: apt.invitee_phone,
-      email: apt.invitee_email,
-      therapistName: apt.booking_host_name,
-      mode: apt.booking_mode,
-      meetingLink: apt.booking_joining_link || '',
-      checkinUrl: apt.booking_checkin_url || ''
+      sessionTimings: selectedAppointment.booking_start_at,
+      sessionName: selectedAppointment.booking_resource_name,
+      clientName: selectedAppointment.invitee_name,
+      phone: selectedAppointment.invitee_phone,
+      email: selectedAppointment.invitee_email,
+      therapistName: selectedAppointment.booking_host_name,
+      mode: selectedAppointment.booking_mode,
+      meetingLink: selectedAppointment.booking_joining_link || '',
+      checkinUrl: selectedAppointment.booking_checkin_url || ''
     };
-    
-    console.log('Webhook data being sent:', webhookData);
 
     try {
       const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/0d1db363-bf04-41e5-a667-a9fe1b5ffc83', {
@@ -118,7 +140,8 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       console.error('Error sending notification:', err);
       setToast({ message: 'Failed to send WhatsApp notification', type: 'error' });
     }
-    setOpenMenuIndex(null);
+    setShowReminderModal(false);
+    setSelectedAppointment(null);
   };
 
   const handleSessionNotesReminder = async (apt: Appointment) => {
@@ -249,19 +272,21 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapist Name</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Form Link</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-gray-400 py-8">
+                  <td colSpan={9} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredAppointments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-gray-400 py-8">
+                  <td colSpan={9} className="text-center text-gray-400 py-8">
                     No appointments found
                   </td>
                 </tr>
@@ -277,6 +302,22 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                     </td>
                     <td className="px-6 py-4 text-sm">{apt.booking_host_name}</td>
                     <td className="px-6 py-4 text-sm">{apt.booking_mode}</td>
+                    <td className="px-6 py-4 text-sm">{apt.session_status || 'Scheduled'}</td>
+                    <td className="px-6 py-4 text-sm">
+                      {apt.paperform_link ? (
+                        <a
+                          href={apt.paperform_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal-600 hover:text-teal-800 flex items-center gap-1"
+                        >
+                          <ExternalLink size={16} />
+                          Open
+                        </a>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm">
                       <button
                         onClick={(e) => {
@@ -308,7 +349,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
               Copy to Clipboard
             </button>
             <button 
-              onClick={() => sendWhatsAppNotification(filteredAppointments[openMenuIndex])}
+              onClick={() => handleReminderClick(filteredAppointments[openMenuIndex])}
               className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
             >
               <Send size={16} />
@@ -343,6 +384,31 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
           type={toast.type}
           onClose={() => setToast(null)}
         />
+      )}
+      {showReminderModal && selectedAppointment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Send Manual Reminder</h3>
+            <p className="text-gray-600 mb-4">Are you sure you want to send a WhatsApp reminder to {selectedAppointment.invitee_name}?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowReminderModal(false);
+                  setSelectedAppointment(null);
+                }}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+              >
+                No
+              </button>
+              <button
+                onClick={sendWhatsAppNotification}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -27,13 +27,24 @@ export const AllTherapists: React.FC = () => {
     }
   };
 
-  const filteredTherapists = therapists.filter(therapist => {
-    const query = searchQuery.toLowerCase();
-    return (
-      therapist.name.toLowerCase().includes(query) ||
-      therapist.specialization.toLowerCase().includes(query)
-    );
-  });
+  const filteredTherapists = therapists
+    .filter(therapist => {
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        therapist.name.toLowerCase().includes(query) ||
+        therapist.specialization.toLowerCase().includes(query)
+      );
+    })
+    .sort((a, b) => {
+      if (!searchQuery) return 0;
+      const query = searchQuery.toLowerCase();
+      const aNameMatch = a.name.toLowerCase().includes(query);
+      const bNameMatch = b.name.toLowerCase().includes(query);
+      if (aNameMatch && !bNameMatch) return -1;
+      if (!aNameMatch && bNameMatch) return 1;
+      return 0;
+    });
 
   const openTherapistDetails = (therapist: any) => {
     setSelectedTherapist(therapist);
@@ -64,9 +75,9 @@ export const AllTherapists: React.FC = () => {
       {loading ? (
         <Loader />
       ) : (
-      <div className="bg-white rounded-lg border flex-1 flex flex-col">
-        <div className="overflow-x-auto flex-1">
-          <table className="w-full h-full">
+      <div className="bg-white rounded-lg border">
+        <div className="overflow-x-auto">
+          <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapists Name</th>
@@ -76,10 +87,10 @@ export const AllTherapists: React.FC = () => {
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Sessions this month</th>
               </tr>
             </thead>
-            <tbody className="h-full">
+            <tbody>
               {filteredTherapists.length === 0 ? (
-                <tr className="h-full">
-                  <td colSpan={5} className="text-center text-gray-400 align-middle">
+                <tr>
+                  <td colSpan={5} className="text-center text-gray-400 py-20">
                     No therapists found
                   </td>
                 </tr>

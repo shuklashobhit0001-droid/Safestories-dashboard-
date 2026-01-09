@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import pool from '../lib/db.js';
+import { notifyAllAdmins, notifyTherapist } from '../lib/notifications.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Extract route from URL path
@@ -50,6 +51,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleSessionNotes(req, res);
       case 'notifications':
         return await handleNotifications(req, res);
+      case 'booking-status':
+        return await handleBookingStatus(req, res);
+      case 'session-notes-submit':
+        return await handleSessionNotesSubmit(req, res);
+      case 'webhook/booking-created':
+        return await handleBookingWebhook(req, res);
+      case 'refund-status':
+        return await handleRefundStatus(req, res);
       default:
         return res.status(404).json({ error: 'Route not found' });
     }
@@ -147,7 +156,9 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
       b.booking_joining_link,
       b.booking_checkin_url,
       b.therapist_id,
-      CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+      b.booking_status,
+      CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes,
+      csn.session_status
     FROM bookings b
     LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
     ORDER BY b.booking_start_at DESC
@@ -177,20 +188,37 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
     const istEnd = parseTime(endTime, date, `GMT${offset}`);
     return `${date} at ${istStart} - ${istEnd} IST`;
   };
-  const appointments = result.rows.map(row => ({
-    booking_id: row.booking_id,
-    booking_start_at: convertToIST(row.booking_invitee_time),
-    booking_resource_name: row.booking_resource_name,
-    invitee_name: row.invitee_name,
-    invitee_phone: row.invitee_phone,
-    invitee_email: row.invitee_email,
-    booking_host_name: row.booking_host_name,
-    booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-    booking_joining_link: row.booking_joining_link,
-    booking_checkin_url: row.booking_checkin_url,
-    therapist_id: row.therapist_id,
-    has_session_notes: row.has_session_notes
-  }));
+  const appointments = result.rows.map(row => {
+    let status = 'Scheduled';
+    const now = new Date();
+    const sessionDate = new Date(row.booking_start_at);
+    
+    if (row.booking_status === 'cancelled') {
+      status = 'Cancelled';
+    } else if (row.booking_status === 'no_show') {
+      status = 'No Show';
+    } else if (row.has_session_notes) {
+      status = 'Completed';
+    } else if (sessionDate < now) {
+      status = 'Pending Notes';
+    }
+    
+    return {
+      booking_id: row.booking_id,
+      booking_start_at: convertToIST(row.booking_invitee_time),
+      booking_resource_name: row.booking_resource_name,
+      invitee_name: row.invitee_name,
+      invitee_phone: row.invitee_phone,
+      invitee_email: row.invitee_email,
+      booking_host_name: row.booking_host_name,
+      booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+      booking_joining_link: row.booking_joining_link,
+      booking_checkin_url: row.booking_checkin_url,
+      therapist_id: row.therapist_id,
+      has_session_notes: row.has_session_notes,
+      session_status: status
+    };
+  });
   res.json(appointments);
 }
 
@@ -226,6 +254,15 @@ async function handleBookingRequests(req: VercelRequest, res: VercelResponse) {
      VALUES ($1, $2, $3, $4, $5, $6, 'sent', $7) RETURNING *`,
     [clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation || false]
   );
+  
+  // Notify admins about new booking request
+  await notifyAllAdmins(
+    'new_booking_request',
+    'New Booking Request',
+    `New booking request from ${clientName} for ${therapyType}`,
+    result.rows[0].request_id
+  );
+  
   res.json({ success: true, data: result.rows[0] });
 }
 
@@ -240,9 +277,13 @@ async function handleTherapistAppointments(req: VercelRequest, res: VercelRespon
   const therapist = therapistResult.rows[0];
   const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
   const appointmentsResult = await pool.query(`
-    SELECT invitee_name as client_name, invitee_phone as contact_info, booking_resource_name as session_name,
-      booking_invitee_time as session_timings, booking_mode as mode, booking_start_at as booking_date, booking_status
-    FROM bookings WHERE booking_host_name ILIKE $1 ORDER BY booking_start_at DESC
+    SELECT b.invitee_name as client_name, b.invitee_phone as contact_info, b.booking_resource_name as session_name,
+      b.booking_invitee_time as session_timings, b.booking_mode as mode, b.booking_start_at as booking_date, 
+      b.booking_status, b.booking_id,
+      CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+    FROM bookings b
+    LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+    WHERE b.booking_host_name ILIKE $1 ORDER BY b.booking_start_at DESC
   `, [`%${therapistFirstName}%`]);
   
   const convertToIST = (timeStr: string) => {
@@ -272,12 +313,28 @@ async function handleTherapistAppointments(req: VercelRequest, res: VercelRespon
     return `${date} at ${istStart} - ${istEnd} IST`;
   };
   
-  const appointments = appointmentsResult.rows.map(apt => ({
-    ...apt,
-    session_timings: convertToIST(apt.session_timings),
-    mode: apt.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
-    booking_status: apt.booking_status || 'confirmed'
-  }));
+  const appointments = appointmentsResult.rows.map(apt => {
+    let status = 'Scheduled';
+    const now = new Date();
+    const sessionDate = new Date(apt.booking_date);
+    
+    if (apt.booking_status === 'cancelled') {
+      status = 'Cancelled';
+    } else if (apt.booking_status === 'no_show') {
+      status = 'No Show';
+    } else if (apt.has_session_notes) {
+      status = 'Completed';
+    } else if (sessionDate < now) {
+      status = 'Pending Notes';
+    }
+    
+    return {
+      ...apt,
+      session_timings: convertToIST(apt.session_timings),
+      mode: apt.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
+      booking_status: status
+    };
+  });
   
   res.json({ appointments });
 }
@@ -555,6 +612,34 @@ async function handleTransferClient(req: VercelRequest, res: VercelResponse) {
        toTherapistId, newTherapist.name, transferredByAdminId, transferredByAdminName, reason]
     );
 
+    // Notify old therapist about transfer out
+    if (fromTherapistId) {
+      await notifyTherapist(
+        fromTherapistId,
+        'client_transfer_out',
+        'Client Transferred',
+        `Client ${clientName} has been transferred to ${newTherapist.name}`,
+        clientId
+      );
+    }
+    
+    // Notify new therapist about transfer in
+    await notifyTherapist(
+      toTherapistId,
+      'client_transfer_in',
+      'New Client Assigned',
+      `Client ${clientName} has been transferred to you from ${fromTherapistName}`,
+      clientId
+    );
+    
+    // Notify admins
+    await notifyAllAdmins(
+      'client_transfer',
+      'Client Transfer Completed',
+      `${clientName} transferred from ${fromTherapistName} to ${newTherapist.name}`,
+      clientId
+    );
+
     const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/efc4396f-401b-4d46-bfdb-e990a3ac3846';
     
     try {
@@ -667,4 +752,176 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse) {
   }
   
   return res.status(405).json({ error: 'Method not allowed' });
+}
+
+async function handleBookingStatus(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  
+  const { booking_id, status, therapist_id, client_name, session_name } = req.body;
+  
+  try {
+    await pool.query('UPDATE bookings SET booking_status = $1 WHERE booking_id = $2', [status, booking_id]);
+    
+    // Notify based on status change
+    if (status === 'cancelled') {
+      await notifyAllAdmins(
+        'booking_cancelled',
+        'Booking Cancelled',
+        `Session "${session_name}" with ${client_name} has been cancelled`,
+        booking_id
+      );
+      
+      if (therapist_id) {
+        await notifyTherapist(
+          therapist_id,
+          'booking_cancelled',
+          'Session Cancelled',
+          `Your session "${session_name}" with ${client_name} has been cancelled`,
+          booking_id
+        );
+      }
+    } else if (status === 'rescheduled') {
+      await notifyAllAdmins(
+        'booking_rescheduled',
+        'Booking Rescheduled',
+        `Session "${session_name}" with ${client_name} has been rescheduled`,
+        booking_id
+      );
+      
+      if (therapist_id) {
+        await notifyTherapist(
+          therapist_id,
+          'booking_rescheduled',
+          'Session Rescheduled',
+          `Your session "${session_name}" with ${client_name} has been rescheduled`,
+          booking_id
+        );
+      }
+    } else if (status === 'no_show') {
+      await notifyAllAdmins(
+        'no_show',
+        'Client No-Show',
+        `${client_name} did not show up for session "${session_name}"`,
+        booking_id
+      );
+    } else if (status === 'confirmed') {
+      if (therapist_id) {
+        await notifyTherapist(
+          therapist_id,
+          'new_booking',
+          'New Booking Assigned',
+          `New session "${session_name}" booked with ${client_name}`,
+          booking_id
+        );
+      }
+      
+      await notifyAllAdmins(
+        'new_booking',
+        'New Booking',
+        `New session "${session_name}" booked with ${client_name}`,
+        booking_id
+      );
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating booking status:', error);
+    res.status(500).json({ error: 'Failed to update booking status' });
+  }
+}
+
+async function handleSessionNotesSubmit(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  
+  const { booking_id, therapist_id, therapist_name, client_name } = req.body;
+  
+  try {
+    // Notify admins about session notes submission
+    await notifyAllAdmins(
+      'session_notes_submitted',
+      'Session Notes Submitted',
+      `${therapist_name} submitted session notes for ${client_name}`,
+      booking_id
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error handling session notes:', error);
+    res.status(500).json({ error: 'Failed to process session notes' });
+  }
+}
+
+async function handleBookingWebhook(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  
+  const { booking_id, client_name, session_name, therapist_name, therapist_id } = req.body;
+  
+  try {
+    // Notify therapist about new booking
+    if (therapist_id) {
+      await notifyTherapist(
+        therapist_id,
+        'new_booking',
+        'New Booking Assigned',
+        `New session "${session_name}" booked with ${client_name}`,
+        booking_id
+      );
+    }
+    
+    // Notify admins
+    await notifyAllAdmins(
+      'new_booking',
+      'New Booking Created',
+      `${client_name} booked "${session_name}" with ${therapist_name}`,
+      booking_id
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error handling booking webhook:', error);
+    res.status(500).json({ error: 'Failed to process booking webhook' });
+  }
+}
+
+async function handleRefundStatus(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  
+  const { booking_id, refund_status, client_name, therapist_id, refund_amount } = req.body;
+  
+  try {
+    await pool.query('UPDATE bookings SET refund_status = $1 WHERE booking_id = $2', [refund_status, booking_id]);
+    
+    if (refund_status === 'completed' || refund_status === 'processed') {
+      // Notify therapist
+      if (therapist_id) {
+        await notifyTherapist(
+          therapist_id,
+          'refund_processed',
+          'Refund Processed',
+          `Refund of ₹${refund_amount} processed for ${client_name}`,
+          booking_id
+        );
+      }
+      
+      // Notify admins
+      await notifyAllAdmins(
+        'refund_processed',
+        'Refund Completed',
+        `Refund of ₹${refund_amount} processed for ${client_name}`,
+        booking_id
+      );
+    } else if (refund_status === 'requested') {
+      await notifyAllAdmins(
+        'refund_requested',
+        'Refund Requested',
+        `${client_name} requested a refund of ₹${refund_amount}`,
+        booking_id
+      );
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating refund status:', error);
+    res.status(500).json({ error: 'Failed to update refund status' });
+  }
 }

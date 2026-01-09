@@ -27,6 +27,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     { title: 'Cancelled', value: '0', lastMonth: '0' },
   ]);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,6 +35,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [clientsLoading, setClientsLoading] = useState(true);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -44,6 +47,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [showSessionNotesModal, setShowSessionNotesModal] = useState(false);
   const [sessionNotesData, setSessionNotesData] = useState<any>(null);
   const [sessionNotesLoading, setSessionNotesLoading] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [selectedReminderAppointment, setSelectedReminderAppointment] = useState<any>(null);
 
   const handleMonthSelect = (month: string) => {
     setSelectedMonth(month);
@@ -73,12 +78,15 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   useEffect(() => {
     fetchTherapistData();
+  }, [dateRange, user.id]);
+
+  useEffect(() => {
     if (activeView === 'clients') {
       fetchClientsData();
     } else if (activeView === 'appointments') {
       fetchAppointmentsData();
     }
-  }, [dateRange, user.id, activeView]);
+  }, [activeView]);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -98,6 +106,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       const response = await fetch(`/api/therapist-appointments?therapist_id=${user.id}`);
       if (response.ok) {
         const data = await response.json();
+        console.log('Therapist appointments API response:', data);
+        console.log('First appointment:', JSON.stringify(data.appointments[0], null, 2));
         setAppointments(data.appointments || []);
       }
     } catch (error) {
@@ -146,6 +156,12 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         ]);
         
         setBookings(data.upcomingBookings || []);
+
+        const notificationsRes = await fetch(`/api/notifications?user_id=${user.therapist_id}&user_role=therapist`);
+        if (notificationsRes.ok) {
+          const notificationsData = await notificationsRes.json();
+          setNotifications(notificationsData.slice(0, 2));
+        }
       } else {
         // Fallback to empty data
         setStats([
@@ -216,7 +232,29 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     });
   };
 
-  const sendWhatsAppNotification = async (apt: any) => {
+  const handleReminderClick = (apt: any) => {
+    // Check if meeting has ended
+    const timeMatch = apt.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+    if (timeMatch) {
+      const [, dateStr, , endTimeStr] = timeMatch;
+      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+      const now = new Date();
+      
+      if (now > endDateTime) {
+        setToast({ message: 'Cannot send reminder after meeting has ended', type: 'error' });
+        setOpenMenuIndex(null);
+        return;
+      }
+    }
+    
+    setSelectedReminderAppointment(apt);
+    setShowReminderModal(true);
+    setOpenMenuIndex(null);
+  };
+
+  const sendWhatsAppNotification = async () => {
+    if (!selectedReminderAppointment) return;
+
     await fetch('/api/audit-logs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -225,11 +263,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         therapist_name: user.username,
         action_type: 'send_whatsapp',
         action_description: `${user.username} sent WhatsApp notification`,
-        client_name: apt.client_name
+        client_name: selectedReminderAppointment.client_name
       })
     });
-    console.log('Send WhatsApp notification for:', apt);
-    setOpenMenuIndex(null);
+    
+    setToast({ message: 'WhatsApp notification sent successfully!', type: 'success' });
+    setShowReminderModal(false);
+    setSelectedReminderAppointment(null);
   };
 
   const handleSOSClick = (booking: any) => {
@@ -376,7 +416,19 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     }
   };
 
-  const renderMyClients = () => (
+  const renderMyClients = () => {
+    const filteredClients = clients.filter(client => 
+      searchTerm === '' || 
+      client.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.client_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.client_phone.includes(searchTerm)
+    );
+    
+    const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const paginatedClients = filteredClients.slice(startIndex, startIndex + itemsPerPage);
+
+    return (
     <div className="p-8">
       {clientsLoading ? (
         <Loader />
@@ -421,21 +473,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                     Loading...
                   </td>
                 </tr>
-              ) : clients.length === 0 ? (
+              ) : paginatedClients.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center text-gray-400 py-8">
                     No clients found
                   </td>
                 </tr>
               ) : (
-                clients
-                  .filter(client => 
-                    searchTerm === '' || 
-                    client.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    client.client_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    client.client_phone.includes(searchTerm)
-                  )
-                  .map((client, index) => (
+                paginatedClients.map((client, index) => (
                     <React.Fragment key={index}>
                       <tr className="border-b hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm">
@@ -476,15 +521,22 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           </table>
         </div>
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {clients.filter(client => 
-            searchTerm === '' || 
-            client.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            client.client_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            client.client_phone.includes(searchTerm)
-          ).length} of {clients.length} client{clients.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredClients.length)} of {filteredClients.length} client{filteredClients.length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
-            <button className="p-2 border rounded hover:bg-gray-50">←</button>
-            <button className="p-2 border rounded hover:bg-gray-50">→</button>
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ←
+            </button>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              →
+            </button>
           </div>
         </div>
       </div>
@@ -492,6 +544,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       )}
     </div>
   );
+  };
 
   const renderMyAppointments = () => (
     <div className="p-8">
@@ -568,10 +621,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                         }
                       </td>
                       <td className="px-6 py-4 text-sm">
-                        {appointment.booking_status?.includes('_')
-                          ? appointment.booking_status.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-                          : appointment.booking_status || 'Google Meet'
-                        }
+                        {appointment.booking_status || 'Scheduled'}
                       </td>
                       <td className="px-6 py-4">
                         <button
@@ -604,22 +654,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
                   'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
                 );
-                copyAppointmentDetails(filteredAppts[openMenuIndex]);
-              }}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
-            >
-              <Copy size={16} />
-              Copy to Clipboard
-            </button>
-            <button 
-              onClick={() => {
-                const filteredAppts = appointments.filter(appointment => 
-                  appointmentSearchTerm === '' || 
-                  appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-                );
-                sendWhatsAppNotification(filteredAppts[openMenuIndex]);
+                handleReminderClick(filteredAppts[openMenuIndex]);
               }}
               className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
             >
@@ -877,7 +912,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               <div className="p-6 border-b">
                 <h2 className="text-xl font-bold">Upcoming Bookings</h2>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-80 overflow-y-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b">
                     <tr>
@@ -926,14 +961,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button 
-                    onClick={() => copyAppointmentDetails(bookings[openMenuIndex])}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
-                  >
-                    <Copy size={16} />
-                    Copy to Clipboard
-                  </button>
-                  <button 
-                    onClick={() => sendWhatsAppNotification(bookings[openMenuIndex])}
+                    onClick={() => handleReminderClick(bookings[openMenuIndex])}
                     className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
                   >
                     <Send size={16} />
@@ -968,6 +996,51 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   <button className="p-2 border rounded hover:bg-gray-50">←</button>
                   <button className="p-2 border rounded hover:bg-gray-50">→</button>
                 </div>
+              </div>
+            </div>
+
+            {/* Latest Notifications */}
+            <div className="bg-white rounded-lg border mt-8">
+              <div className="p-6 border-b">
+                <h2 className="text-xl font-bold">Latest Notifications</h2>
+              </div>
+              <div className="divide-y">
+                {notifications.length === 0 ? (
+                  <div className="px-6 py-20 text-center text-gray-400">
+                    No notifications
+                  </div>
+                ) : (
+                  notifications.map((notification, index) => (
+                    <div
+                      key={index}
+                      onClick={() => setActiveView('notifications')}
+                      className="px-6 py-4 hover:bg-gray-50 cursor-pointer flex items-start gap-4"
+                    >
+                      <div className="flex-shrink-0 mt-1">
+                        <Bell size={20} className={notification.is_read ? 'text-gray-400' : 'text-teal-700'} />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <h3 className={`font-semibold ${notification.is_read ? 'text-gray-700' : 'text-gray-900'}`}>
+                            {notification.title}
+                          </h3>
+                          <span className="text-xs text-gray-500">
+                            {new Date(notification.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="px-6 py-4 border-t">
+                <button
+                  onClick={() => setActiveView('notifications')}
+                  className="text-sm text-teal-700 hover:text-teal-800 font-medium"
+                >
+                  View All Notifications →
+                </button>
               </div>
             </div>
           </>
@@ -1131,6 +1204,32 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   </div>
                 </div>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showReminderModal && selectedReminderAppointment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Send Manual Reminder</h3>
+            <p className="text-gray-600 mb-4">Are you sure you want to send a WhatsApp reminder to {selectedReminderAppointment.client_name}?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowReminderModal(false);
+                  setSelectedReminderAppointment(null);
+                }}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+              >
+                No
+              </button>
+              <button
+                onClick={sendWhatsAppNotification}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+              >
+                Yes
+              </button>
             </div>
           </div>
         </div>
