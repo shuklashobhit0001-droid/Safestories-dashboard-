@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Check, Trash2, X } from 'lucide-react';
+import { Bell, Check } from 'lucide-react';
 import { Loader } from './Loader';
 
 interface Notification {
@@ -21,8 +21,6 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [notificationToDelete, setNotificationToDelete] = useState<number | null>(null);
 
   useEffect(() => {
     fetchNotifications();
@@ -60,27 +58,7 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
     }
   };
 
-  const deleteNotification = async (notificationId: number) => {
-    try {
-      const response = await fetch(`/api/notifications/delete`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notification_id: notificationId })
-      });
-      if (response.ok) {
-        setNotifications(notifications.filter(n => n.notification_id !== notificationId));
-      }
-    } catch (error) {
-      console.error('Error deleting notification:', error);
-    }
-    setDeleteModalOpen(false);
-    setNotificationToDelete(null);
-  };
 
-  const handleDeleteClick = (notificationId: number) => {
-    setNotificationToDelete(notificationId);
-    setDeleteModalOpen(true);
-  };
 
   const markAllAsRead = async () => {
     try {
@@ -183,54 +161,21 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
                 </div>
                 <p className="text-sm text-gray-600">{notification.message}</p>
               </div>
-              <div className="flex gap-2">
-                {!notification.is_read && (
-                  <button
-                    onClick={() => markAsRead(notification.notification_id)}
-                    className="p-2 hover:bg-gray-100 rounded-lg text-teal-600"
-                    title="Mark as read"
-                  >
-                    <Check size={18} />
-                  </button>
-                )}
+              {!notification.is_read && (
                 <button
-                  onClick={() => handleDeleteClick(notification.notification_id)}
-                  className="p-2 hover:bg-gray-100 rounded-lg text-red-600"
-                  title="Delete"
+                  onClick={() => markAsRead(notification.notification_id)}
+                  className="p-2 hover:bg-gray-100 rounded-lg text-teal-600"
+                  title="Mark as read"
                 >
-                  <Trash2 size={18} />
+                  <Check size={18} />
                 </button>
-              </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {deleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Delete Notification</h3>
-            <p className="text-gray-600 mb-6">Are you sure you want to delete this notification?</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setDeleteModalOpen(false);
-                  setNotificationToDelete(null);
-                }}
-                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
-              >
-                No
-              </button>
-              <button
-                onClick={() => notificationToDelete && deleteNotification(notificationToDelete)}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                Yes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };
