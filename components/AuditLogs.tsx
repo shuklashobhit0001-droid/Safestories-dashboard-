@@ -45,8 +45,9 @@ export const AuditLogs: React.FC = () => {
 
   const formatTimestamp = (timestamp: string) => {
     if (!timestamp) return 'Invalid Date';
-    const date = new Date(timestamp);
-    return date.toLocaleString('en-IN', {
+    const date = new Date(timestamp + 'Z'); // Treat as UTC
+    return date.toLocaleString('en-US', {
+      timeZone: 'Asia/Kolkata',
       year: 'numeric',
       month: 'short',
       day: 'numeric',
