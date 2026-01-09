@@ -43,8 +43,10 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
 
   const markAsRead = async (notificationId: number) => {
     try {
-      const response = await fetch(`/api/notifications/${notificationId}/read`, {
-        method: 'PUT'
+      const response = await fetch(`/api/notifications/read`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification_id: notificationId })
       });
       if (response.ok) {
         setNotifications(notifications.map(n => 
@@ -58,8 +60,10 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
 
   const deleteNotification = async (notificationId: number) => {
     try {
-      const response = await fetch(`/api/notifications/${notificationId}`, {
-        method: 'DELETE'
+      const response = await fetch(`/api/notifications/delete`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification_id: notificationId })
       });
       if (response.ok) {
         setNotifications(notifications.filter(n => n.notification_id !== notificationId));

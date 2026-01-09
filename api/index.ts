@@ -51,6 +51,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleSessionNotes(req, res);
       case 'notifications':
         return await handleNotifications(req, res);
+      case 'notifications/mark-all-read':
+        return await handleNotificationsMarkAllRead(req, res);
+      case 'notifications/read':
+        return await handleNotificationRead(req, res);
+      case 'notifications/delete':
+        return await handleNotificationDelete(req, res);
       case 'booking-status':
         return await handleBookingStatus(req, res);
       case 'session-notes-submit':
@@ -712,9 +718,6 @@ async function handleSessionNotes(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleNotifications(req: VercelRequest, res: VercelResponse) {
-  const urlPath = req.url?.split('?')[0] || '';
-  const pathParts = urlPath.split('/');
-  
   if (req.method === 'GET') {
     const { user_id, user_role } = req.query;
     if (!user_id || !user_role) return res.status(400).json({ error: 'User ID and role required' });
@@ -726,32 +729,38 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse) {
     return res.json(result.rows);
   }
   
-  if (req.method === 'PUT') {
-    if (pathParts.includes('mark-all-read')) {
-      const { user_id, user_role } = req.body;
-      await pool.query(
-        'UPDATE notifications SET is_read = true WHERE user_id = $1 AND user_role = $2',
-        [user_id, user_role]
-      );
-      return res.json({ success: true });
-    }
-    
-    const notificationId = pathParts[pathParts.indexOf('notifications') + 1];
-    if (notificationId && pathParts.includes('read')) {
-      await pool.query('UPDATE notifications SET is_read = true WHERE notification_id = $1', [notificationId]);
-      return res.json({ success: true });
-    }
-  }
-  
-  if (req.method === 'DELETE') {
-    const notificationId = pathParts[pathParts.indexOf('notifications') + 1];
-    if (notificationId) {
-      await pool.query('DELETE FROM notifications WHERE notification_id = $1', [notificationId]);
-      return res.json({ success: true });
-    }
-  }
-  
   return res.status(405).json({ error: 'Method not allowed' });
+}
+
+async function handleNotificationsMarkAllRead(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' });
+  
+  const { user_id, user_role } = req.body;
+  await pool.query(
+    'UPDATE notifications SET is_read = true WHERE user_id = $1 AND user_role = $2',
+    [user_id, user_role]
+  );
+  return res.json({ success: true });
+}
+
+async function handleNotificationRead(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' });
+  
+  const { notification_id } = req.body;
+  if (!notification_id) return res.status(400).json({ error: 'Notification ID required' });
+  
+  await pool.query('UPDATE notifications SET is_read = true WHERE notification_id = $1', [notification_id]);
+  return res.json({ success: true });
+}
+
+async function handleNotificationDelete(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' });
+  
+  const { notification_id } = req.body;
+  if (!notification_id) return res.status(400).json({ error: 'Notification ID required' });
+  
+  await pool.query('DELETE FROM notifications WHERE notification_id = $1', [notification_id]);
+  return res.json({ success: true });
 }
 
 async function handleBookingStatus(req: VercelRequest, res: VercelResponse) {
