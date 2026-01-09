@@ -31,6 +31,8 @@ export const Appointments: React.FC = () => {
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     fetch('/api/appointments')
@@ -193,6 +195,10 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
     );
   });
 
+  const totalPages = Math.ceil(filteredAppointments.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedAppointments = filteredAppointments.slice(startIndex, startIndex + itemsPerPage);
+
   const exportToCSV = () => {
     const headers = ['Session Timings', 'Session Name', 'Client Name', 'Phone', 'Email', 'Therapist Name', 'Mode'];
     const rows = filteredAppointments.map(apt => [
@@ -290,7 +296,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                   </td>
                 </tr>
               ) : (
-                filteredAppointments.map((apt, index) => (
+                paginatedAppointments.map((apt, index) => (
                   <tr key={index} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm">{apt.booking_start_at}</td>
                     <td className="px-6 py-4 text-sm">{apt.booking_resource_name}</td>
@@ -326,23 +332,23 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
             onClick={(e) => e.stopPropagation()}
           >
             <button 
-              onClick={() => copyAppointmentDetails(filteredAppointments[openMenuIndex])}
+              onClick={() => copyAppointmentDetails(paginatedAppointments[openMenuIndex])}
               className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
             >
               <Copy size={16} />
               Copy to Clipboard
             </button>
             <button 
-              onClick={() => handleReminderClick(filteredAppointments[openMenuIndex])}
+              onClick={() => handleReminderClick(paginatedAppointments[openMenuIndex])}
               className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
             >
               <Send size={16} />
               Send Manual Reminder
             </button>
             <button 
-              onClick={() => handleSessionNotesReminder(filteredAppointments[openMenuIndex])}
+              onClick={() => handleSessionNotesReminder(paginatedAppointments[openMenuIndex])}
               className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 ${
-                filteredAppointments[openMenuIndex].has_session_notes 
+                paginatedAppointments[openMenuIndex].has_session_notes 
                   ? 'text-gray-400 cursor-not-allowed' 
                   : 'hover:bg-gray-100 text-blue-600'
               }`}
@@ -353,10 +359,22 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
           </div>
         )}
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {filteredAppointments.length} of {appointments.length} appointment{appointments.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredAppointments.length)} of {filteredAppointments.length} appointment{filteredAppointments.length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
-            <button className="p-2 border rounded hover:bg-gray-50">←</button>
-            <button className="p-2 border rounded hover:bg-gray-50">→</button>
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ←
+            </button>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              →
+            </button>
           </div>
         </div>
       </div>
