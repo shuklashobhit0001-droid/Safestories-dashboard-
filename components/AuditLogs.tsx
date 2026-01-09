@@ -45,9 +45,10 @@ export const AuditLogs: React.FC = () => {
 
   const formatTimestamp = (timestamp: string) => {
     if (!timestamp) return 'Invalid Date';
-    const date = new Date(timestamp);
+    const date = new Date(timestamp + 'Z');
     if (isNaN(date.getTime())) return 'Invalid Date';
     return date.toLocaleString('en-US', {
+      timeZone: 'Asia/Kolkata',
       year: 'numeric',
       month: 'short',
       day: 'numeric',
