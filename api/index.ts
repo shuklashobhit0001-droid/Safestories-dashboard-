@@ -150,84 +150,64 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleAppointments(req: VercelRequest, res: VercelResponse) {
-  const result = await pool.query(`
-    SELECT 
-      b.booking_id,
-      b.booking_invitee_time,
-      b.booking_resource_name,
-      b.invitee_name,
-      b.invitee_phone,
-      b.invitee_email,
-      b.booking_host_name,
-      b.booking_mode,
-      b.booking_start_at,
-      b.booking_joining_link,
-      b.booking_checkin_url,
-      b.therapist_id,
-      b.booking_status,
-      CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes,
-      csn.session_status
-    FROM bookings b
-    LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-    ORDER BY b.booking_start_at DESC
-  `);
-  const convertToIST = (timeStr: string) => {
-    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-    if (!match) return timeStr;
-    const [, date, startTime, endTime, offset] = match;
-    const parseTime = (time: string, dateStr: string, tz: string) => {
-      const [h, rest] = time.split(':');
-      const [m, period] = rest.split(' ');
-      let hour = parseInt(h);
-      if (period === 'PM' && hour !== 12) hour += 12;
-      if (period === 'AM' && hour === 12) hour = 0;
-      const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
-      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-      const istOffset = 330;
-      const diff = istOffset - offsetTotal;
-      let totalMins = hour * 60 + parseInt(m) + diff;
-      const newHour = Math.floor(totalMins / 60) % 24;
-      const newMin = totalMins % 60;
-      const period12 = newHour >= 12 ? 'PM' : 'AM';
-      const hour12 = newHour % 12 || 12;
-      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-    };
-    const istStart = parseTime(startTime, date, `GMT${offset}`);
-    const istEnd = parseTime(endTime, date, `GMT${offset}`);
-    return `${date} at ${istStart} - ${istEnd} IST`;
-  };
-  const appointments = result.rows.map(row => {
-    let status = 'Scheduled';
-    const now = new Date();
-    const sessionDate = new Date(row.booking_start_at);
-    
-    if (row.booking_status === 'cancelled') {
-      status = 'Cancelled';
-    } else if (row.booking_status === 'no_show') {
-      status = 'No Show';
-    } else if (row.has_session_notes) {
-      status = 'Completed';
-    } else if (sessionDate < now) {
-      status = 'Pending Notes';
-    }
-    
-    return {
-      booking_id: row.booking_id,
-      booking_start_at: convertToIST(row.booking_invitee_time),
-      booking_resource_name: row.booking_resource_name,
-      invitee_name: row.invitee_name,
-      invitee_phone: row.invitee_phone,
-      invitee_email: row.invitee_email,
-      booking_host_name: row.booking_host_name,
-      booking_mode: row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-      booking_joining_link: row.booking_joining_link,
-      booking_checkin_url: row.booking_checkin_url,
-      therapist_id: row.therapist_id,
-      has_session_notes: row.has_session_notes,
-      session_status: status
-    };
-  });
-  res.json(appointments);
+  try {
+    const result = await pool.query(`
+      SELECT 
+        b.booking_id,
+        b.booking_invitee_time,
+        b.booking_resource_name,
+        b.invitee_name,
+        b.invitee_phone,
+        b.invitee_email,
+        b.booking_host_name,
+        b.booking_mode,
+        b.booking_start_at,
+        b.booking_joining_link,
+        b.booking_checkin_url,
+        b.therapist_id,
+        b.booking_status,
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+      FROM bookings b
+      LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+      ORDER BY b.booking_start_at DESC
+    `);
+
+    const appointments = result.rows.map(row => {
+      let status = row.booking_status;
+      const now = new Date();
+      const sessionDate = new Date(row.booking_start_at);
+      
+      if (row.booking_status !== 'cancelled' && row.booking_status !== 'no_show') {
+        if (row.has_session_notes) {
+          status = 'completed';
+        } else if (sessionDate < now) {
+          status = 'pending_notes';
+        }
+      }
+      
+      return {
+        booking_id: row.booking_id,
+        booking_start_at: row.booking_invitee_time || 'N/A',
+        booking_resource_name: row.booking_resource_name,
+        invitee_name: row.invitee_name,
+        invitee_phone: row.invitee_phone,
+        invitee_email: row.invitee_email,
+        booking_host_name: row.booking_host_name,
+        booking_mode: row.booking_mode ? row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
+        booking_joining_link: row.booking_joining_link,
+        booking_checkin_url: row.booking_checkin_url,
+        therapist_id: row.therapist_id,
+        has_session_notes: row.has_session_notes,
+        booking_status: status,
+        booking_start_at_raw: row.booking_start_at
+      };
+    });
+
+    res.json(appointments);
+  } catch (error) {
+    console.error('Error fetching appointments:', error);
+    res.status(500).json({ error: 'Failed to fetch appointments' });
+  }
 }
 
 async function handleTherapies(req: VercelRequest, res: VercelResponse) {
