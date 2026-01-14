@@ -83,11 +83,16 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
   if (result.rows.length > 0) {
     const user = result.rows[0];
     if (user.role === 'therapist') {
-      await pool.query(
-        `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
-         VALUES ($1, $2, $3, $4, NOW(), true)`,
-        [user.therapist_id, username, 'login', `${username} logged into dashboard`]
-      );
+      try {
+        await pool.query(
+          `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
+           VALUES ($1, $2, $3, $4, NOW(), true)`,
+          [user.therapist_id, username, 'login', `${username} logged into dashboard`]
+        );
+        console.log('✅ Audit log created for login:', username, user.therapist_id);
+      } catch (auditError) {
+        console.error('❌ Failed to create audit log for login:', auditError);
+      }
     }
     res.json({ success: true, user });
   } else {
@@ -742,11 +747,16 @@ async function handleLogout(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const { user } = req.body;
   if (user?.role === 'therapist') {
-    await pool.query(
-      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
-       VALUES ($1, $2, $3, $4, NOW(), true)`,
-      [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
-    );
+    try {
+      await pool.query(
+        `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
+         VALUES ($1, $2, $3, $4, NOW(), true)`,
+        [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
+      );
+      console.log('✅ Audit log created for logout:', user.username, user.therapist_id);
+    } catch (auditError) {
+      console.error('❌ Failed to create audit log for logout:', auditError);
+    }
   }
   res.json({ success: true });
 }
