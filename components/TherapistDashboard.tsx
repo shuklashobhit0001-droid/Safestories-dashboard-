@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, MoreVertical, Copy, Send, Search, FileText, Bell, X } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, MoreVertical } from 'lucide-react';
 import { Logo } from './Logo';
 import { Notifications } from './Notifications';
 import { Toast } from './Toast';
@@ -32,6 +32,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [appointments, setAppointments] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
+  const [selectedAppointmentIndex, setSelectedAppointmentIndex] = useState<number | null>(null);
   const [clientsLoading, setClientsLoading] = useState(true);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -44,11 +45,79 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [sosConfirmText, setSosConfirmText] = useState('');
   const [selectedSOSBooking, setSelectedSOSBooking] = useState<any>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
-  const [showSessionNotesModal, setShowSessionNotesModal] = useState(false);
   const [sessionNotesData, setSessionNotesData] = useState<any>(null);
   const [sessionNotesLoading, setSessionNotesLoading] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedReminderAppointment, setSelectedReminderAppointment] = useState<any>(null);
+  const [activeAppointmentTab, setActiveAppointmentTab] = useState('all');
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [clientDetailLoading, setClientDetailLoading] = useState(false);
+  const [clientStats, setClientStats] = useState({ sessions: 0, noShows: 0, cancelled: 0 });
+  const [clientAppointments, setClientAppointments] = useState<any[]>([]);
+  const [clientDateRange, setClientDateRange] = useState({ start: '', end: '' });
+  const [clientSelectedMonth, setClientSelectedMonth] = useState('All Time');
+  const [isClientDateDropdownOpen, setIsClientDateDropdownOpen] = useState(false);
+  const [showClientCustomCalendar, setShowClientCustomCalendar] = useState(false);
+  const [clientStartDate, setClientStartDate] = useState('');
+  const [clientEndDate, setClientEndDate] = useState('');
+  const [selectedSessionNote, setSelectedSessionNote] = useState<any>(null);
+  const [sessionNoteTab, setSessionNoteTab] = useState('notes');
+
+  const resetAllStates = () => {
+    setSelectedClient(null);
+    setSelectedSessionNote(null);
+    setSelectedAppointmentIndex(null);
+    setOpenMenuIndex(null);
+    setMenuPosition(null);
+    setExpandedRows(new Set());
+    setShowSOSModal(false);
+    setShowReminderModal(false);
+    setIsDateDropdownOpen(false);
+    setShowCustomCalendar(false);
+    setIsClientDateDropdownOpen(false);
+    setShowClientCustomCalendar(false);
+  };
+
+  const appointmentTabs = [
+    { id: 'all', label: 'All Appointments' },
+    { id: 'scheduled', label: 'Scheduled' },
+    { id: 'completed', label: 'Completed' },
+    { id: 'pending_notes', label: 'Pending Notes' },
+    { id: 'cancelled', label: 'Cancelled' },
+    { id: 'no_show', label: 'No Show' },
+  ];
+
+  const handleClientMonthSelect = (month: string) => {
+    setClientSelectedMonth(month);
+    setIsClientDateDropdownOpen(false);
+    setShowClientCustomCalendar(false);
+    
+    const [monthName, year] = month.split(' ');
+    const monthMap: { [key: string]: number } = {
+      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+    };
+    const monthNum = monthMap[monthName];
+    const start = new Date(parseInt(year), monthNum, 1).toISOString().split('T')[0];
+    const end = new Date(parseInt(year), monthNum + 1, 0).toISOString().split('T')[0];
+    
+    setClientDateRange({ start, end });
+  };
+
+  const handleClientCustomDateApply = () => {
+    if (clientStartDate && clientEndDate) {
+      setClientDateRange({ start: clientStartDate, end: clientEndDate });
+      setClientSelectedMonth(`${clientStartDate} to ${clientEndDate}`);
+      setShowClientCustomCalendar(false);
+      setIsClientDateDropdownOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedClient) {
+      fetchClientDetails(selectedClient);
+    }
+  }, [clientDateRange]);
 
   const handleMonthSelect = (month: string) => {
     setSelectedMonth(month);
@@ -137,6 +206,36 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     }
   };
 
+  const fetchClientDetails = async (client: any) => {
+    try {
+      setClientDetailLoading(true);
+      const response = await fetch(`/api/client-appointments?client_phone=${encodeURIComponent(client.client_phone)}&therapist_id=${user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        let filteredAppointments = data.appointments || [];
+        
+        if (clientDateRange.start && clientDateRange.end) {
+          filteredAppointments = filteredAppointments.filter((apt: any) => {
+            const aptDate = new Date(apt.booking_date);
+            const startDate = new Date(clientDateRange.start);
+            const endDate = new Date(clientDateRange.end + 'T23:59:59');
+            return aptDate >= startDate && aptDate <= endDate;
+          });
+        }
+        
+        setClientAppointments(filteredAppointments);
+        const sessions = filteredAppointments.length;
+        const noShows = filteredAppointments.filter((a: any) => a.booking_status === 'no_show').length;
+        const cancelled = filteredAppointments.filter((a: any) => a.booking_status === 'cancelled').length;
+        setClientStats({ sessions, noShows, cancelled });
+      }
+    } catch (error) {
+      console.error('Error fetching client details:', error);
+    } finally {
+      setClientDetailLoading(false);
+    }
+  };
+
   const fetchTherapistData = async () => {
     try {
       setDashboardLoading(true);
@@ -157,7 +256,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         
         setBookings(data.upcomingBookings || []);
 
-        const notificationsRes = await fetch(`/api/notifications?user_id=${user.therapist_id}&user_role=therapist`);
+        const notificationsRes = await fetch(`/api/notifications?user_id=${user.id}&user_role=therapist`);
         if (notificationsRes.ok) {
           const notificationsData = await notificationsRes.json();
           setNotifications(notificationsData.slice(0, 2));
@@ -224,32 +323,27 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         })
       });
       setToast({ message: 'Appointment details copied to clipboard!', type: 'success' });
-      setOpenMenuIndex(null);
-      setMenuPosition(null);
+      setSelectedAppointmentIndex(null);
     }).catch(err => {
       console.error('Failed to copy:', err);
       setToast({ message: 'Failed to copy details', type: 'error' });
     });
   };
 
-  const handleReminderClick = (apt: any) => {
-    // Check if meeting has ended
+  const isMeetingEnded = (apt: any) => {
     const timeMatch = apt.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
     if (timeMatch) {
       const [, dateStr, , endTimeStr] = timeMatch;
       const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-      const now = new Date();
-      
-      if (now > endDateTime) {
-        setToast({ message: 'Cannot send reminder after meeting has ended', type: 'error' });
-        setOpenMenuIndex(null);
-        return;
-      }
+      return new Date() > endDateTime;
     }
-    
+    return false;
+  };
+
+  const handleReminderClick = (apt: any) => {
     setSelectedReminderAppointment(apt);
     setShowReminderModal(true);
-    setOpenMenuIndex(null);
+    setSelectedAppointmentIndex(null);
   };
 
   const sendWhatsAppNotification = async () => {
@@ -293,15 +387,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       if (now < startDateTime) {
         console.log('❌ Session has not started yet');
         setToast({ message: 'SOS ticket can only be raised after the session starts', type: 'error' });
-        setOpenMenuIndex(null);
+        setSelectedAppointmentIndex(null);
         return;
       }
       
-      // Extended to 72 hours (3 days) instead of 24 hours
       if (hoursSinceEnd > 24) {
         console.log('❌ More than 24 hours since session ended');
         setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
-        setOpenMenuIndex(null);
+        setSelectedAppointmentIndex(null);
         return;
       }
       
@@ -310,7 +403,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     
     setSelectedSOSBooking(booking);
     setShowSOSModal(true);
-    setOpenMenuIndex(null);
+    setSelectedAppointmentIndex(null);
   };
 
   const handleSOSConfirm = async () => {
@@ -389,16 +482,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleFillSessionNotes = (appointment: any) => {
-    // TODO: Add functionality later
     console.log('Fill session notes for:', appointment);
-    setOpenMenuIndex(null);
+    setSelectedAppointmentIndex(null);
   };
 
   const handleViewSessionNotes = async (appointment: any) => {
     console.log('View session notes for booking_id:', appointment.booking_id);
     setSessionNotesLoading(true);
-    setShowSessionNotesModal(true);
-    setOpenMenuIndex(null);
+    setSelectedAppointmentIndex(null);
     
     try {
       const response = await fetch(`/api/session-notes?booking_id=${appointment.booking_id}`);
@@ -482,12 +573,18 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               ) : (
                 paginatedClients.map((client, index) => (
                     <React.Fragment key={index}>
-                      <tr className="border-b hover:bg-gray-50">
+                      <tr className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => {
+                        setSelectedClient(client);
+                        fetchClientDetails(client);
+                      }}>
                         <td className="px-6 py-4 text-sm">
                           <div className="flex items-center gap-2">
                             {client.therapists && client.therapists.length > 1 && (
                               <button
-                                onClick={() => toggleRow(index)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleRow(index);
+                                }}
                                 className="text-gray-500 hover:text-gray-700"
                               >
                                 {expandedRows.has(index) ? (
@@ -546,6 +643,23 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   );
   };
 
+  const getAppointmentStatus = (apt: any) => {
+    if (apt.booking_status === 'cancelled') return 'cancelled';
+    if (apt.booking_status === 'no_show') return 'no_show';
+    if (apt.has_session_notes) return 'completed';
+    
+    if (apt.session_timings) {
+      const timeMatch = apt.session_timings.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+      if (timeMatch) {
+        const [, dateStr, , endTimeStr] = timeMatch;
+        const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+        if (endDateTime < new Date() && !apt.has_session_notes) return 'pending_notes';
+      }
+    }
+    
+    return 'scheduled';
+  };
+
   const renderMyAppointments = () => (
     <div className="p-8">
       {appointmentsLoading ? (
@@ -557,6 +671,23 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           <h1 className="text-3xl font-bold mb-1">My Appointments</h1>
           <p className="text-gray-600">View Recently Book Session, Send invite and more...</p>
         </div>
+      </div>
+      
+      {/* Tabs */}
+      <div className="flex gap-6 mb-6">
+        {appointmentTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveAppointmentTab(tab.id)}
+            className={`pb-2 font-medium ${
+              activeAppointmentTab === tab.id
+                ? 'text-teal-700 border-b-2 border-teal-700'
+                : 'text-gray-400'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
       
       {/* Search Bar */}
@@ -584,7 +715,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -602,119 +732,119 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 </tr>
               ) : (
                 appointments
-                  .filter(appointment => 
-                    appointmentSearchTerm === '' || 
-                    appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                    appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                    (user.full_name || user.username).toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-                  )
+                  .filter(appointment => {
+                    const matchesSearch = appointmentSearchTerm === '' || 
+                      appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                      appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                      (user.full_name || user.username).toLowerCase().includes(appointmentSearchTerm.toLowerCase());
+                    
+                    if (!matchesSearch) return false;
+                    if (activeAppointmentTab === 'all') return true;
+                    
+                    return getAppointmentStatus(appointment) === activeAppointmentTab;
+                  })
                   .map((appointment, index, filteredArray) => (
-                    <tr key={index} className="border-b hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm">{appointment.session_timings}</td>
-                      <td className="px-6 py-4 text-sm">{appointment.session_name}</td>
-                      <td className="px-6 py-4 text-sm">{appointment.client_name}</td>
-                      <td className="px-6 py-4 text-sm">{appointment.contact_info}</td>
-                      <td className="px-6 py-4 text-sm">
-                        {appointment.mode?.includes('_') 
-                          ? appointment.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-                          : appointment.mode || 'Google Meet'
-                        }
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {appointment.booking_status || 'Scheduled'}
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleMenu(index, e);
-                          }}
-                          className="p-1 hover:bg-gray-200 rounded"
-                        >
-                          <MoreVertical size={18} />
-                        </button>
-                      </td>
-                    </tr>
+                    <React.Fragment key={index}>
+                      <tr 
+                        className={`border-b cursor-pointer transition-colors ${
+                          selectedAppointmentIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                        }`}
+                        onClick={() => setSelectedAppointmentIndex(selectedAppointmentIndex === index ? null : index)}
+                      >
+                        <td className="px-6 py-4 text-sm">{appointment.session_timings}</td>
+                        <td className="px-6 py-4 text-sm">{appointment.session_name}</td>
+                        <td className="px-6 py-4 text-sm">{appointment.client_name}</td>
+                        <td className="px-6 py-4 text-sm">{appointment.contact_info}</td>
+                        <td className="px-6 py-4 text-sm">
+                          {appointment.mode?.includes('_') 
+                            ? appointment.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                            : appointment.mode || 'Google Meet'
+                          }
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            getAppointmentStatus(appointment) === 'completed' ? 'bg-green-100 text-green-700' :
+                            getAppointmentStatus(appointment) === 'cancelled' ? 'bg-red-100 text-red-700' :
+                            getAppointmentStatus(appointment) === 'no_show' ? 'bg-orange-100 text-orange-700' :
+                            getAppointmentStatus(appointment) === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {getAppointmentStatus(appointment) === 'pending_notes' ? 'Pending Notes' :
+                             getAppointmentStatus(appointment) === 'no_show' ? 'No Show' :
+                             getAppointmentStatus(appointment).charAt(0).toUpperCase() + getAppointmentStatus(appointment).slice(1)}
+                          </span>
+                        </td>
+                      </tr>
+                      {selectedAppointmentIndex === index && (
+                        <tr className="bg-gray-100">
+                          <td colSpan={6} className="px-6 py-4">
+                            <div className="flex gap-3 justify-center">
+                              <button
+                                onClick={() => copyAppointmentDetails(appointment)}
+                                className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                              >
+                                <Copy size={16} />
+                                Copy to Clipboard
+                              </button>
+                              <button
+                                onClick={() => handleReminderClick(appointment)}
+                                disabled={isMeetingEnded(appointment)}
+                                className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                  isMeetingEnded(appointment)
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                    : 'border border-gray-400 text-gray-700 hover:bg-white'
+                                }`}
+                              >
+                                <Send size={16} />
+                                Send Manual Reminder to Client
+                              </button>
+                              <button
+                                onClick={() => handleSOSClick(appointment)}
+                                className="px-6 py-2 border border-red-600 rounded-lg text-sm text-red-600 hover:bg-white flex items-center gap-2"
+                              >
+                                <span className="font-bold">SOS</span>
+                                Raise Ticket
+                              </button>
+                              <button
+                                onClick={() => handleViewSessionNotes(appointment)}
+                                className="px-6 py-2 border border-blue-600 rounded-lg text-sm text-blue-600 hover:bg-white flex items-center gap-2"
+                              >
+                                <FileText size={16} />
+                                View Session Notes
+                              </button>
+                              <button
+                                onClick={() => handleFillSessionNotes(appointment)}
+                                disabled={appointment.has_session_notes}
+                                className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                  appointment.has_session_notes
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                    : 'border border-teal-600 text-teal-600 hover:bg-white'
+                                }`}
+                              >
+                                <FileText size={16} />
+                                Fill Session Notes
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))
               )}
             </tbody>
           </table>
         </div>
-        {openMenuIndex !== null && menuPosition && (
-          <div 
-            className="fixed w-48 bg-white border rounded-lg shadow-lg z-50"
-            style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => {
-                const filteredAppts = appointments.filter(appointment => 
-                  appointmentSearchTerm === '' || 
-                  appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-                );
-                handleReminderClick(filteredAppts[openMenuIndex]);
-              }}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
-            >
-              <Send size={16} />
-              Send Manual Reminder
-            </button>
-            <button 
-              onClick={() => {
-                const filteredAppts = appointments.filter(appointment => 
-                  appointmentSearchTerm === '' || 
-                  appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-                );
-                handleSOSClick(filteredAppts[openMenuIndex]);
-              }}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-red-600 border-t"
-            >
-              <span className="font-bold">SOS</span>
-              Raise Ticket
-            </button>
-            <button 
-              onClick={() => {
-                const filteredAppts = appointments.filter(appointment => 
-                  appointmentSearchTerm === '' || 
-                  appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-                );
-                handleViewSessionNotes(filteredAppts[openMenuIndex]);
-              }}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-blue-600"
-            >
-              <FileText size={16} />
-              View Session Notes
-            </button>
-            <button 
-              onClick={() => {
-                const filteredAppts = appointments.filter(appointment => 
-                  appointmentSearchTerm === '' || 
-                  appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                  'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-                );
-                handleFillSessionNotes(filteredAppts[openMenuIndex]);
-              }}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-teal-600"
-            >
-              <FileText size={16} />
-              Fill Session Notes
-            </button>
-          </div>
-        )}
+
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {appointments.filter(appointment => 
-            appointmentSearchTerm === '' || 
-            appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-            appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-            'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-          ).length} of {appointments.length} appointment{appointments.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-gray-600">Showing {appointments.filter(appointment => {
+            const matchesSearch = appointmentSearchTerm === '' || 
+              appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+              appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+              'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase());
+            if (!matchesSearch) return false;
+            if (activeAppointmentTab === 'all') return true;
+            return getAppointmentStatus(appointment) === activeAppointmentTab;
+          }).length} of {appointments.length} appointment{appointments.length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
             <button className="p-2 border rounded hover:bg-gray-50">←</button>
             <button className="p-2 border rounded hover:bg-gray-50">→</button>
@@ -738,7 +868,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer" 
             style={{ backgroundColor: activeView === 'dashboard' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('dashboard')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('dashboard');
+            }}
           >
             <LayoutDashboard size={20} className={activeView === 'dashboard' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'dashboard' ? 'text-teal-700' : 'text-gray-700'}>Dashboard</span>
@@ -746,7 +879,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'clients' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('clients')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('clients');
+            }}
           >
             <Users size={20} className={activeView === 'clients' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'clients' ? 'text-teal-700' : 'text-gray-700'}>My Clients</span>
@@ -754,7 +890,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'appointments' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('appointments')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('appointments');
+            }}
           >
             <Calendar size={20} className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>My Appointments</span>
@@ -762,7 +901,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'notifications' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('notifications')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('notifications');
+            }}
           >
             <Bell size={20} className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'}>Notifications</span>
@@ -792,12 +934,275 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto relative">
-        {activeView === 'clients' ? (
+        {selectedSessionNote ? (
+          <div className="p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <button onClick={() => {
+                setSelectedSessionNote(null);
+                setSessionNotesData(null);
+                setSessionNoteTab('notes');
+              }} className="text-2xl hover:text-gray-600">
+                ←
+              </button>
+              <h1 className="text-2xl font-bold">{selectedClient?.client_name}</h1>
+            </div>
+
+            <div className="flex gap-8 mb-6 border-b">
+              <button
+                onClick={() => setSessionNoteTab('notes')}
+                className={`pb-3 font-medium ${
+                  sessionNoteTab === 'notes'
+                    ? 'text-teal-700 border-b-2 border-teal-700'
+                    : 'text-gray-500'
+                }`}
+              >
+                Session Notes
+              </button>
+              <button
+                onClick={() => setSessionNoteTab('timelines')}
+                className={`pb-3 font-medium ${
+                  sessionNoteTab === 'timelines'
+                    ? 'text-teal-700 border-b-2 border-teal-700'
+                    : 'text-gray-500'
+                }`}
+              >
+                Timelines
+              </button>
+            </div>
+
+            <div className="flex gap-6">
+              <div className="flex-1">
+                {sessionNoteTab === 'notes' ? (
+                  sessionNotesLoading ? (
+                    <div className="text-center py-8"><Loader /></div>
+                  ) : sessionNotesData?.error ? (
+                    <div className="bg-white rounded-lg border p-8 text-center">
+                      <p className="text-red-600">{sessionNotesData.error}</p>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-lg border p-6">
+                      <div className="mb-6">
+                        <p className="text-sm text-gray-600">
+                          Session Timings: {sessionNotesData?.session_timing || 'N/A'}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-4 mb-6">
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Client Age:</label>
+                          <p className="text-sm">{sessionNotesData?.client_age || ''}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Gender:</label>
+                          <p className="text-sm">{sessionNotesData?.gender || ''}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Occupation:</label>
+                          <p className="text-sm">{sessionNotesData?.occupation || ''}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">Marital status:</label>
+                          <p className="text-sm">{sessionNotesData?.marital_status || ''}</p>
+                        </div>
+                      </div>
+
+                      <div className="mb-6">
+                        <label className="block text-sm text-gray-600 mb-2">Concerns or themes discussed today?:</label>
+                        <div className="text-sm whitespace-pre-wrap">{sessionNotesData?.concerns_discussed || ''}</div>
+                      </div>
+
+                      <div className="mb-6">
+                        <label className="block text-sm text-gray-600 mb-2">
+                          Somatic Cues: How did the client present today (appearance, behaviour, energy, mood, non-verbal cues)?
+                        </label>
+                        <div className="text-sm whitespace-pre-wrap">{sessionNotesData?.somatic_cues?.join(', ') || ''}</div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-2">Which interventions were used?</label>
+                        <div className="text-sm whitespace-pre-wrap">{sessionNotesData?.interventions_used || ''}</div>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <div className="bg-white rounded-lg border p-8 text-center text-gray-400">
+                    No timeline data available
+                  </div>
+                )}
+              </div>
+
+              <div className="w-80">
+                <div className="bg-white rounded-lg border p-6">
+                  <h3 className="font-bold mb-4">Additional Notes</h3>
+                  <button className="text-teal-700 text-sm">+ Add Notes</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : selectedClient ? (
+          <div className="p-8">
+            <button onClick={() => setSelectedClient(null)} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6">
+              <span className="text-2xl">←</span>
+            </button>
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h1 className="text-3xl font-bold mb-2">{selectedClient.client_name}</h1>
+                <div className="flex gap-6 text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <span>📞</span>
+                    <span>{selectedClient.client_phone}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span>✉️</span>
+                    <span>{selectedClient.client_email}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="relative">
+                <button 
+                  onClick={() => setIsClientDateDropdownOpen(!isClientDateDropdownOpen)}
+                  className="flex items-center gap-2 border rounded-lg px-4 py-2"
+                  style={{ backgroundColor: '#2D757938' }}
+                >
+                  <PieChart size={18} className="text-gray-600" />
+                  <span className="text-sm text-teal-700">{clientSelectedMonth}</span>
+                  {isClientDateDropdownOpen ? (
+                    <ChevronUp size={16} className="text-teal-700" />
+                  ) : (
+                    <ChevronDown size={16} className="text-teal-700" />
+                  )}
+                </button>
+                {isClientDateDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
+                    {!showClientCustomCalendar ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            setClientSelectedMonth('All Time');
+                            setClientDateRange({ start: '', end: '' });
+                            setIsClientDateDropdownOpen(false);
+                          }}
+                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                        >
+                          All Time
+                        </button>
+                        <button
+                          onClick={() => setShowClientCustomCalendar(true)}
+                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                        >
+                          Custom Dates
+                        </button>
+                        {monthOptions.map((month) => (
+                          <button
+                            key={month}
+                            onClick={() => handleClientMonthSelect(month)}
+                            className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
+                          >
+                            {month}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <div className="p-4">
+                        <div className="mb-3">
+                          <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                          <input
+                            type="date"
+                            value={clientStartDate}
+                            onChange={(e) => setClientStartDate(e.target.value)}
+                            className="w-full px-3 py-2 border rounded text-sm"
+                          />
+                        </div>
+                        <div className="mb-3">
+                          <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                          <input
+                            type="date"
+                            value={clientEndDate}
+                            onChange={(e) => setClientEndDate(e.target.value)}
+                            className="w-full px-3 py-2 border rounded text-sm"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setShowClientCustomCalendar(false)}
+                            className="flex-1 px-3 py-2 border rounded text-sm hover:bg-gray-100"
+                          >
+                            Back
+                          </button>
+                          <button
+                            onClick={handleClientCustomDateApply}
+                            className="flex-1 px-3 py-2 bg-teal-700 text-white rounded text-sm hover:bg-teal-800"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4 mb-8">
+              <div className="bg-white rounded-lg p-6 border">
+                <div className="text-sm text-gray-600 mb-2">Sessions</div>
+                <div className="text-3xl font-bold text-teal-700">{clientStats.sessions}</div>
+              </div>
+              <div className="bg-white rounded-lg p-6 border">
+                <div className="text-sm text-gray-600 mb-2">No-Show</div>
+                <div className="text-3xl font-bold text-teal-700">{clientStats.noShows}</div>
+              </div>
+              <div className="bg-white rounded-lg p-6 border">
+                <div className="text-sm text-gray-600 mb-2">Cancelled</div>
+                <div className="text-3xl font-bold text-teal-700">{clientStats.cancelled}</div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg border">
+              <div className="p-6 border-b">
+                <h2 className="text-xl font-bold">Appointments List</h2>
+              </div>
+              {clientDetailLoading ? (
+                <div className="p-8 text-center"><Loader /></div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Mode</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-600"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientAppointments.length === 0 ? (
+                        <tr><td colSpan={3} className="text-center text-gray-400 py-8">No appointments found</td></tr>
+                      ) : (
+                        clientAppointments.map((apt, i) => (
+                          <tr key={i} className="border-b hover:bg-gray-50">
+                            <td className="px-6 py-4 text-sm">{apt.session_timings}</td>
+                            <td className="px-6 py-4 text-sm">{apt.mode || 'Google Meet'}</td>
+                            <td className="px-6 py-4 text-sm text-right">
+                              {apt.has_session_notes && (
+                                <button onClick={() => {
+                                  setSelectedSessionNote(apt);
+                                  handleViewSessionNotes(apt);
+                                }} className="text-teal-700 hover:underline">View Session Notes</button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : activeView === 'clients' ? (
           renderMyClients()
         ) : activeView === 'appointments' ? (
           renderMyAppointments()
         ) : activeView === 'notifications' ? (
-          <Notifications userRole="therapist" userId={user.therapist_id} />
+          <Notifications userRole="therapist" userId={user.id} />
         ) : (
           <div className="p-8">
             {dashboardLoading ? (
@@ -1109,112 +1514,19 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         </div>
       )}
       
-      {showSessionNotesModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-blue-600">Session Notes</h3>
-              <button
-                onClick={() => {
-                  setShowSessionNotesModal(false);
-                  setSessionNotesData(null);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              {sessionNotesLoading ? (
-                <div className="text-center py-8">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <p className="mt-2 text-gray-600">Loading session notes...</p>
-                </div>
-              ) : sessionNotesData?.error ? (
-                <div className="text-center py-8">
-                  <p className="text-red-600">{sessionNotesData.error}</p>
-                </div>
-              ) : sessionNotesData ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
-                      <p className="text-sm text-gray-900">{sessionNotesData.client_name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Session Timing</label>
-                      <p className="text-sm text-gray-900">{sessionNotesData.session_timing || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Therapist</label>
-                      <p className="text-sm text-gray-900">{sessionNotesData.host_name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Session Status</label>
-                      <p className="text-sm text-gray-900">{sessionNotesData.session_status || 'N/A'}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="border-t pt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Concerns Discussed</label>
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.concerns_discussed || 'N/A'}</p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Somatic Cues</label>
-                    <p className="text-sm text-gray-900">{sessionNotesData.somatic_cues?.join(', ') || 'N/A'}</p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Interventions Used</label>
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.interventions_used || 'N/A'}</p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Client Participation</label>
-                    <p className="text-sm text-gray-900">{sessionNotesData.client_participation || 'N/A'}</p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Goal Progress</label>
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.goal_progress || 'N/A'}</p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Self Harm Mention</label>
-                    <p className="text-sm text-gray-900">{sessionNotesData.self_harm_mention || 'N/A'}</p>
-                  </div>
-                  
-                  {sessionNotesData.self_harm_details && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Self Harm Details</label>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.self_harm_details}</p>
-                    </div>
-                  )}
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Next Session Plan</label>
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.next_session_plan || 'N/A'}</p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Homework Suggested</label>
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{sessionNotesData.homework_suggested || 'N/A'}</p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      )}
       
       {showReminderModal && selectedReminderAppointment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Send Manual Reminder</h3>
-            <p className="text-gray-600 mb-4">Are you sure you want to send a WhatsApp reminder to {selectedReminderAppointment.client_name}?</p>
+            <h3 className="text-xl font-bold mb-4">Sending Manual Reminder</h3>
+            <p className="text-gray-600 mb-4">This will send a reminder message to {selectedReminderAppointment.client_name} on Whatsapp</p>
             <div className="flex gap-3">
+              <button
+                onClick={sendWhatsAppNotification}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+              >
+                Send
+              </button>
               <button
                 onClick={() => {
                   setShowReminderModal(false);
@@ -1222,13 +1534,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 }}
                 className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
               >
-                No
-              </button>
-              <button
-                onClick={sendWhatsAppNotification}
-                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
-              >
-                Yes
+                Cancel
               </button>
             </div>
           </div>

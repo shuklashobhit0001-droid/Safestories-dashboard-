@@ -13,6 +13,7 @@ interface Therapy {
 
 interface Therapist {
   name: string;
+  specialization: string;
 }
 
 export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onClose }) => {
@@ -242,6 +243,13 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
     }
   }, [isOpen]);
 
+  // Filter therapists based on selected therapy
+  const filteredTherapists = therapyType
+    ? therapists.filter(therapist => 
+        therapist.specialization?.toLowerCase().includes(therapyType.toLowerCase())
+      )
+    : therapists;
+
   const fetchTherapies = async () => {
     try {
       const response = await fetch('/api/therapies');
@@ -405,7 +413,10 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
                 <div className="relative">
                   <select 
                     value={therapyType}
-                    onChange={(e) => setTherapyType(e.target.value)}
+                    onChange={(e) => {
+                      setTherapyType(e.target.value);
+                      setTherapistName(''); // Reset therapist when therapy changes
+                    }}
                     className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 appearance-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
                     required={!isFreeConsultation}
                     disabled={isFreeConsultation}
@@ -437,7 +448,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
                     disabled={isFreeConsultation}
                   >
                     <option value="">Select</option>
-                    {therapists.map((therapist) => (
+                    {filteredTherapists.map((therapist) => (
                       <option key={therapist.name} value={therapist.name}>
                         {therapist.name}
                       </option>

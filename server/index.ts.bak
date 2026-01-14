@@ -203,10 +203,42 @@ app.get('/api/dashboard/bookings', async (req, res) => {
           ['cancelled']
         );
 
+    const convertToIST = (timeStr: string) => {
+      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+      if (!match) return timeStr;
+      
+      const [, date, startTime, endTime, offset] = match;
+      const parseTime = (time: string, dateStr: string, tz: string) => {
+        const [h, rest] = time.split(':');
+        const [m, period] = rest.split(' ');
+        let hour = parseInt(h);
+        if (period === 'PM' && hour !== 12) hour += 12;
+        if (period === 'AM' && hour === 12) hour = 0;
+        
+        const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
+        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+        const istOffset = 330;
+        const diff = istOffset - offsetTotal;
+        
+        let totalMins = hour * 60 + parseInt(m) + diff;
+        const newHour = Math.floor(totalMins / 60) % 24;
+        const newMin = totalMins % 60;
+        
+        const period12 = newHour >= 12 ? 'PM' : 'AM';
+        const hour12 = newHour % 12 || 12;
+        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
+      };
+      
+      const istStart = parseTime(startTime, date, `GMT${offset}`);
+      const istEnd = parseTime(endTime, date, `GMT${offset}`);
+      
+      return `${date} at ${istStart} - ${istEnd} IST`;
+    };
+
     const bookings = result.rows.map(row => ({
       ...row,
-      booking_start_at: row.booking_invitee_time || 'N/A',
-      mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
+      booking_start_at: convertToIST(row.booking_invitee_time),
+      mode: row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
     }));
 
     res.json(bookings);
@@ -335,6 +367,38 @@ app.get('/api/appointments', async (req, res) => {
       ORDER BY b.booking_start_at DESC
     `);
 
+    const convertToIST = (timeStr: string) => {
+      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+      if (!match) return timeStr;
+      
+      const [, date, startTime, endTime, offset] = match;
+      const parseTime = (time: string, dateStr: string, tz: string) => {
+        const [h, rest] = time.split(':');
+        const [m, period] = rest.split(' ');
+        let hour = parseInt(h);
+        if (period === 'PM' && hour !== 12) hour += 12;
+        if (period === 'AM' && hour === 12) hour = 0;
+        
+        const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
+        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+        const istOffset = 330;
+        const diff = istOffset - offsetTotal;
+        
+        let totalMins = hour * 60 + parseInt(m) + diff;
+        const newHour = Math.floor(totalMins / 60) % 24;
+        const newMin = totalMins % 60;
+        
+        const period12 = newHour >= 12 ? 'PM' : 'AM';
+        const hour12 = newHour % 12 || 12;
+        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
+      };
+      
+      const istStart = parseTime(startTime, date, `GMT${offset}`);
+      const istEnd = parseTime(endTime, date, `GMT${offset}`);
+      
+      return `${date} at ${istStart} - ${istEnd} IST`;
+    };
+
     const appointments = result.rows.map(row => {
       let status = row.booking_status;
       const now = new Date();
@@ -350,13 +414,13 @@ app.get('/api/appointments', async (req, res) => {
       
       return {
         booking_id: row.booking_id,
-        booking_start_at: row.booking_invitee_time || 'N/A',
+        booking_start_at: convertToIST(row.booking_invitee_time),
         booking_resource_name: row.booking_resource_name,
         invitee_name: row.invitee_name,
         invitee_phone: row.invitee_phone,
         invitee_email: row.invitee_email,
         booking_host_name: row.booking_host_name,
-        booking_mode: row.booking_mode ? row.booking_mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
+        booking_mode: row.booking_mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
         booking_joining_link: row.booking_joining_link,
         booking_checkin_url: row.booking_checkin_url,
         therapist_id: row.therapist_id,
@@ -687,63 +751,6 @@ app.get('/api/therapist-stats', async (req, res) => {
   }
 });
 
-// Get therapist appointments
-app.get('/api/therapist-appointments', async (req, res) => {
-  try {
-    const { therapist_id } = req.query;
-
-    if (!therapist_id) {
-      return res.status(400).json({ error: 'Therapist ID is required' });
-    }
-
-    const userResult = await pool.query(
-      'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
-      [therapist_id, 'therapist']
-    );
-
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Therapist user not found' });
-    }
-
-    const therapistUserId = userResult.rows[0].therapist_id;
-    const therapistResult = await pool.query(
-      'SELECT * FROM therapists WHERE therapist_id = $1',
-      [therapistUserId]
-    );
-
-    const therapist = therapistResult.rows[0];
-    const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
-
-    const appointmentsResult = await pool.query(`
-      SELECT 
-        b.booking_id,
-        b.invitee_name as client_name,
-        b.invitee_phone as contact_info,
-        b.booking_resource_name as session_name,
-        b.booking_invitee_time as session_timings,
-        b.booking_mode as mode,
-        b.booking_start_at as booking_date,
-        b.booking_status,
-        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
-      FROM bookings b
-      LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-      WHERE b.booking_host_name ILIKE $1
-      ORDER BY b.booking_start_at DESC
-    `, [`%${therapistFirstName}%`]);
-
-    const appointments = appointmentsResult.rows.map(apt => ({
-      ...apt,
-      session_timings: convertToIST(apt.session_timings),
-      mode: apt.mode?.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet'
-    }));
-
-    res.json({ appointments });
-  } catch (error) {
-    console.error('Therapist appointments error:', error);
-    res.status(500).json({ error: 'Failed to fetch therapist appointments' });
-  }
-});
-
 // Get therapist clients
 app.get('/api/therapist-clients', async (req, res) => {
   try {
@@ -874,7 +881,6 @@ app.get('/api/client-appointments', async (req, res) => {
         b.booking_invitee_time as session_timings,
         b.booking_mode as mode,
         b.booking_start_at as booking_date,
-        b.booking_status,
         CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
@@ -919,14 +925,129 @@ app.get('/api/client-appointments', async (req, res) => {
       booking_id: row.booking_id,
       session_timings: convertToIST(row.session_timings),
       mode: row.mode?.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
-      has_session_notes: row.has_session_notes,
-      booking_status: row.booking_status
+      has_session_notes: row.has_session_notes
     }));
 
     res.json({ appointments });
   } catch (error) {
     console.error('Client appointments error:', error);
     res.status(500).json({ error: 'Failed to fetch client appointments' });
+  }
+});
+
+// Get therapist appointments
+app.get('/api/therapist-appointments', async (req, res) => {
+  try {
+    const { therapist_id } = req.query;
+
+    if (!therapist_id) {
+      return res.status(400).json({ error: 'Therapist ID is required' });
+    }
+
+    // Get user info to find therapist_id
+    const userResult = await pool.query(
+      'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
+      [therapist_id, 'therapist']
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapist user not found' });
+    }
+
+    const therapistUserId = userResult.rows[0].therapist_id;
+
+    // Get therapist info to get the name
+    const therapistResult = await pool.query(
+      'SELECT * FROM therapists WHERE therapist_id = $1',
+      [therapistUserId]
+    );
+
+    const therapist = therapistResult.rows[0];
+    const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
+
+    // Get appointments for this therapist directly from bookings table
+    const appointmentsResult = await pool.query(`
+      SELECT 
+        b.booking_id,
+        b.invitee_name as client_name,
+        b.invitee_phone as contact_info,
+        b.booking_resource_name as session_name,
+        b.booking_invitee_time as session_timings,
+        b.booking_mode as mode,
+        b.booking_start_at as booking_date,
+        b.booking_status,
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+      FROM bookings b
+      LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+      WHERE b.booking_host_name ILIKE $1
+      ORDER BY b.booking_start_at DESC
+    `, [`%${therapistFirstName}%`]);
+
+    const convertToIST = (timeStr: string) => {
+      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+      if (!match) return timeStr;
+      
+      const [, date, startTime, endTime, offset] = match;
+      const parseTime = (time: string, dateStr: string, tz: string) => {
+        const [h, rest] = time.split(':');
+        const [m, period] = rest.split(' ');
+        let hour = parseInt(h);
+        if (period === 'PM' && hour !== 12) hour += 12;
+        if (period === 'AM' && hour === 12) hour = 0;
+        
+        const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
+        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+        const istOffset = 330;
+        const diff = istOffset - offsetTotal;
+        
+        let totalMins = hour * 60 + parseInt(m) + diff;
+        const newHour = Math.floor(totalMins / 60) % 24;
+        const newMin = totalMins % 60;
+        
+        const period12 = newHour >= 12 ? 'PM' : 'AM';
+        const hour12 = newHour % 12 || 12;
+        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
+      };
+      
+      const istStart = parseTime(startTime, date, `GMT${offset}`);
+      const istEnd = parseTime(endTime, date, `GMT${offset}`);
+      
+      return `${date} at ${istStart} - ${istEnd} IST`;
+    };
+
+    const appointments = appointmentsResult.rows.map(row => {
+      let status = 'Scheduled';
+      const now = new Date();
+      const sessionDate = new Date(row.booking_date);
+      
+      if (row.booking_status === 'cancelled') {
+        status = 'Cancelled';
+      } else if (row.booking_status === 'no_show') {
+        status = 'No Show';
+      } else if (row.has_session_notes) {
+        status = 'Completed';
+      } else if (sessionDate < now) {
+        status = 'Pending Notes';
+      }
+      
+      return {
+        booking_id: row.booking_id,
+        client_name: row.client_name,
+        contact_info: row.contact_info,
+        session_name: row.session_name,
+        session_timings: convertToIST(row.session_timings),
+        mode: row.mode?.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
+        booking_status: status
+      };
+    });
+
+    res.json({
+      appointments: appointments
+    });
+
+  } catch (error) {
+    console.error('Therapist appointments error:', error);
+    res.status(500).json({ error: 'Failed to fetch therapist appointments' });
   }
 });
 
@@ -1377,59 +1498,6 @@ app.post('/api/notifications/create-admin', async (req, res) => {
   } catch (error) {
     console.error('Error creating admin notifications:', error);
     res.status(500).json({ error: 'Failed to create notifications' });
-  }
-});
-
-// Webhook to notify new bookings
-app.post('/api/webhooks/new-booking', async (req, res) => {
-  try {
-    const { booking_id } = req.body;
-    
-    if (!booking_id) {
-      return res.status(400).json({ error: 'Booking ID required' });
-    }
-
-    const bookingResult = await pool.query(
-      `SELECT b.booking_id, b.invitee_name, b.booking_resource_name, 
-              b.booking_host_name, t.therapist_id, u.id as user_id
-       FROM bookings b
-       LEFT JOIN therapists t ON b.booking_host_name ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
-       LEFT JOIN users u ON u.therapist_id = t.therapist_id AND u.role = 'therapist'
-       WHERE b.booking_id = $1`,
-      [booking_id]
-    );
-
-    if (bookingResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Booking not found' });
-    }
-
-    const booking = bookingResult.rows[0];
-
-    // Notify therapist
-    if (booking.user_id) {
-      await pool.query(
-        `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [booking.user_id, 'therapist', 'new_booking', 'New Booking Assigned',
-         `New session "${booking.booking_resource_name}" booked with ${booking.invitee_name}`, booking.booking_id]
-      );
-    }
-
-    // Notify all admins
-    const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
-    for (const admin of admins.rows) {
-      await pool.query(
-        `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [admin.id, 'admin', 'new_booking', 'New Booking Created',
-         `${booking.invitee_name} booked "${booking.booking_resource_name}" with ${booking.booking_host_name}`, booking.booking_id]
-      );
-    }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error notifying new booking:', error);
-    res.status(500).json({ error: 'Failed to notify new booking' });
   }
 });
 

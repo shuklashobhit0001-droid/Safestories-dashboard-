@@ -10,7 +10,7 @@ async function createAuditLogsTable() {
         action_type VARCHAR(100) NOT NULL,
         action_description TEXT NOT NULL,
         client_name VARCHAR(255),
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        timestamp VARCHAR(255),
         ip_address VARCHAR(50),
         is_visible BOOLEAN DEFAULT true
       )

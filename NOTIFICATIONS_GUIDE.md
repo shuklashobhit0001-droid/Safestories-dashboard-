@@ -84,11 +84,6 @@ The notifications system sends real-time alerts to admins and therapists for var
    - Title: "Client Transferred"
    - Message: "Client {client_name} has been transferred to {new_therapist}"
 
-6. **Refund Processed** (`refund_processed`)
-   - When: Refund for their session is completed
-   - Title: "Refund Processed"
-   - Message: "Refund of ₹{amount} processed for {client_name}"
-
 ## API Endpoints
 
 ### Get Notifications

@@ -39,6 +39,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
 
+  const resetAllStates = () => {
+    setIsModalOpen(false);
+    setIsDateDropdownOpen(false);
+    setShowCustomCalendar(false);
+  };
+
   const handleMonthSelect = (month: string) => {
     setSelectedMonth(month);
     setIsDateDropdownOpen(false);
@@ -120,7 +126,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer" 
             style={{ backgroundColor: activeView === 'dashboard' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('dashboard')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('dashboard');
+            }}
           >
             <LayoutDashboard size={20} className={activeView === 'dashboard' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'dashboard' ? 'text-teal-700' : 'text-gray-700'}>Dashboard</span>
@@ -128,7 +137,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'clients' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('clients')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('clients');
+            }}
           >
             <Users size={20} className={activeView === 'clients' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'clients' ? 'text-teal-700' : 'text-gray-700'}>All Clients</span>
@@ -136,7 +148,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'therapists' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('therapists')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('therapists');
+            }}
           >
             <UserCog size={20} className={activeView === 'therapists' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'therapists' ? 'text-teal-700' : 'text-gray-700'}>All Therapists</span>
@@ -144,7 +159,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'appointments' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('appointments')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('appointments');
+            }}
           >
             <Calendar size={20} className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>Appointments</span>
@@ -152,7 +170,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'refunds' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('refunds')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('refunds');
+            }}
           >
             <CreditCard size={20} className={activeView === 'refunds' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'refunds' ? 'text-teal-700' : 'text-gray-700'}>Refunds & Cancellations</span>
@@ -160,7 +181,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'audit' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('audit')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('audit');
+            }}
           >
             <FileText size={20} className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'}>Audit Logs</span>
@@ -168,7 +192,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'notifications' ? '#2D75795C' : 'transparent' }}
-            onClick={() => setActiveView('notifications')}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('notifications');
+            }}
           >
             <Bell size={20} className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'}>Notifications</span>

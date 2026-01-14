@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, MoreVertical, Copy, Send, X, FileText } from 'lucide-react';
+import { MessageCircle, Search, Download, Copy, Send, FileText } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { Toast } from './Toast';
 import { Loader } from './Loader';
@@ -7,6 +7,7 @@ import { Loader } from './Loader';
 interface Appointment {
   booking_id?: number;
   booking_start_at: string;
+  booking_start_at_raw?: string;
   booking_resource_name: string;
   invitee_name: string;
   invitee_phone: string;
@@ -19,6 +20,7 @@ interface Appointment {
   therapist_id?: string;
   session_status?: string;
   paperform_link?: string;
+  booking_status?: string;
 }
 
 export const Appointments: React.FC = () => {
@@ -26,13 +28,22 @@ export const Appointments: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState('all');
   const itemsPerPage = 10;
+
+  const tabs = [
+    { id: 'all', label: 'All Appointments' },
+    { id: 'scheduled', label: 'Scheduled' },
+    { id: 'completed', label: 'Completed' },
+    { id: 'pending_notes', label: 'Pending Notes' },
+    { id: 'cancelled', label: 'Cancelled' },
+    { id: 'no_show', label: 'No Show' },
+  ];
 
   useEffect(() => {
     fetch('/api/appointments')
@@ -48,33 +59,7 @@ export const Appointments: React.FC = () => {
       });
   }, []);
 
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (openMenuIndex !== null) {
-        setOpenMenuIndex(null);
-        setMenuPosition(null);
-      }
-    };
 
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [openMenuIndex]);
-
-
-
-  const toggleMenu = (index: number, event: React.MouseEvent<HTMLButtonElement>) => {
-    if (openMenuIndex === index) {
-      setOpenMenuIndex(null);
-      setMenuPosition(null);
-    } else {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setOpenMenuIndex(index);
-      setMenuPosition({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX - 192 + rect.width
-      });
-    }
-  };
 
   const copyAppointmentDetails = (apt: Appointment) => {
     const details = `${apt.booking_resource_name}
@@ -84,31 +69,33 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
     
     navigator.clipboard.writeText(details).then(() => {
       setToast({ message: 'Appointment details copied to clipboard!', type: 'success' });
-      setOpenMenuIndex(null);
     }).catch(err => {
       console.error('Failed to copy:', err);
       setToast({ message: 'Failed to copy details', type: 'error' });
     });
   };
 
-  const handleReminderClick = (apt: Appointment) => {
-    // Check if meeting has ended
+  const isMeetingEnded = (apt: Appointment) => {
+    if (apt.booking_start_at_raw) {
+      return new Date(apt.booking_start_at_raw) < new Date();
+    }
     const timeMatch = apt.booking_start_at?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
     if (timeMatch) {
       const [, dateStr, , endTimeStr] = timeMatch;
       const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-      const now = new Date();
-      
-      if (now > endDateTime) {
-        setToast({ message: 'Cannot send reminder after meeting has ended', type: 'error' });
-        setOpenMenuIndex(null);
-        return;
-      }
+      return new Date() > endDateTime;
+    }
+    return false;
+  };
+
+  const handleReminderClick = (apt: Appointment) => {
+    if (isMeetingEnded(apt)) {
+      setToast({ message: 'Cannot send reminder after meeting has ended', type: 'error' });
+      return;
     }
     
     setSelectedAppointment(apt);
     setShowReminderModal(true);
-    setOpenMenuIndex(null);
   };
 
   const sendWhatsAppNotification = async () => {
@@ -150,9 +137,13 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
     console.log('Full appointment object:', apt);
     console.log('Therapist ID:', apt.therapist_id);
     
+    if (!isMeetingEnded(apt)) {
+      setToast({ message: 'Cannot send reminder before meeting ends', type: 'error' });
+      return;
+    }
+    
     if (apt.has_session_notes) {
       setToast({ message: 'Session notes already filled for this appointment', type: 'error' });
-      setOpenMenuIndex(null);
       return;
     }
 
@@ -183,16 +174,33 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       console.error('Error sending reminder:', err);
       setToast({ message: 'Failed to send reminder', type: 'error' });
     }
-    setOpenMenuIndex(null);
+  };
+
+  const getAppointmentStatus = (apt: Appointment) => {
+    if (apt.booking_status === 'cancelled') return 'cancelled';
+    if (apt.booking_status === 'no_show') return 'no_show';
+    if (apt.has_session_notes) return 'completed';
+    
+    if (apt.booking_start_at_raw) {
+      const sessionDate = new Date(apt.booking_start_at_raw);
+      if (sessionDate < new Date() && !apt.has_session_notes) return 'pending_notes';
+    }
+    
+    return 'scheduled';
   };
 
   const filteredAppointments = appointments.filter(apt => {
     const query = searchQuery.toLowerCase();
-    return (
+    const matchesSearch = (
       apt.booking_resource_name.toLowerCase().includes(query) ||
       apt.invitee_name.toLowerCase().includes(query) ||
       apt.booking_host_name.toLowerCase().includes(query)
     );
+    
+    if (!matchesSearch) return false;
+    if (activeTab === 'all') return true;
+    
+    return getAppointmentStatus(apt) === activeTab;
   });
 
   const totalPages = Math.ceil(filteredAppointments.length / itemsPerPage);
@@ -242,6 +250,26 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
         </button>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-6 mb-6">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => {
+              setActiveTab(tab.id);
+              setCurrentPage(1);
+            }}
+            className={`pb-2 font-medium ${
+              activeTab === tab.id
+                ? 'text-teal-700 border-b-2 border-teal-700'
+                : 'text-gray-400'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Search Bar */}
       <div className="relative mb-6 flex gap-4">
         <div className="relative flex-1">
@@ -279,85 +307,98 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapist Name</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="text-center text-gray-400 py-8">
+                  <td colSpan={7} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredAppointments.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center text-gray-400 py-8">
+                  <td colSpan={7} className="text-center text-gray-400 py-8">
                     No appointments found
                   </td>
                 </tr>
               ) : (
                 paginatedAppointments.map((apt, index) => (
-                  <tr key={index} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm">{apt.booking_start_at}</td>
-                    <td className="px-6 py-4 text-sm">{apt.booking_resource_name}</td>
-                    <td className="px-6 py-4 text-sm">{apt.invitee_name}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <div>{apt.invitee_phone}</div>
-                      <div className="text-gray-500 text-xs">{apt.invitee_email}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm">{apt.booking_host_name}</td>
-                    <td className="px-6 py-4 text-sm">{apt.booking_mode}</td>
-                    <td className="px-6 py-4 text-sm">{apt.session_status || 'Scheduled'}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleMenu(index, e);
-                        }}
-                        className="p-1 hover:bg-gray-200 rounded"
-                      >
-                        <MoreVertical size={18} />
-                      </button>
-                    </td>
-                  </tr>
+                  <React.Fragment key={index}>
+                    <tr 
+                      className={`border-b cursor-pointer transition-colors ${
+                        selectedRowIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => setSelectedRowIndex(selectedRowIndex === index ? null : index)}
+                    >
+                      <td className="px-6 py-4 text-sm">{apt.booking_start_at}</td>
+                      <td className="px-6 py-4 text-sm">{apt.booking_resource_name}</td>
+                      <td className="px-6 py-4 text-sm">{apt.invitee_name}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <div>{apt.invitee_phone}</div>
+                        <div className="text-gray-500 text-xs">{apt.invitee_email}</div>
+                      </td>
+                      <td className="px-6 py-4 text-sm">{apt.booking_host_name}</td>
+                      <td className="px-6 py-4 text-sm">{apt.booking_mode}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          getAppointmentStatus(apt) === 'completed' ? 'bg-green-100 text-green-700' :
+                          getAppointmentStatus(apt) === 'cancelled' ? 'bg-red-100 text-red-700' :
+                          getAppointmentStatus(apt) === 'no_show' ? 'bg-orange-100 text-orange-700' :
+                          getAppointmentStatus(apt) === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                          {getAppointmentStatus(apt) === 'pending_notes' ? 'Pending Notes' :
+                           getAppointmentStatus(apt) === 'no_show' ? 'No Show' :
+                           getAppointmentStatus(apt).charAt(0).toUpperCase() + getAppointmentStatus(apt).slice(1)}
+                        </span>
+                      </td>
+                    </tr>
+                    {selectedRowIndex === index && (
+                      <tr className="bg-gray-100">
+                        <td colSpan={7} className="px-6 py-4">
+                          <div className="flex gap-3 justify-center">
+                            <button
+                              onClick={() => copyAppointmentDetails(apt)}
+                              className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                            >
+                              <Copy size={16} />
+                              Copy to Clipboard
+                            </button>
+                            <button
+                              onClick={() => handleReminderClick(apt)}
+                              disabled={isMeetingEnded(apt)}
+                              className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                isMeetingEnded(apt)
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                  : 'border border-gray-400 text-gray-700 hover:bg-white'
+                              }`}
+                            >
+                              <Send size={16} />
+                              Send Manual Reminder to Client
+                            </button>
+                            <button
+                              onClick={() => handleSessionNotesReminder(apt)}
+                              disabled={!isMeetingEnded(apt) || apt.has_session_notes}
+                              className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                !isMeetingEnded(apt) || apt.has_session_notes
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                  : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                              }`}
+                            >
+                              <FileText size={16} />
+                              Send Session Note Reminder to Therapist
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>
           </table>
         </div>
-        {openMenuIndex !== null && menuPosition && (
-          <div 
-            className="fixed w-48 bg-white border rounded-lg shadow-lg z-50"
-            style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => copyAppointmentDetails(paginatedAppointments[openMenuIndex])}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
-            >
-              <Copy size={16} />
-              Copy to Clipboard
-            </button>
-            <button 
-              onClick={() => handleReminderClick(paginatedAppointments[openMenuIndex])}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
-            >
-              <Send size={16} />
-              Send Manual Reminder
-            </button>
-            <button 
-              onClick={() => handleSessionNotesReminder(paginatedAppointments[openMenuIndex])}
-              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 ${
-                paginatedAppointments[openMenuIndex].has_session_notes 
-                  ? 'text-gray-400 cursor-not-allowed' 
-                  : 'hover:bg-gray-100 text-blue-600'
-              }`}
-            >
-              <FileText size={16} />
-              Send Session Notes Reminder
-            </button>
-          </div>
-        )}
         <div className="px-6 py-4 border-t flex justify-between items-center">
           <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredAppointments.length)} of {filteredAppointments.length} appointment{filteredAppointments.length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
@@ -390,9 +431,15 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       {showReminderModal && selectedAppointment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Send Manual Reminder</h3>
-            <p className="text-gray-600 mb-4">Are you sure you want to send a WhatsApp reminder to {selectedAppointment.invitee_name}?</p>
+            <h3 className="text-xl font-bold mb-4">Sending Manual Reminder</h3>
+            <p className="text-gray-600 mb-4">This will send a reminder message to {selectedAppointment.invitee_name} on Whatsapp</p>
             <div className="flex gap-3">
+              <button
+                onClick={sendWhatsAppNotification}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+              >
+                Send
+              </button>
               <button
                 onClick={() => {
                   setShowReminderModal(false);
@@ -400,13 +447,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                 }}
                 className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
               >
-                No
-              </button>
-              <button
-                onClick={sendWhatsAppNotification}
-                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
-              >
-                Yes
+                Cancel
               </button>
             </div>
           </div>

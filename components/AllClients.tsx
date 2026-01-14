@@ -97,11 +97,32 @@ export const AllClients: React.FC = () => {
   };
 
   const handleTransferClick = (client: Client) => {
+    // Check if client has upcoming appointments
+    const hasUpcomingAppointment = client.therapists?.some(t => {
+      if (t.latest_booking_date) {
+        return new Date(t.latest_booking_date) > new Date();
+      }
+      return false;
+    });
+    
+    if (hasUpcomingAppointment) {
+      return; // Button is disabled, do nothing
+    }
+    
     const actualTherapist = client.therapists && client.therapists.length > 0 
       ? client.therapists[0].booking_host_name 
       : client.booking_host_name;
     setSelectedClient({ ...client, booking_host_name: actualTherapist });
     setIsTransferModalOpen(true);
+  };
+
+  const isTransferDisabled = (client: Client) => {
+    return client.therapists?.some(t => {
+      if (t.latest_booking_date) {
+        return new Date(t.latest_booking_date) > new Date();
+      }
+      return false;
+    }) || false;
   };
 
   const handleTransferSuccess = () => {
@@ -210,7 +231,12 @@ export const AllClients: React.FC = () => {
                       <td className="px-6 py-4 text-sm">
                         <button
                           onClick={() => handleTransferClick(client)}
-                          className="text-orange-600 hover:text-orange-700 flex items-center gap-1 text-sm font-medium"
+                          disabled={isTransferDisabled(client)}
+                          className={`flex items-center gap-1 text-sm font-medium ${
+                            isTransferDisabled(client)
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-orange-600 hover:text-orange-700'
+                          }`}
                         >
                           <ArrowRightLeft size={16} />
                           Transfer

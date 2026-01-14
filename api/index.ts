@@ -901,18 +901,7 @@ async function handleRefundStatus(req: VercelRequest, res: VercelResponse) {
     await pool.query('UPDATE bookings SET refund_status = $1 WHERE booking_id = $2', [refund_status, booking_id]);
     
     if (refund_status === 'completed' || refund_status === 'processed') {
-      // Notify therapist
-      if (therapist_id) {
-        await notifyTherapist(
-          therapist_id,
-          'refund_processed',
-          'Refund Processed',
-          `Refund of ₹${refund_amount} processed for ${client_name}`,
-          booking_id
-        );
-      }
-      
-      // Notify admins
+      // Notify admins only
       await notifyAllAdmins(
         'refund_processed',
         'Refund Completed',
