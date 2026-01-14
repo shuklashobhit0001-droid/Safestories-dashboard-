@@ -984,9 +984,36 @@ async function handleClientAppointments(req: VercelRequest, res: VercelResponse)
     const params = therapistFirstName ? [client_phone, `%${therapistFirstName}%`] : [client_phone];
     const appointmentsResult = await pool.query(query, params);
 
+    const convertToIST = (timeStr: string) => {
+      if (!timeStr) return timeStr;
+      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+      if (!match) return timeStr;
+      const [, date, startTime, endTime, offset] = match;
+      const parseTime = (time: string) => {
+        const [h, rest] = time.split(':');
+        const [m, period] = rest.split(' ');
+        let hour = parseInt(h);
+        if (period === 'PM' && hour !== 12) hour += 12;
+        if (period === 'AM' && hour === 12) hour = 0;
+        const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
+        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+        const istOffset = 330;
+        const diff = istOffset - offsetTotal;
+        let totalMins = hour * 60 + parseInt(m) + diff;
+        const newHour = Math.floor(totalMins / 60) % 24;
+        const newMin = totalMins % 60;
+        const period12 = newHour >= 12 ? 'PM' : 'AM';
+        const hour12 = newHour % 12 || 12;
+        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
+      };
+      const istStart = parseTime(startTime);
+      const istEnd = parseTime(endTime);
+      return `${date} at ${istStart} - ${istEnd} IST`;
+    };
+
     const appointments = appointmentsResult.rows.map(row => ({
       booking_id: row.booking_id,
-      session_timings: row.session_timings || 'N/A',
+      session_timings: convertToIST(row.session_timings),
       mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
       has_session_notes: row.has_session_notes,
       booking_status: row.booking_status
