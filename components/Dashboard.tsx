@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell } from 'lucide-react';
+import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell, Copy, Send } from 'lucide-react';
 import { Logo } from './Logo';
 import { AllClients } from './AllClients';
 import { AllTherapists } from './AllTherapists';
@@ -9,6 +9,7 @@ import { SendBookingModal } from './SendBookingModal';
 import { AuditLogs } from './AuditLogs';
 import { Notifications } from './Notifications';
 import { Loader } from './Loader';
+import { Toast } from './Toast';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -38,11 +39,61 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   ]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [selectedBookingIndex, setSelectedBookingIndex] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
 
   const resetAllStates = () => {
     setIsModalOpen(false);
     setIsDateDropdownOpen(false);
     setShowCustomCalendar(false);
+    setSelectedBookingIndex(null);
+  };
+
+  const copyBookingDetails = (booking: any) => {
+    const details = `${booking.therapy_type}\n${booking.booking_start_at}\nTime zone: Asia/Kolkata\n${booking.mode} joining info${booking.booking_joining_link ? `\nVideo call link: ${booking.booking_joining_link}` : ''}`;
+    navigator.clipboard.writeText(details).then(() => {
+      setToast({ message: 'Booking details copied to clipboard!', type: 'success' });
+    }).catch(() => {
+      setToast({ message: 'Failed to copy details', type: 'error' });
+    });
+  };
+
+  const handleReminderClick = (booking: any) => {
+    setSelectedBooking(booking);
+    setShowReminderModal(true);
+  };
+
+  const sendWhatsAppNotification = async () => {
+    if (!selectedBooking) return;
+    const webhookData = {
+      sessionTimings: selectedBooking.booking_start_at,
+      sessionName: selectedBooking.therapy_type,
+      clientName: selectedBooking.client_name,
+      phone: selectedBooking.client_phone,
+      email: selectedBooking.client_email,
+      therapistName: selectedBooking.therapist_name,
+      mode: selectedBooking.mode,
+      meetingLink: selectedBooking.booking_joining_link || '',
+      checkinUrl: selectedBooking.booking_checkin_url || ''
+    };
+    try {
+      const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/0d1db363-bf04-41e5-a667-a9fe1b5ffc83', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookData)
+      });
+      if (response.ok) {
+        setToast({ message: 'WhatsApp notification sent successfully!', type: 'success' });
+      } else {
+        setToast({ message: 'Failed to send WhatsApp notification', type: 'error' });
+      }
+    } catch (err) {
+      setToast({ message: 'Failed to send WhatsApp notification', type: 'error' });
+    }
+    setShowReminderModal(false);
+    setSelectedBooking(null);
   };
 
   const handleMonthSelect = (month: string) => {
@@ -369,13 +420,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                     </tr>
                   ) : (
                     bookings.map((booking, index) => (
-                      <tr key={index} className="border-b hover:bg-gray-50">
-                        <td className="px-6 py-4">{booking.client_name}</td>
-                        <td className="px-6 py-4">{booking.therapy_type}</td>
-                        <td className="px-6 py-4">{booking.mode}</td>
-                        <td className="px-6 py-4">{booking.therapist_name}</td>
-                        <td className="px-6 py-4">{booking.booking_start_at}</td>
-                      </tr>
+                      <React.Fragment key={index}>
+                        <tr 
+                          className={`border-b cursor-pointer transition-colors ${
+                            selectedBookingIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                          }`}
+                          onClick={() => setSelectedBookingIndex(selectedBookingIndex === index ? null : index)}
+                        >
+                          <td className="px-6 py-4">{booking.client_name}</td>
+                          <td className="px-6 py-4">{booking.therapy_type}</td>
+                          <td className="px-6 py-4">{booking.mode}</td>
+                          <td className="px-6 py-4">{booking.therapist_name}</td>
+                          <td className="px-6 py-4">{booking.booking_start_at}</td>
+                        </tr>
+                        {selectedBookingIndex === index && (
+                          <tr className="bg-gray-100">
+                            <td colSpan={5} className="px-6 py-4">
+                              <div className="flex gap-3 justify-center">
+                                <button
+                                  onClick={() => copyBookingDetails(booking)}
+                                  className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                                >
+                                  <Copy size={16} />
+                                  Copy to Clipboard
+                                </button>
+                                <button
+                                  onClick={() => handleReminderClick(booking)}
+                                  className="px-6 py-2 rounded-lg text-sm flex items-center gap-2 border border-gray-400 text-gray-700 hover:bg-white"
+                                >
+                                  <Send size={16} />
+                                  Send Manual Reminder to Client
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))
                   )}
                 </tbody>
@@ -438,6 +518,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         )}
       </div>
       {isModalOpen && <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {showReminderModal && selectedBooking && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Sending Manual Reminder</h3>
+            <p className="text-gray-600 mb-4">This will send a reminder message to {selectedBooking.client_name} on Whatsapp</p>
+            <div className="flex gap-3">
+              <button
+                onClick={sendWhatsAppNotification}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+              >
+                Send
+              </button>
+              <button
+                onClick={() => {
+                  setShowReminderModal(false);
+                  setSelectedBooking(null);
+                }}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

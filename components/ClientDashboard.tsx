@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Calendar, FileText, Wallet, LogOut, User, CalendarPlus } from 'lucide-react';
+import { LayoutDashboard, Calendar, FileText, Wallet, LogOut, User, CalendarPlus, UserCircle } from 'lucide-react';
 import { Logo } from './Logo';
 import { ClientAppointments } from './ClientAppointments';
 import { ClientCheckIns } from './ClientCheckIns';
 import { ClientPayments } from './ClientPayments';
+import { ClientProfile } from './ClientProfile';
 
 interface ClientDashboardProps {
   onLogout: () => void;
@@ -32,6 +33,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onLogout, user
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+            style={{ backgroundColor: activeView === 'profile' ? '#2D75795C' : 'transparent' }}
+            onClick={() => setActiveView('profile')}
+          >
+            <UserCircle size={20} className={activeView === 'profile' ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={activeView === 'profile' ? 'text-teal-700' : 'text-gray-700'}>Profile</span>
+          </div>
+          <div 
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'appointments' ? '#2D75795C' : 'transparent' }}
             onClick={() => setActiveView('appointments')}
           >
@@ -57,7 +66,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onLogout, user
         </nav>
 
         <div className="p-4 border-t">
-          <div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: '#2D757930' }}>
+          <div className="flex items-center gap-3 rounded-lg p-3 cursor-pointer" style={{ backgroundColor: '#2D757930' }} onClick={() => setActiveView('profile')}>
             <div className="w-10 h-10 bg-orange-400 rounded-lg flex items-center justify-center">
               <User size={20} className="text-white" />
             </div>
@@ -65,14 +74,16 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onLogout, user
               <div className="font-semibold text-sm">{user?.full_name || user?.username}</div>
               <div className="text-xs text-gray-600">+91 75229 XXXXX</div>
             </div>
-            <LogOut size={18} className="text-red-500 cursor-pointer" onClick={onLogout} />
+            <LogOut size={18} className="text-red-500 cursor-pointer" onClick={(e) => { e.stopPropagation(); onLogout(); }} />
           </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto">
-        {activeView === 'appointments' ? (
+        {activeView === 'profile' ? (
+          <ClientProfile user={user} />
+        ) : activeView === 'appointments' ? (
           <ClientAppointments />
         ) : activeView === 'checkins' ? (
           <ClientCheckIns />

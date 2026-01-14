@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, MoreVertical } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X } from 'lucide-react';
 import { Logo } from './Logo';
 import { Notifications } from './Notifications';
 import { Toast } from './Toast';
@@ -33,13 +33,12 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [searchTerm, setSearchTerm] = useState('');
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
   const [selectedAppointmentIndex, setSelectedAppointmentIndex] = useState<number | null>(null);
+  const [selectedBookingIndex, setSelectedBookingIndex] = useState<number | null>(null);
   const [clientsLoading, setClientsLoading] = useState(true);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [sosConfirmText, setSosConfirmText] = useState('');
@@ -67,8 +66,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     setSelectedClient(null);
     setSelectedSessionNote(null);
     setSelectedAppointmentIndex(null);
-    setOpenMenuIndex(null);
-    setMenuPosition(null);
+    setSelectedBookingIndex(null);
     setExpandedRows(new Set());
     setShowSOSModal(false);
     setShowReminderModal(false);
@@ -157,17 +155,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     }
   }, [activeView]);
 
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (openMenuIndex !== null) {
-        setOpenMenuIndex(null);
-        setMenuPosition(null);
-      }
-    };
 
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [openMenuIndex]);
 
   const fetchAppointmentsData = async () => {
     try {
@@ -294,19 +282,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     setExpandedRows(newExpanded);
   };
 
-  const toggleMenu = (index: number, event: React.MouseEvent<HTMLButtonElement>) => {
-    if (openMenuIndex === index) {
-      setOpenMenuIndex(null);
-      setMenuPosition(null);
-    } else {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setOpenMenuIndex(index);
-      setMenuPosition({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX - 192 + rect.width
-      });
-    }
-  };
+
 
   const copyAppointmentDetails = async (apt: any) => {
     const details = `${apt.session_name || apt.therapy_type}\n${apt.session_timings}\nClient: ${apt.client_name}\nContact: ${apt.contact_info || 'N/A'}\nMode: ${apt.mode}`;
@@ -1325,76 +1301,63 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                       <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapy Type</th>
                       <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
                       <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {bookings.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400">
+                        <td colSpan={4} className="px-6 py-20 text-center text-gray-400">
                           No upcoming bookings
                         </td>
                       </tr>
                     ) : (
                       bookings.map((booking, index) => (
-                        <tr key={index} className="border-b hover:bg-gray-50">
-                          <td className="px-6 py-4">{booking.client_name}</td>
-                          <td className="px-6 py-4">{booking.therapy_type}</td>
-                          <td className="px-6 py-4">{booking.mode}</td>
-                          <td className="px-6 py-4">{booking.session_timings}</td>
-                          <td className="px-6 py-4">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleMenu(index, e);
-                              }}
-                              className="p-1 hover:bg-gray-200 rounded"
-                            >
-                              <MoreVertical size={18} />
-                            </button>
-                          </td>
-                        </tr>
+                        <React.Fragment key={index}>
+                          <tr 
+                            className={`border-b cursor-pointer transition-colors ${
+                              selectedBookingIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                            }`}
+                            onClick={() => setSelectedBookingIndex(selectedBookingIndex === index ? null : index)}
+                          >
+                            <td className="px-6 py-4">{booking.client_name}</td>
+                            <td className="px-6 py-4">{booking.therapy_type}</td>
+                            <td className="px-6 py-4">{booking.mode}</td>
+                            <td className="px-6 py-4">{booking.session_timings}</td>
+                          </tr>
+                          {selectedBookingIndex === index && (
+                            <tr className="bg-gray-100">
+                              <td colSpan={4} className="px-6 py-4">
+                                <div className="flex gap-3 justify-center">
+                                  <button
+                                    onClick={() => {
+                                      handleReminderClick(booking);
+                                      setSelectedBookingIndex(null);
+                                    }}
+                                    className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                                  >
+                                    <Send size={16} />
+                                    Send Manual Reminder
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      handleSOSClick(booking);
+                                      setSelectedBookingIndex(null);
+                                    }}
+                                    className="px-6 py-2 border border-red-600 rounded-lg text-sm text-red-600 hover:bg-white flex items-center gap-2"
+                                  >
+                                    <span className="font-bold">SOS</span>
+                                    Raise Ticket
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       ))
                     )}
                   </tbody>
                 </table>
               </div>
-              {openMenuIndex !== null && menuPosition && (
-                <div 
-                  className="fixed w-48 bg-white border rounded-lg shadow-lg z-50"
-                  style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button 
-                    onClick={() => handleReminderClick(bookings[openMenuIndex])}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2"
-                  >
-                    <Send size={16} />
-                    Send Manual Reminder
-                  </button>
-                  <button 
-                    onClick={() => handleSOSClick(bookings[openMenuIndex])}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-red-600 border-t"
-                  >
-                    <span className="font-bold">SOS</span>
-                    Raise Ticket
-                  </button>
-                  <button 
-                    onClick={() => handleViewSessionNotes(bookings[openMenuIndex])}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-blue-600"
-                  >
-                    <FileText size={16} />
-                    View Session Notes
-                  </button>
-                  <button 
-                    onClick={() => handleFillSessionNotes(bookings[openMenuIndex])}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2 text-teal-600"
-                  >
-                    <FileText size={16} />
-                    Fill Session Notes
-                  </button>
-                </div>
-              )}
               <div className="px-6 py-4 border-t flex justify-between items-center">
                 <span className="text-sm text-gray-600">Showing {Math.min(10, bookings.length)} of {bookings.length} results</span>
                 <div className="flex gap-2">
