@@ -850,75 +850,59 @@ app.get('/api/client-appointments', async (req, res) => {
       return res.status(400).json({ error: 'Client phone is required' });
     }
 
-    const userResult = await pool.query(
-      'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
-      [therapist_id, 'therapist']
-    );
+    // Get therapist info
+    let therapistFirstName = '';
+    if (therapist_id) {
+      const userResult = await pool.query(
+        'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
+        [therapist_id, 'therapist']
+      );
 
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Therapist user not found' });
+      if (userResult.rows.length > 0) {
+        const therapistUserId = userResult.rows[0].therapist_id;
+        const therapistResult = await pool.query(
+          'SELECT * FROM therapists WHERE therapist_id = $1',
+          [therapistUserId]
+        );
+
+        const therapist = therapistResult.rows[0];
+        therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
+      }
     }
 
-    const therapistUserId = userResult.rows[0].therapist_id;
-    const therapistResult = await pool.query(
-      'SELECT * FROM therapists WHERE therapist_id = $1',
-      [therapistUserId]
-    );
+    // Query with or without therapist filter
+    const query = therapistFirstName
+      ? `SELECT 
+          b.booking_id,
+          b.booking_invitee_time as session_timings,
+          b.booking_mode as mode,
+          b.booking_start_at as booking_date,
+          b.booking_status,
+          CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+        FROM bookings b
+        LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+        WHERE b.invitee_phone = $1
+          AND b.booking_host_name ILIKE $2
+        ORDER BY b.booking_start_at DESC`
+      : `SELECT 
+          b.booking_id,
+          b.booking_invitee_time as session_timings,
+          b.booking_mode as mode,
+          b.booking_start_at as booking_date,
+          b.booking_status,
+          CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+        FROM bookings b
+        LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+        WHERE b.invitee_phone = $1
+        ORDER BY b.booking_start_at DESC`;
 
-    const therapist = therapistResult.rows[0];
-    const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
-
-    const appointmentsResult = await pool.query(`
-      SELECT 
-        b.booking_id,
-        b.booking_invitee_time as session_timings,
-        b.booking_mode as mode,
-        b.booking_start_at as booking_date,
-        b.booking_status,
-        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
-      FROM bookings b
-      LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-      WHERE b.invitee_phone = $1
-        AND b.booking_host_name ILIKE $2
-      ORDER BY b.booking_start_at DESC
-    `, [client_phone, `%${therapistFirstName}%`]);
-
-    const convertToIST = (timeStr: string) => {
-      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-      if (!match) return timeStr;
-      
-      const [, date, startTime, endTime, offset] = match;
-      const parseTime = (time: string, dateStr: string, tz: string) => {
-        const [h, rest] = time.split(':');
-        const [m, period] = rest.split(' ');
-        let hour = parseInt(h);
-        if (period === 'PM' && hour !== 12) hour += 12;
-        if (period === 'AM' && hour === 12) hour = 0;
-        
-        const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
-        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-        const istOffset = 330;
-        const diff = istOffset - offsetTotal;
-        
-        let totalMins = hour * 60 + parseInt(m) + diff;
-        const newHour = Math.floor(totalMins / 60) % 24;
-        const newMin = totalMins % 60;
-        
-        const period12 = newHour >= 12 ? 'PM' : 'AM';
-        const hour12 = newHour % 12 || 12;
-        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-      };
-      
-      const istStart = parseTime(startTime, date, `GMT${offset}`);
-      const istEnd = parseTime(endTime, date, `GMT${offset}`);
-      
-      return `${date} at ${istStart} - ${istEnd} IST`;
-    };
+    const params = therapistFirstName ? [client_phone, `%${therapistFirstName}%`] : [client_phone];
+    const appointmentsResult = await pool.query(query, params);
 
     const appointments = appointmentsResult.rows.map(row => ({
       booking_id: row.booking_id,
-      session_timings: convertToIST(row.session_timings),
-      mode: row.mode?.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
+      session_timings: row.session_timings || 'N/A',
+      mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
       has_session_notes: row.has_session_notes,
       booking_status: row.booking_status
     }));
