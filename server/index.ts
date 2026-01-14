@@ -37,11 +37,16 @@ app.post('/api/login', async (req, res) => {
       
       // Log therapist login
       if (user.role === 'therapist') {
-        await pool.query(
-          `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [user.therapist_id, username, 'login', `${username} logged into dashboard`, getCurrentISTTimestamp()]
-        );
+        try {
+          await pool.query(
+            `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, is_visible)
+             VALUES ($1, $2, $3, $4, true)`,
+            [user.therapist_id, username, 'login', `${username} logged into dashboard`]
+          );
+          console.log('✅ Audit log created for login:', username, user.therapist_id);
+        } catch (auditError) {
+          console.error('❌ Failed to create audit log for login:', auditError);
+        }
       }
       
       res.json({ success: true, user });
@@ -1078,13 +1083,14 @@ app.post('/api/audit-logs', async (req, res) => {
   try {
     const { therapist_id, therapist_name, action_type, action_description, client_name, ip_address } = req.body;
     await pool.query(
-      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address, getCurrentISTTimestamp()]
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, is_visible)
+       VALUES ($1, $2, $3, $4, $5, $6, true)`,
+      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address]
     );
+    console.log('✅ Manual audit log created:', action_type, therapist_name);
     res.json({ success: true });
   } catch (error) {
-    console.error('Error creating audit log:', error);
+    console.error('❌ Error creating audit log:', error);
     res.status(500).json({ error: 'Failed to create audit log' });
   }
 });
@@ -1095,11 +1101,16 @@ app.post('/api/logout', async (req, res) => {
     const { user } = req.body;
     
     if (user?.role === 'therapist') {
-      await pool.query(
-        `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [user.therapist_id, user.username, 'logout', `${user.username} logged out`, getCurrentISTTimestamp()]
-      );
+      try {
+        await pool.query(
+          `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, is_visible)
+           VALUES ($1, $2, $3, $4, true)`,
+          [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
+        );
+        console.log('✅ Audit log created for logout:', user.username, user.therapist_id);
+      } catch (auditError) {
+        console.error('❌ Failed to create audit log for logout:', auditError);
+      }
     }
     
     res.json({ success: true });
