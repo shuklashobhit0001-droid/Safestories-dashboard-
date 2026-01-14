@@ -115,11 +115,26 @@ async function handleTherapists(req: VercelRequest, res: VercelResponse) {
 
 async function handleClients(req: VercelRequest, res: VercelResponse) {
   const result = await pool.query(`
-    SELECT invitee_name, invitee_phone, invitee_email, booking_host_name, COUNT(*) as session_count, MAX(invitee_created_at) as created_at
-    FROM bookings GROUP BY invitee_name, invitee_phone, invitee_email, booking_host_name
+    SELECT 
+      invitee_name,
+      invitee_phone,
+      invitee_email,
+      booking_host_name,
+      1 as session_count,
+      invitee_created_at as created_at,
+      booking_start_at as latest_booking_date
+    FROM bookings
+    
     UNION ALL
-    SELECT client_name as invitee_name, client_whatsapp as invitee_phone, client_email as invitee_email, 
-      therapist_name as booking_host_name, 0 as session_count, created_at
+    
+    SELECT 
+      client_name as invitee_name,
+      client_whatsapp as invitee_phone,
+      client_email as invitee_email,
+      therapist_name as booking_host_name,
+      0 as session_count,
+      created_at,
+      created_at as latest_booking_date
     FROM booking_requests
   `);
   const clientMap = new Map();
@@ -137,13 +152,32 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
     if (row.invitee_email) emailToKey.set(row.invitee_email, key);
     if (row.invitee_phone) phoneToKey.set(row.invitee_phone, key);
     if (!clientMap.has(key)) {
-      clientMap.set(key, { invitee_name: row.invitee_name, invitee_phone: row.invitee_phone, invitee_email: row.invitee_email,
-        session_count: 0, booking_host_name: row.booking_host_name, created_at: row.created_at, therapists: [] });
+      clientMap.set(key, {
+        invitee_name: row.invitee_name,
+        invitee_phone: row.invitee_phone,
+        invitee_email: row.invitee_email,
+        session_count: 0,
+        booking_host_name: row.booking_host_name,
+        created_at: row.created_at,
+        latest_booking_date: row.latest_booking_date,
+        therapists: []
+      });
     }
     const client = clientMap.get(key);
     client.session_count += parseInt(row.session_count) || 0;
-    client.therapists.push({ invitee_name: row.invitee_name, invitee_phone: row.invitee_phone, 
-      booking_host_name: row.booking_host_name, session_count: parseInt(row.session_count) || 0 });
+    if (parseInt(row.session_count) > 0) {
+      client.therapists.push({
+        invitee_name: row.invitee_name,
+        invitee_phone: row.invitee_phone,
+        booking_host_name: row.booking_host_name,
+        session_count: parseInt(row.session_count) || 0,
+        latest_booking_date: row.latest_booking_date
+      });
+    }
+    if (new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
+      client.latest_booking_date = row.latest_booking_date;
+      client.booking_host_name = row.booking_host_name;
+    }
   });
   const clients = Array.from(clientMap.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   res.json(clients);
