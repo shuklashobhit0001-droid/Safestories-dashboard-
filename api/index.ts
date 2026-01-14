@@ -31,6 +31,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleTherapistAppointments(req, res);
       case 'therapist-clients':
         return await handleTherapistClients(req, res);
+      case 'client-appointments':
+        return await handleClientAppointments(req, res);
       case 'therapist-details':
         return await handleTherapistDetails(req, res);
       case 'therapist-stats':
@@ -921,5 +923,64 @@ async function handleRefundStatus(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Error updating refund status:', error);
     res.status(500).json({ error: 'Failed to update refund status' });
+  }
+}
+
+async function handleClientAppointments(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  
+  const { client_phone, therapist_id } = req.query;
+  
+  if (!client_phone) {
+    return res.status(400).json({ error: 'Client phone is required' });
+  }
+  
+  try {
+    let therapistFirstName = '';
+    if (therapist_id) {
+      const userResult = await pool.query(
+        'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
+        [therapist_id, 'therapist']
+      );
+
+      if (userResult.rows.length > 0) {
+        const therapistUserId = userResult.rows[0].therapist_id;
+        const therapistResult = await pool.query(
+          'SELECT * FROM therapists WHERE therapist_id = $1',
+          [therapistUserId]
+        );
+        const therapist = therapistResult.rows[0];
+        therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
+      }
+    }
+
+    const query = therapistFirstName
+      ? `SELECT b.booking_id, b.booking_invitee_time as session_timings, b.booking_mode as mode,
+          b.booking_start_at as booking_date, b.booking_status,
+          CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+        FROM bookings b LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+        WHERE b.invitee_phone = $1 AND b.booking_host_name ILIKE $2
+        ORDER BY b.booking_start_at DESC`
+      : `SELECT b.booking_id, b.booking_invitee_time as session_timings, b.booking_mode as mode,
+          b.booking_start_at as booking_date, b.booking_status,
+          CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+        FROM bookings b LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+        WHERE b.invitee_phone = $1 ORDER BY b.booking_start_at DESC`;
+
+    const params = therapistFirstName ? [client_phone, `%${therapistFirstName}%`] : [client_phone];
+    const appointmentsResult = await pool.query(query, params);
+
+    const appointments = appointmentsResult.rows.map(row => ({
+      booking_id: row.booking_id,
+      session_timings: row.session_timings || 'N/A',
+      mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
+      has_session_notes: row.has_session_notes,
+      booking_status: row.booking_status
+    }));
+
+    res.json({ appointments });
+  } catch (error) {
+    console.error('Client appointments error:', error);
+    res.status(500).json({ error: 'Failed to fetch client appointments' });
   }
 }
