@@ -1119,7 +1119,10 @@ app.get('/api/session-notes', async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT * FROM client_session_notes WHERE booking_id = $1',
+      `SELECT csn.*, b.booking_invitee_time as session_timing
+       FROM client_session_notes csn
+       LEFT JOIN bookings b ON csn.booking_id = b.booking_id
+       WHERE csn.booking_id = $1`,
       [booking_id]
     );
 
