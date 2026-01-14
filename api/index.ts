@@ -254,7 +254,7 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
         invitee_phone: row.invitee_phone,
         invitee_email: row.invitee_email,
         booking_host_name: row.booking_host_name,
-        booking_mode: row.booking_mode ? row.booking_mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
+        booking_mode: row.booking_mode ? row.booking_mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
         booking_joining_link: row.booking_joining_link,
         booking_checkin_url: row.booking_checkin_url,
         therapist_id: row.therapist_id,
@@ -380,7 +380,7 @@ async function handleTherapistAppointments(req: VercelRequest, res: VercelRespon
     return {
       ...apt,
       session_timings: convertToIST(apt.session_timings),
-      mode: apt.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
+      mode: apt.mode ? apt.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
       booking_status: status
     };
   });
@@ -562,7 +562,7 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
     upcomingBookings: upcomingResult.rows.map(booking => ({
       client_name: booking.client_name,
       therapy_type: booking.session_name,
-      mode: booking.mode?.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet',
+      mode: booking.mode ? booking.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
       session_timings: convertToIST(booking.session_timings)
     }))
   });
@@ -610,7 +610,7 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
   };
   const bookings = result.rows.map(row => ({
     ...row, booking_start_at: convertToIST(row.booking_invitee_time),
-    mode: row.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+    mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
   }));
   res.json(bookings);
 }
