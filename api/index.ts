@@ -84,8 +84,8 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
     const user = result.rows[0];
     if (user.role === 'therapist') {
       await pool.query(
-        `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
-         VALUES ($1, $2, $3, $4, NOW())`,
+        `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
+         VALUES ($1, $2, $3, $4, NOW(), true)`,
         [user.therapist_id, username, 'login', `${username} logged into dashboard`]
       );
     }
@@ -723,8 +723,8 @@ async function handleAuditLogs(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const { therapist_id, therapist_name, action_type, action_description, client_name, ip_address } = req.body;
     await pool.query(
-      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp, is_visible)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), true)`,
       [therapist_id, therapist_name, action_type, action_description, client_name, ip_address]
     );
     return res.json({ success: true });
@@ -743,8 +743,8 @@ async function handleLogout(req: VercelRequest, res: VercelResponse) {
   const { user } = req.body;
   if (user?.role === 'therapist') {
     await pool.query(
-      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp)
-       VALUES ($1, $2, $3, $4, NOW())`,
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
+       VALUES ($1, $2, $3, $4, NOW(), true)`,
       [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
     );
   }
