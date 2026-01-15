@@ -738,7 +738,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                           }
                         </td>
                         <td className="px-6 py-4 text-sm">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
                             getAppointmentStatus(appointment) === 'completed' ? 'bg-green-100 text-green-700' :
                             getAppointmentStatus(appointment) === 'cancelled' ? 'bg-red-100 text-red-700' :
                             getAppointmentStatus(appointment) === 'no_show' ? 'bg-orange-100 text-orange-700' :
