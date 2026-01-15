@@ -61,7 +61,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [clientEndDate, setClientEndDate] = useState('');
   const [selectedSessionNote, setSelectedSessionNote] = useState<any>(null);
   const [sessionNoteTab, setSessionNoteTab] = useState('notes');
-  const [showSessionNotesModal, setShowSessionNotesModal] = useState(false);
 
   const resetAllStates = () => {
     setSelectedClient(null);
@@ -467,20 +466,42 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     console.log('View session notes for booking_id:', appointment.booking_id);
     setSessionNotesLoading(true);
     setSelectedAppointmentIndex(null);
-    setShowSessionNotesModal(true);
     
-    try {
-      const response = await fetch(`/api/session-notes?booking_id=${appointment.booking_id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setSessionNotesData(data);
-      } else {
-        setSessionNotesData({ error: 'Session notes not found for this appointment' });
+    // Fetch clients if not already loaded
+    if (clients.length === 0) {
+      await fetchClientsData();
+    }
+    
+    // Find client by phone number
+    const client = clients.find(c => c.client_phone === appointment.contact_info);
+    
+    if (client) {
+      // Switch to clients view
+      setActiveView('clients');
+      // Set selected client
+      setSelectedClient(client);
+      // Fetch client details
+      await fetchClientDetails(client);
+      // Set selected session note
+      setSelectedSessionNote(appointment);
+      
+      // Fetch session notes
+      try {
+        const response = await fetch(`/api/session-notes?booking_id=${appointment.booking_id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setSessionNotesData(data);
+        } else {
+          setSessionNotesData({ error: 'Session notes not found for this appointment' });
+        }
+      } catch (error) {
+        console.error('Error fetching session notes:', error);
+        setSessionNotesData({ error: 'Failed to load session notes' });
+      } finally {
+        setSessionNotesLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching session notes:', error);
-      setSessionNotesData({ error: 'Failed to load session notes' });
-    } finally {
+    } else {
+      console.error('Client not found for phone:', appointment.contact_info);
       setSessionNotesLoading(false);
     }
   };
@@ -1501,78 +1522,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               >
                 Cancel
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {showSessionNotesModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold">Session Notes</h2>
-              <button
-                onClick={() => {
-                  setShowSessionNotesModal(false);
-                  setSessionNotesData(null);
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            <div className="p-6">
-              {sessionNotesLoading ? (
-                <div className="text-center py-8"><Loader /></div>
-              ) : sessionNotesData?.error ? (
-                <div className="text-center py-8">
-                  <p className="text-red-600">{sessionNotesData.error}</p>
-                </div>
-              ) : (
-                <div>
-                  <div className="mb-6">
-                    <p className="text-sm text-gray-600">
-                      Session Timings: {sessionNotesData?.session_timing || 'N/A'}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-4 gap-4 mb-6">
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Client Age:</label>
-                      <p className="text-sm">{sessionNotesData?.client_age || ''}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Gender:</label>
-                      <p className="text-sm">{sessionNotesData?.gender || ''}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Occupation:</label>
-                      <p className="text-sm">{sessionNotesData?.occupation || ''}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Marital status:</label>
-                      <p className="text-sm">{sessionNotesData?.marital_status || ''}</p>
-                    </div>
-                  </div>
-
-                  <div className="mb-6">
-                    <label className="block text-sm text-gray-600 mb-2">Concerns or themes discussed today?:</label>
-                    <div className="text-sm whitespace-pre-wrap">{sessionNotesData?.concerns_discussed || ''}</div>
-                  </div>
-
-                  <div className="mb-6">
-                    <label className="block text-sm text-gray-600 mb-2">
-                      Somatic Cues: How did the client present today (appearance, behaviour, energy, mood, non-verbal cues)?
-                    </label>
-                    <div className="text-sm whitespace-pre-wrap">{sessionNotesData?.somatic_cues?.join(', ') || ''}</div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-2">Which interventions were used?</label>
-                    <div className="text-sm whitespace-pre-wrap">{sessionNotesData?.interventions_used || ''}</div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
