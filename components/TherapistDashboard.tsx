@@ -457,9 +457,26 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     }
   };
 
-  const handleFillSessionNotes = (appointment: any) => {
+  const handleFillSessionNotes = async (appointment: any) => {
     console.log('Fill session notes for:', appointment);
     setSelectedAppointmentIndex(null);
+    
+    try {
+      const response = await fetch(`/api/paperform-link?booking_id=${appointment.booking_id}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.paperform_link) {
+          window.open(data.paperform_link, '_blank');
+        } else {
+          setToast({ message: 'No session notes form available for this appointment', type: 'error' });
+        }
+      } else {
+        setToast({ message: 'Failed to get session notes form link', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error fetching paperform link:', error);
+      setToast({ message: 'Error opening session notes form', type: 'error' });
+    }
   };
 
   const handleViewSessionNotes = async (appointment: any) => {
