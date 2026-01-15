@@ -816,7 +816,12 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                               </button>
                               <button
                                 onClick={() => handleViewSessionNotes(appointment)}
-                                className="px-6 py-2 border border-blue-600 rounded-lg text-sm text-blue-600 hover:bg-white flex items-center gap-2"
+                                disabled={!appointment.has_session_notes}
+                                className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                  !appointment.has_session_notes
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                    : 'border border-blue-600 text-blue-600 hover:bg-white'
+                                }`}
                               >
                                 <FileText size={16} />
                                 View Session Notes
