@@ -171,13 +171,22 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
     const client = clientMap.get(key);
     client.session_count += parseInt(row.session_count) || 0;
     if (parseInt(row.session_count) > 0) {
-      client.therapists.push({
-        invitee_name: row.invitee_name,
-        invitee_phone: row.invitee_phone,
-        booking_host_name: row.booking_host_name,
-        session_count: parseInt(row.session_count) || 0,
-        latest_booking_date: row.latest_booking_date
-      });
+      const existing = client.therapists.find((t: any) => 
+        t.invitee_phone === row.invitee_phone && 
+        t.booking_host_name === row.booking_host_name
+      );
+      
+      if (existing) {
+        existing.session_count += parseInt(row.session_count) || 0;
+      } else {
+        client.therapists.push({
+          invitee_name: row.invitee_name,
+          invitee_phone: row.invitee_phone,
+          booking_host_name: row.booking_host_name,
+          session_count: parseInt(row.session_count) || 0,
+          latest_booking_date: row.latest_booking_date
+        });
+      }
     }
     if (new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
       client.latest_booking_date = row.latest_booking_date;
@@ -427,7 +436,13 @@ async function handleTherapistClients(req: VercelRequest, res: VercelResponse) {
     }
     const client = clientMap.get(key);
     client.total_sessions += parseInt(row.total_sessions) || 0;
-    client.therapists.push({ client_name: row.client_name, client_phone: row.client_phone, total_sessions: parseInt(row.total_sessions) || 0 });
+    const existing = client.therapists.find((t: any) => t.client_phone === row.client_phone);
+    
+    if (existing) {
+      existing.total_sessions += parseInt(row.total_sessions) || 0;
+    } else {
+      client.therapists.push({ client_name: row.client_name, client_phone: row.client_phone, total_sessions: parseInt(row.total_sessions) || 0 });
+    }
   });
   const clients = Array.from(clientMap.values());
   res.json({ clients });
@@ -523,7 +538,7 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
   const upcomingResult = await pool.query(`
     SELECT invitee_name as client_name, booking_resource_name as session_name, booking_mode as mode,
       booking_invitee_time as session_timings, booking_start_at as booking_date
-    FROM bookings WHERE booking_host_name ILIKE $1 AND booking_start_at > NOW() AND booking_status != 'cancelled'
+    FROM bookings WHERE booking_host_name ILIKE $1 AND booking_start_at >= CURRENT_DATE AND booking_status != 'cancelled'
     ORDER BY booking_start_at ASC LIMIT 10
   `, [`%${therapistFirstName}%`]);
   
@@ -585,7 +600,7 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
     : await pool.query(`
         SELECT invitee_name as client_name, booking_resource_name as therapy_type, booking_mode as mode,
           booking_host_name as therapist_name, booking_invitee_time
-        FROM bookings WHERE booking_status != 'cancelled' AND booking_start_at >= NOW()
+        FROM bookings WHERE booking_status != 'cancelled' AND booking_start_at >= CURRENT_DATE
         ORDER BY booking_start_at ASC LIMIT 10
       `);
   const convertToIST = (timeStr: string) => {
