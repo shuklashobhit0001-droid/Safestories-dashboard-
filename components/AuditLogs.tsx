@@ -51,7 +51,16 @@ export const AuditLogs: React.FC = () => {
 
   const formatTimestamp = (timestamp: string) => {
     if (!timestamp) return 'Invalid Date';
-    return timestamp;
+    const date = new Date(timestamp);
+    return date.toLocaleString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }) + ' IST';
   };
 
   const getActionColor = (actionType: string) => {
@@ -115,8 +124,8 @@ export const AuditLogs: React.FC = () => {
                   <tr key={log.log_id} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm">{formatTimestamp(log.timestamp)}</td>
                     <td className="px-6 py-4 text-sm">{log.therapist_name}</td>
-                    <td className={`px-6 py-4 text-sm font-medium ${getActionColor(log.action_type)}`}>
-                      {log.action_type.replace(/_/g, ' ').toUpperCase()}
+                    <td className={`px-6 py-4 text-sm font-medium uppercase ${getActionColor(log.action_type)}`}>
+                      {log.action_type.replace(/_/g, ' ')}
                     </td>
                     <td className="px-6 py-4 text-sm">{log.action_description}</td>
                     <td className="px-6 py-4 text-sm">{log.client_name || '-'}</td>

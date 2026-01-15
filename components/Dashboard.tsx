@@ -27,7 +27,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [loading, setLoading] = useState(true);
 
-  const monthOptions = ['Dec 2025', 'Nov 2025', 'Oct 2025', 'Sep 2025', 'Aug 2025', 'Jul 2025', 'Jun 2025', 'May 2025', 'Apr 2025', 'Mar 2025', 'Feb 2025', 'Jan 2025'];
+  const monthOptions = [
+    'Dec 2026', 'Nov 2026', 'Oct 2026', 'Sep 2026', 'Aug 2026', 'Jul 2026', 'Jun 2026', 'May 2026', 'Apr 2026', 'Mar 2026', 'Feb 2026', 'Jan 2026',
+    'Dec 2025', 'Nov 2025', 'Oct 2025', 'Sep 2025', 'Aug 2025', 'Jul 2025', 'Jun 2025', 'May 2025', 'Apr 2025', 'Mar 2025', 'Feb 2025', 'Jan 2025'
+  ];
 
   const [stats, setStats] = useState([
     { title: 'Revenue', value: '₹0', lastMonth: '₹0' },
@@ -326,15 +329,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                         >
                           Custom Dates
                         </button>
-                        {monthOptions.map((month) => (
-                          <button
-                            key={month}
-                            onClick={() => handleMonthSelect(month)}
-                            className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
-                          >
-                            {month}
-                          </button>
-                        ))}
+                        <div className="max-h-60 overflow-y-auto">
+                          {monthOptions.map((month) => (
+                            <button
+                              key={month}
+                              onClick={() => handleMonthSelect(month)}
+                              className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
+                            >
+                              {month}
+                            </button>
+                          ))}
+                        </div>
                       </>
                     ) : (
                       <div className="p-4">

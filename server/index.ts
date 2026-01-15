@@ -202,7 +202,7 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_invitee_time
           FROM bookings
           WHERE booking_status != $1
-            AND booking_start_at >= NOW()
+            AND booking_start_at >= CURRENT_DATE
           ORDER BY booking_start_at ASC
           LIMIT 10`,
           ['cancelled']
@@ -287,15 +287,24 @@ app.get('/api/clients', async (req, res) => {
         client.invitee_email = row.invitee_email;
       }
       
-      // Add all booking records to therapists array
+      // Add all booking records to therapists array (group by phone + email + therapist)
       if (parseInt(row.session_count) > 0) {
-        client.therapists.push({
-          invitee_name: row.invitee_name,
-          invitee_phone: row.invitee_phone,
-          booking_host_name: row.booking_host_name,
-          session_count: parseInt(row.session_count) || 0,
-          latest_booking_date: row.latest_booking_date
-        });
+        const existing = client.therapists.find((t: any) => 
+          t.invitee_phone === row.invitee_phone && 
+          t.booking_host_name === row.booking_host_name
+        );
+        
+        if (existing) {
+          existing.session_count += parseInt(row.session_count) || 0;
+        } else {
+          client.therapists.push({
+            invitee_name: row.invitee_name,
+            invitee_phone: row.invitee_phone,
+            booking_host_name: row.booking_host_name,
+            session_count: parseInt(row.session_count) || 0,
+            latest_booking_date: row.latest_booking_date
+          });
+        }
       }
       
       // Update to show therapist with most recent booking (only if has sessions)
@@ -658,7 +667,7 @@ app.get('/api/therapist-stats', async (req, res) => {
         booking_start_at as booking_date
       FROM bookings
       WHERE booking_host_name ILIKE $1
-        AND booking_start_at > NOW()
+        AND booking_start_at >= CURRENT_DATE
         AND booking_status != 'cancelled'
       ORDER BY booking_start_at ASC
       LIMIT 10
@@ -829,11 +838,18 @@ app.get('/api/therapist-clients', async (req, res) => {
         client.client_email = row.client_email;
       }
       
-      client.therapists.push({
-        client_name: row.client_name,
-        client_phone: row.client_phone,
-        total_sessions: parseInt(row.total_sessions) || 0
-      });
+      // Add to therapists array (group by phone)
+      const existing = client.therapists.find((t: any) => t.client_phone === row.client_phone);
+      
+      if (existing) {
+        existing.total_sessions += parseInt(row.total_sessions) || 0;
+      } else {
+        client.therapists.push({
+          client_name: row.client_name,
+          client_phone: row.client_phone,
+          total_sessions: parseInt(row.total_sessions) || 0
+        });
+      }
     });
 
     const clients = Array.from(clientMap.values());
