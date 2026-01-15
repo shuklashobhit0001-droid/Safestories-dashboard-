@@ -468,12 +468,22 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     setSelectedAppointmentIndex(null);
     
     // Fetch clients if not already loaded
+    let clientsList = clients;
     if (clients.length === 0) {
-      await fetchClientsData();
+      try {
+        const response = await fetch(`/api/therapist-clients?therapist_id=${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          clientsList = data.clients || [];
+          setClients(clientsList);
+        }
+      } catch (error) {
+        console.error('Error fetching clients:', error);
+      }
     }
     
     // Find client by phone number
-    const client = clients.find(c => c.client_phone === appointment.contact_info);
+    const client = clientsList.find(c => c.client_phone === appointment.contact_info);
     
     if (client) {
       // Switch to clients view
