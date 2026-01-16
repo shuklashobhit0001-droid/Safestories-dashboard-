@@ -300,15 +300,44 @@ async function handleTherapies(req: VercelRequest, res: VercelResponse) {
 
 async function handleRefunds(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' });
+  
   const { status } = req.query;
-  let query = `SELECT r.client_name, r.session_name, r.session_timings, b.refund_status, b.invitee_phone, b.invitee_email, b.refund_amount
-    FROM refund_cancellation_table r LEFT JOIN bookings b ON r.session_id = b.booking_id WHERE b.refund_status IS NOT NULL`;
+  
+  let query = `
+    SELECT 
+      invitee_name as client_name,
+      booking_resource_name as session_name,
+      booking_invitee_time as session_timings,
+      COALESCE(refund_status, 'Pending') as refund_status,
+      invitee_phone,
+      invitee_email,
+      refund_amount
+    FROM bookings
+    WHERE booking_status IN ('cancelled', 'canceled')
+  `;
+  
+  const params: any[] = [];
+  
   if (status && status !== 'all') {
-    const result = await pool.query(query + ' AND b.refund_status = $1 ORDER BY r.session_timings DESC', [status]);
-    return res.status(200).json(result.rows);
+    if (String(status).toLowerCase() === 'pending') {
+      query += " AND (LOWER(refund_status) = 'pending' OR LOWER(refund_status) = 'initiated' OR refund_status IS NULL)";
+    } else {
+      query += ' AND LOWER(refund_status) = LOWER($1)';
+      params.push(status);
+    }
   }
-  const result = await pool.query(query + ' ORDER BY r.session_timings DESC');
-  res.status(200).json(result.rows);
+  
+  query += ' ORDER BY invitee_cancelled_at DESC';
+  
+  const result = await pool.query(query, params);
+  
+  const refunds = result.rows.map(row => ({
+    ...row,
+    session_timings: row.session_timings || 'N/A',
+    refund_status: row.refund_status || 'Pending'
+  }));
+  
+  res.status(200).json(refunds);
 }
 
 async function handleBookingRequests(req: VercelRequest, res: VercelResponse) {
