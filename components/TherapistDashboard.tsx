@@ -445,8 +445,12 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     const createdAt = new Date(note.created_at);
     const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
     
+    console.log('Edit note check:', { now, createdAt, minutesSinceCreation });
+    
     if (minutesSinceCreation > 5) {
+      console.log('Note too old to edit');
       setToast({ message: 'Notes can only be edited within 5 minutes of creation', type: 'error' });
+      setTimeout(() => setToast(null), 3000);
       return;
     }
     
