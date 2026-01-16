@@ -11,10 +11,16 @@ interface TherapistDashboardProps {
 }
 
 export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout, user }) => {
-  const [activeView, setActiveView] = useState('dashboard');
+  const [activeView, setActiveView] = useState(() => {
+    return localStorage.getItem('therapistActiveView') || 'dashboard';
+  });
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('All Time');
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('therapistActiveView', activeView);
+  }, [activeView]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });

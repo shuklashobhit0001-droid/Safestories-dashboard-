@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Calendar, FileText, Wallet, LogOut, User, CalendarPlus, UserCircle } from 'lucide-react';
 import { Logo } from './Logo';
 import { ClientAppointments } from './ClientAppointments';
@@ -12,7 +12,13 @@ interface ClientDashboardProps {
 }
 
 export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onLogout, user }) => {
-  const [activeView, setActiveView] = useState('dashboard');
+  const [activeView, setActiveView] = useState(() => {
+    return localStorage.getItem('clientActiveView') || 'dashboard';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('clientActiveView', activeView);
+  }, [activeView]);
 
   return (
     <div className="flex h-screen bg-gray-50">
