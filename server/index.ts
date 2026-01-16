@@ -1348,11 +1348,35 @@ app.get('/api/refunds', async (req, res) => {
     
     const result = await pool.query(query, params);
     
-    const refunds = result.rows.map(row => ({
-      ...row,
-      session_timings: row.session_timings || 'N/A',
-      refund_status: row.refund_status || 'Pending'
-    }));
+    const refunds = result.rows.map(row => {
+      let formattedTimings = 'N/A';
+      if (row.session_timings) {
+        const date = new Date(row.session_timings);
+        const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+        const endDate = new Date(istDate.getTime() + (50 * 60 * 1000));
+        
+        const formatTime = (d: Date) => {
+          const hours = d.getHours();
+          const minutes = d.getMinutes();
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          const hour12 = hours % 12 || 12;
+          return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+        };
+        
+        const weekday = istDate.toLocaleDateString('en-US', { weekday: 'long' });
+        const month = istDate.toLocaleDateString('en-US', { month: 'short' });
+        const day = istDate.getDate();
+        const year = istDate.getFullYear();
+        
+        formattedTimings = `${weekday}, ${month} ${day}, ${year} at ${formatTime(istDate)} - ${formatTime(endDate)} IST`;
+      }
+      
+      return {
+        ...row,
+        session_timings: formattedTimings,
+        refund_status: row.refund_status || 'Pending'
+      };
+    });
     
     res.json(refunds);
   } catch (error) {
