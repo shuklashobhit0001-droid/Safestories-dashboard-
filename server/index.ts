@@ -1323,11 +1323,11 @@ app.get('/api/refunds', async (req, res) => {
       SELECT 
         r.client_name,
         r.session_name,
-        b.booking_invitee_time as session_timings,
+        r.session_timings,
         r.refund_status,
-        b.invitee_phone,
-        b.invitee_email,
-        b.refund_amount
+        COALESCE(b.invitee_phone, '') as invitee_phone,
+        COALESCE(b.invitee_email, '') as invitee_email,
+        COALESCE(b.refund_amount, 0) as refund_amount
       FROM refund_cancellation_table r
       LEFT JOIN bookings b ON r.session_id = b.booking_id
       WHERE 1=1
