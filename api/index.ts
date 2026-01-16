@@ -53,6 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleLogout(req, res);
       case 'session-notes':
         return await handleSessionNotes(req, res);
+      case 'additional-notes':
+        return await handleAdditionalNotes(req, res);
       case 'paperform-link':
         return await handlePaperformLink(req, res);
       case 'notifications':
@@ -807,6 +809,42 @@ async function handleLogout(req: VercelRequest, res: VercelResponse) {
     }
   }
   res.json({ success: true });
+}
+
+async function handleAdditionalNotes(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    const { booking_id } = req.query;
+    if (!booking_id) return res.status(400).json({ error: 'Booking ID is required' });
+    
+    const result = await pool.query(
+      'SELECT * FROM client_additional_notes WHERE booking_id = $1 ORDER BY created_at DESC',
+      [booking_id]
+    );
+    return res.json(result.rows);
+  }
+  
+  if (req.method === 'POST') {
+    const { note_id, booking_id, therapist_id, therapist_name, note_text } = req.body;
+    
+    if (!booking_id || !therapist_id || !note_text) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (note_id) {
+      await pool.query(
+        'UPDATE client_additional_notes SET note_text = $1, updated_at = CURRENT_TIMESTAMP WHERE note_id = $2',
+        [note_text, note_id]
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO client_additional_notes (booking_id, therapist_id, therapist_name, note_text) VALUES ($1, $2, $3, $4)',
+        [booking_id, therapist_id, therapist_name, note_text]
+      );
+    }
+    return res.json({ success: true });
+  }
+  
+  return res.status(405).json({ error: 'Method not allowed' });
 }
 
 async function handleSessionNotes(req: VercelRequest, res: VercelResponse) {
