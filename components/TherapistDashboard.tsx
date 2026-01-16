@@ -1259,7 +1259,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                         {timelineData.map((item, index) => {
                           const now = new Date();
                           const createdAt = new Date(item.timestamp);
-                          const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+                          const minutesSinceCreation = Math.abs((now.getTime() - createdAt.getTime()) / (1000 * 60));
                           const canEdit = minutesSinceCreation <= 5;
                           
                           return (
@@ -1318,7 +1318,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                         {additionalNotes.map((note) => {
                           const now = new Date();
                           const createdAt = new Date(note.created_at);
-                          const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+                          // Handle both UTC and IST timestamps by using absolute value
+                          const minutesSinceCreation = Math.abs((now.getTime() - createdAt.getTime()) / (1000 * 60));
                           const canEdit = minutesSinceCreation <= 5;
                           
                           console.log('Additional note edit check:', {
