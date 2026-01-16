@@ -1292,7 +1292,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                                 </div>
                                 {item.type === 'additional_note' && (
                                   <button
-                                    onClick={() => handleEditNote(item.data)}
+                                    onClick={() => canEdit && handleEditNote(item.data)}
+                                    disabled={!canEdit}
                                     className={`text-xs ${
                                       canEdit ? 'text-teal-700 hover:underline' : 'text-gray-400 cursor-not-allowed'
                                     }`}
@@ -1334,7 +1335,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                                   {new Date(note.created_at).toLocaleDateString()}
                                 </p>
                                 <button
-                                  onClick={() => handleEditNote(note)}
+                                  onClick={() => canEdit && handleEditNote(note)}
+                                  disabled={!canEdit}
                                   className={`text-xs ${
                                     canEdit ? 'text-teal-700 hover:underline' : 'text-gray-400 cursor-not-allowed'
                                   }`}
