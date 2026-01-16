@@ -1321,6 +1321,15 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                           const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
                           const canEdit = minutesSinceCreation <= 5;
                           
+                          console.log('Additional note edit check:', {
+                            note_id: note.note_id,
+                            now: now.toISOString(),
+                            created_at: note.created_at,
+                            createdAt: createdAt.toISOString(),
+                            minutesSinceCreation,
+                            canEdit
+                          });
+                          
                           return (
                             <div key={note.note_id} className="border-l-2 border-gray-300 pl-3 py-2">
                               <div className="flex justify-between items-start mb-1">
