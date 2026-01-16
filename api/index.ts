@@ -309,29 +309,30 @@ async function handleRefunds(req: VercelRequest, res: VercelResponse) {
   
   let query = `
     SELECT 
-      invitee_name as client_name,
-      booking_resource_name as session_name,
-      booking_invitee_time as session_timings,
-      COALESCE(refund_status, 'Pending') as refund_status,
-      invitee_phone,
-      invitee_email,
-      refund_amount
-    FROM bookings
-    WHERE booking_status IN ('cancelled', 'canceled')
+      r.client_name,
+      r.session_name,
+      r.session_timings,
+      r.refund_status,
+      COALESCE(b.invitee_phone, '') as invitee_phone,
+      COALESCE(b.invitee_email, '') as invitee_email,
+      COALESCE(b.refund_amount, 0) as refund_amount
+    FROM refund_cancellation_table r
+    LEFT JOIN bookings b ON r.session_id = b.booking_id
+    WHERE 1=1
   `;
   
   const params: any[] = [];
   
   if (status && status !== 'all') {
     if (String(status).toLowerCase() === 'pending') {
-      query += " AND (LOWER(refund_status) = 'pending' OR LOWER(refund_status) = 'initiated' OR refund_status IS NULL)";
+      query += " AND (LOWER(r.refund_status) = 'pending' OR LOWER(r.refund_status) = 'initiated' OR r.refund_status IS NULL)";
     } else {
-      query += ' AND LOWER(refund_status) = LOWER($1)';
+      query += ' AND LOWER(r.refund_status) = LOWER($1)';
       params.push(status);
     }
   }
   
-  query += ' ORDER BY invitee_cancelled_at DESC';
+  query += ' ORDER BY r.session_timings DESC';
   
   const result = await pool.query(query, params);
   
