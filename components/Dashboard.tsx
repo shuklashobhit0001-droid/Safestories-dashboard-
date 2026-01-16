@@ -26,6 +26,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [endDate, setEndDate] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [loading, setLoading] = useState(true);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   const monthOptions = [
     'Dec 2026', 'Nov 2026', 'Oct 2026', 'Sep 2026', 'Aug 2026', 'Jul 2026', 'Jun 2026', 'May 2026', 'Apr 2026', 'Mar 2026', 'Feb 2026', 'Jan 2026',
@@ -46,6 +47,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const bookingActionsRef = React.useRef<HTMLTableElement>(null);
 
   const resetAllStates = () => {
     setIsModalOpen(false);
@@ -131,6 +133,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDateDropdownOpen(false);
+        setShowCustomCalendar(false);
+      }
+      if (bookingActionsRef.current && !bookingActionsRef.current.contains(event.target as Node)) {
+        setSelectedBookingIndex(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchDashboardData = async () => {
     try {
@@ -295,7 +311,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
               <p className="text-gray-600">Welcome Back, {user?.full_name || user?.username}!</p>
             </div>
             <div className="flex items-center gap-4">
-              <div className="relative">
+              <div className="relative" ref={dropdownRef}>
                 <button 
                   onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
                   className="flex items-center gap-2 border rounded-lg px-4 py-2"
@@ -406,7 +422,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
               </button>
             </div>
             <div className="overflow-x-auto max-h-80 overflow-y-auto">
-              <table className="w-full">
+              <table className="w-full" ref={bookingActionsRef}>
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>

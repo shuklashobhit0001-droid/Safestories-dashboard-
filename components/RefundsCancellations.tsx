@@ -42,14 +42,8 @@ export const RefundsCancellations: React.FC = () => {
   );
 
   const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-IN', { 
-      day: '2-digit', 
-      month: 'short', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    if (!dateString || dateString === 'N/A') return dateString;
+    return dateString;
   };
 
   const exportToCSV = () => {
@@ -125,7 +119,7 @@ export const RefundsCancellations: React.FC = () => {
       {/* Table */}
       <div className="bg-white rounded-lg border flex-1 flex flex-col">
         <div className="overflow-x-auto flex-1">
-          <table className="w-full h-full">
+          <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Clients Details</th>
@@ -134,10 +128,10 @@ export const RefundsCancellations: React.FC = () => {
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Refund Status</th>
               </tr>
             </thead>
-            <tbody className="h-full">
+            <tbody className="align-top">
               {filteredRefunds.length === 0 ? (
-                <tr className="h-full">
-                  <td colSpan={4} className="text-center text-gray-400 align-middle">
+                <tr>
+                  <td colSpan={4} className="text-center text-gray-400 py-8">
                     No refunds or cancellations found
                   </td>
                 </tr>

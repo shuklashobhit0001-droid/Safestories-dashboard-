@@ -26,6 +26,7 @@ export const AllTherapists: React.FC = () => {
   const [clientDetailsLoading, setClientDetailsLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [expandedClientRows, setExpandedClientRows] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchTherapists();
@@ -69,7 +70,51 @@ export const AllTherapists: React.FC = () => {
     try {
       const response = await fetch(`/api/therapist-details?name=${encodeURIComponent(therapist.name)}`);
       const data = await response.json();
-      setClients(data.clients || []);
+      
+      // Group clients by email OR phone
+      const clientMap = new Map();
+      const emailToKey = new Map();
+      const phoneToKey = new Map();
+      
+      (data.clients || []).forEach((client: Client) => {
+        let key = null;
+        
+        if (client.invitee_email && emailToKey.has(client.invitee_email)) {
+          key = emailToKey.get(client.invitee_email);
+        } else if (client.invitee_phone && phoneToKey.has(client.invitee_phone)) {
+          key = phoneToKey.get(client.invitee_phone);
+        } else {
+          key = `client-${clientMap.size}`;
+        }
+        
+        if (client.invitee_email) emailToKey.set(client.invitee_email, key);
+        if (client.invitee_phone) phoneToKey.set(client.invitee_phone, key);
+        
+        if (!clientMap.has(key)) {
+          clientMap.set(key, {
+            invitee_name: client.invitee_name,
+            invitee_email: client.invitee_email,
+            invitee_phone: client.invitee_phone,
+            phoneNumbers: []
+          });
+        }
+        
+        const groupedClient = clientMap.get(key);
+        if (!groupedClient.invitee_email && client.invitee_email) {
+          groupedClient.invitee_email = client.invitee_email;
+        }
+        
+        if (client.invitee_phone && !groupedClient.phoneNumbers.some((p: string) => p === client.invitee_phone)) {
+          groupedClient.phoneNumbers.push(client.invitee_phone);
+        }
+      });
+      
+      const groupedClients = Array.from(clientMap.values()).map(client => ({
+        ...client,
+        invitee_phone: client.phoneNumbers.join(', ')
+      }));
+      
+      setClients(groupedClients);
       setAppointments(data.appointments || []);
     } catch (error) {
       console.error('Error fetching therapist details:', error);
@@ -84,13 +129,27 @@ export const AllTherapists: React.FC = () => {
     setClients([]);
     setAppointments([]);
     setClientAppointments([]);
+    setExpandedClientRows(new Set());
+  };
+
+  const toggleClientRow = (index: number) => {
+    const newExpanded = new Set(expandedClientRows);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedClientRows(newExpanded);
   };
 
   const openClientDetails = async (client: Client) => {
     setSelectedClient(client);
     setClientDetailsLoading(true);
     try {
-      const response = await fetch(`/api/client-details?email=${encodeURIComponent(client.invitee_email)}&phone=${encodeURIComponent(client.invitee_phone)}`);
+      const params = new URLSearchParams();
+      if (client.invitee_email) params.append('email', client.invitee_email);
+      
+      const response = await fetch(`/api/client-details?${params.toString()}`);
       const data = await response.json();
       setClientAppointments(data.appointments || []);
     } catch (error) {
@@ -256,20 +315,46 @@ export const AllTherapists: React.FC = () => {
                         <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No clients found</td>
                       </tr>
                     ) : (
-                      clients.map((client, index) => (
-                        <tr key={index} className="border-b hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm">
-                            <button
-                              onClick={() => openClientDetails(client)}
-                              className="text-teal-700 hover:underline font-medium text-left"
-                            >
-                              {client.invitee_name}
-                            </button>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_phone}</td>
-                        </tr>
-                      ))
+                      clients.map((client, index) => {
+                        const phoneNumbers = client.invitee_phone.split(', ');
+                        const hasMultiplePhones = phoneNumbers.length > 1;
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <tr className="border-b hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm">
+                                <div className="flex items-center gap-2">
+                                  {hasMultiplePhones && (
+                                    <button
+                                      onClick={() => toggleClientRow(index)}
+                                      className="text-gray-500 hover:text-gray-700"
+                                    >
+                                      {expandedClientRows.has(index) ? '▼' : '▶'}
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => openClientDetails(client)}
+                                    className="text-teal-700 hover:underline font-medium text-left"
+                                  >
+                                    {client.invitee_name}
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{phoneNumbers[0]}</td>
+                            </tr>
+                            {expandedClientRows.has(index) && hasMultiplePhones && (
+                              phoneNumbers.slice(1).map((phone, pIndex) => (
+                                <tr key={`${index}-${pIndex}`} className="bg-gray-50 border-b">
+                                  <td className="px-4 py-3 text-sm pl-12 text-gray-600">{client.invitee_name}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{phone}</td>
+                                </tr>
+                              ))
+                            )}
+                          </React.Fragment>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

@@ -35,6 +35,7 @@ export const Appointments: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState('all');
   const itemsPerPage = 10;
+  const appointmentActionsRef = React.useRef<HTMLTableElement>(null);
 
   const tabs = [
     { id: 'all', label: 'All Appointments' },
@@ -57,6 +58,16 @@ export const Appointments: React.FC = () => {
         console.error('Error fetching appointments:', err);
         setLoading(false);
       });
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (appointmentActionsRef.current && !appointmentActionsRef.current.contains(event.target as Node)) {
+        setSelectedRowIndex(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
 
@@ -297,7 +308,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       ) : (
       <div className="bg-white rounded-lg border flex-1 flex flex-col">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full" ref={appointmentActionsRef}>
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>

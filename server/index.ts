@@ -72,12 +72,12 @@ app.get('/api/dashboard/stats', async (req, res) => {
     
     const revenue = hasDateFilter
       ? await pool.query(
-          'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status != $1 AND booking_start_at BETWEEN $2 AND $3',
-          ['cancelled', start, `${end} 23:59:59`]
+          'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status NOT IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+          ['cancelled', 'canceled', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status != $1',
-          ['cancelled']
+          'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status NOT IN ($1, $2)',
+          ['cancelled', 'canceled']
         );
 
     const sessions = hasDateFilter
@@ -101,12 +101,12 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
     const cancelled = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1 AND booking_start_at BETWEEN $2 AND $3',
-          ['cancelled', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+          ['cancelled', 'canceled', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1',
-          ['cancelled']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2)',
+          ['cancelled', 'canceled']
         );
 
     const refunds = hasDateFilter
@@ -140,8 +140,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
     );
 
     const lastMonthCancelled = await pool.query(
-      'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1 AND booking_start_at BETWEEN $2 AND $3',
-      ['cancelled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+      ['cancelled', 'canceled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
     );
 
     const lastMonthRefunds = await pool.query(
@@ -187,11 +187,11 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_host_name as therapist_name,
             booking_invitee_time
           FROM bookings
-          WHERE booking_status != $1
-            AND booking_start_at BETWEEN $2 AND $3
+          WHERE booking_status NOT IN ($1, $2)
+            AND booking_start_at BETWEEN $3 AND $4
           ORDER BY booking_start_at ASC
           LIMIT 10`,
-          ['cancelled', start, `${end} 23:59:59`]
+          ['cancelled', 'canceled', start, `${end} 23:59:59`]
         )
       : await pool.query(
           `SELECT 
@@ -201,11 +201,11 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_host_name as therapist_name,
             booking_invitee_time
           FROM bookings
-          WHERE booking_status != $1
+          WHERE booking_status NOT IN ($1, $2)
             AND booking_start_at >= CURRENT_DATE
           ORDER BY booking_start_at ASC
           LIMIT 10`,
-          ['cancelled']
+          ['cancelled', 'canceled']
         );
 
     const bookings = result.rows.map(row => ({
@@ -633,12 +633,12 @@ app.get('/api/therapist-stats', async (req, res) => {
 
     const cancelled = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
-          [`%${therapistFirstName}%`, 'cancelled', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+          [`%${therapistFirstName}%`, 'cancelled', 'canceled', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2',
-          [`%${therapistFirstName}%`, 'cancelled']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3)',
+          [`%${therapistFirstName}%`, 'cancelled', 'canceled']
         );
 
     const lastMonthSessions = await pool.query(
@@ -652,8 +652,8 @@ app.get('/api/therapist-stats', async (req, res) => {
     );
 
     const lastMonthCancelled = await pool.query(
-      'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
-      [`%${therapistFirstName}%`, 'cancelled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+      [`%${therapistFirstName}%`, 'cancelled', 'canceled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
     );
 
     // Get upcoming bookings directly from bookings table
@@ -668,7 +668,7 @@ app.get('/api/therapist-stats', async (req, res) => {
       FROM bookings
       WHERE booking_host_name ILIKE $1
         AND booking_start_at >= CURRENT_DATE
-        AND booking_status != 'cancelled'
+        AND booking_status NOT IN ('cancelled', 'canceled')
       ORDER BY booking_start_at ASC
       LIMIT 10
     `, [`%${therapistFirstName}%`]);
@@ -1136,6 +1136,57 @@ app.post('/api/logout', async (req, res) => {
   }
 });
 
+// Get additional notes for a booking
+app.get('/api/additional-notes', async (req, res) => {
+  try {
+    const { booking_id } = req.query;
+    
+    if (!booking_id) {
+      return res.status(400).json({ error: 'Booking ID is required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM client_additional_notes WHERE booking_id = $1 ORDER BY created_at DESC',
+      [booking_id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching additional notes:', error);
+    res.status(500).json({ error: 'Failed to fetch additional notes' });
+  }
+});
+
+// Save/Update additional note
+app.post('/api/additional-notes', async (req, res) => {
+  try {
+    const { note_id, booking_id, therapist_id, therapist_name, note_text } = req.body;
+    
+    if (!booking_id || !therapist_id || !note_text) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (note_id) {
+      // Update existing note
+      await pool.query(
+        'UPDATE client_additional_notes SET note_text = $1, updated_at = CURRENT_TIMESTAMP WHERE note_id = $2',
+        [note_text, note_id]
+      );
+    } else {
+      // Insert new note
+      await pool.query(
+        'INSERT INTO client_additional_notes (booking_id, therapist_id, therapist_name, note_text) VALUES ($1, $2, $3, $4)',
+        [booking_id, therapist_id, therapist_name, note_text]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving additional note:', error);
+    res.status(500).json({ error: 'Failed to save additional note' });
+  }
+});
+
 // Get session notes
 app.get('/api/session-notes', async (req, res) => {
   try {
@@ -1278,52 +1329,23 @@ app.get('/api/refunds', async (req, res) => {
         invitee_email,
         refund_amount
       FROM bookings
-      WHERE booking_status = 'cancelled'
+      WHERE booking_status IN ('cancelled', 'canceled')
     `;
     
     const params: any[] = [];
     
     if (status && status !== 'all') {
-      query += ' AND LOWER(refund_status) = LOWER($1)';
-      params.push(status);
+      if (status.toLowerCase() === 'pending') {
+        query += " AND (LOWER(refund_status) = 'pending' OR LOWER(refund_status) = 'initiated' OR refund_status IS NULL)";
+      } else {
+        query += ' AND LOWER(refund_status) = LOWER($1)';
+        params.push(status);
+      }
     }
     
     query += ' ORDER BY invitee_cancelled_at DESC';
     
     const result = await pool.query(query, params);
-    
-    const convertToIST = (timeStr: string) => {
-      if (!timeStr) return 'N/A';
-      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-      if (!match) return timeStr;
-      
-      const [, date, startTime, endTime, offset] = match;
-      const parseTime = (time: string, dateStr: string, tz: string) => {
-        const [h, rest] = time.split(':');
-        const [m, period] = rest.split(' ');
-        let hour = parseInt(h);
-        if (period === 'PM' && hour !== 12) hour += 12;
-        if (period === 'AM' && hour === 12) hour = 0;
-        
-        const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
-        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-        const istOffset = 330;
-        const diff = istOffset - offsetTotal;
-        
-        let totalMins = hour * 60 + parseInt(m) + diff;
-        const newHour = Math.floor(totalMins / 60) % 24;
-        const newMin = totalMins % 60;
-        
-        const period12 = newHour >= 12 ? 'PM' : 'AM';
-        const hour12 = newHour % 12 || 12;
-        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-      };
-      
-      const istStart = parseTime(startTime, date, `GMT${offset}`);
-      const istEnd = parseTime(endTime, date, `GMT${offset}`);
-      
-      return `${date} at ${istStart} - ${istEnd} IST`;
-    };
     
     const refunds = result.rows.map(row => ({
       ...row,

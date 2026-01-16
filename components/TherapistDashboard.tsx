@@ -61,6 +61,15 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [clientEndDate, setClientEndDate] = useState('');
   const [selectedSessionNote, setSelectedSessionNote] = useState<any>(null);
   const [sessionNoteTab, setSessionNoteTab] = useState('notes');
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const clientDropdownRef = React.useRef<HTMLDivElement>(null);
+  const bookingActionsRef = React.useRef<HTMLTableElement>(null);
+  const appointmentActionsRef = React.useRef<HTMLTableElement>(null);
+  const [showAddNoteModal, setShowAddNoteModal] = useState(false);
+  const [additionalNoteText, setAdditionalNoteText] = useState('');
+  const [additionalNotes, setAdditionalNotes] = useState<any[]>([]);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [timelineData, setTimelineData] = useState<any[]>([]);
 
   const resetAllStates = () => {
     setSelectedClient(null);
@@ -116,6 +125,27 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       fetchClientDetails(selectedClient);
     }
   }, [clientDateRange]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDateDropdownOpen(false);
+        setShowCustomCalendar(false);
+      }
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(event.target as Node)) {
+        setIsClientDateDropdownOpen(false);
+        setShowClientCustomCalendar(false);
+      }
+      if (bookingActionsRef.current && !bookingActionsRef.current.contains(event.target as Node)) {
+        setSelectedBookingIndex(null);
+      }
+      if (appointmentActionsRef.current && !appointmentActionsRef.current.contains(event.target as Node)) {
+        setSelectedAppointmentIndex(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleMonthSelect = (month: string) => {
     setSelectedMonth(month);
@@ -342,6 +372,121 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     setSelectedReminderAppointment(null);
   };
 
+  const fetchTimelineData = async (bookingId: number) => {
+    try {
+      const timeline: any[] = [];
+      
+      // Fetch session notes
+      const sessionNotesRes = await fetch(`/api/session-notes?booking_id=${bookingId}`);
+      if (sessionNotesRes.ok) {
+        const sessionNotes = await sessionNotesRes.json();
+        if (sessionNotes && !sessionNotes.error) {
+          timeline.push({
+            type: 'session_notes',
+            action: 'Session notes added',
+            timestamp: sessionNotes.created_at,
+            data: sessionNotes
+          });
+          if (sessionNotes.updated_at && sessionNotes.updated_at !== sessionNotes.created_at) {
+            timeline.push({
+              type: 'session_notes',
+              action: 'Session notes updated',
+              timestamp: sessionNotes.updated_at,
+              data: sessionNotes
+            });
+          }
+        }
+      }
+      
+      // Fetch additional notes
+      const additionalNotesRes = await fetch(`/api/additional-notes?booking_id=${bookingId}`);
+      if (additionalNotesRes.ok) {
+        const additionalNotes = await additionalNotesRes.json();
+        additionalNotes.forEach((note: any) => {
+          timeline.push({
+            type: 'additional_note',
+            action: 'Additional note added',
+            timestamp: note.created_at,
+            data: note
+          });
+          if (note.updated_at && note.updated_at !== note.created_at) {
+            timeline.push({
+              type: 'additional_note',
+              action: 'Additional note updated',
+              timestamp: note.updated_at,
+              data: note
+            });
+          }
+        });
+      }
+      
+      // Sort by timestamp descending
+      timeline.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setTimelineData(timeline);
+    } catch (error) {
+      console.error('Error fetching timeline data:', error);
+    }
+  };
+
+  const handleAddNote = () => {
+    setShowAddNoteModal(true);
+    setAdditionalNoteText('');
+    setEditingNoteId(null);
+  };
+
+  const handleEditNote = (note: any) => {
+    const now = new Date();
+    const createdAt = new Date(note.created_at);
+    const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+    
+    if (minutesSinceCreation > 5) {
+      setToast({ message: 'Notes can only be edited within 5 minutes of creation', type: 'error' });
+      return;
+    }
+    
+    setShowAddNoteModal(true);
+    setAdditionalNoteText(note.note_text);
+    setEditingNoteId(note.note_id);
+  };
+
+  const handleSaveAdditionalNote = async () => {
+    if (!additionalNoteText.trim() || !selectedSessionNote) return;
+    
+    try {
+      const response = await fetch('/api/additional-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          note_id: editingNoteId,
+          booking_id: selectedSessionNote.booking_id,
+          therapist_id: user.therapist_id,
+          therapist_name: user.username,
+          note_text: additionalNoteText
+        })
+      });
+      
+      if (response.ok) {
+        setToast({ message: editingNoteId ? 'Note updated successfully!' : 'Note added successfully!', type: 'success' });
+        setShowAddNoteModal(false);
+        setAdditionalNoteText('');
+        setEditingNoteId(null);
+        
+        // Refresh additional notes and timeline
+        const notesRes = await fetch(`/api/additional-notes?booking_id=${selectedSessionNote.booking_id}`);
+        if (notesRes.ok) {
+          const data = await notesRes.json();
+          setAdditionalNotes(data);
+        }
+        await fetchTimelineData(selectedSessionNote.booking_id);
+      } else {
+        setToast({ message: 'Failed to save note', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error saving additional note:', error);
+      setToast({ message: 'Failed to save note', type: 'error' });
+    }
+  };
+
   const handleSOSClick = (booking: any) => {
     console.log('=== SOS BUTTON CLICKED ===');
     console.log('Booking:', booking);
@@ -481,8 +626,45 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   const handleViewSessionNotes = async (appointment: any) => {
     console.log('View session notes for booking_id:', appointment.booking_id);
+    console.log('Appointment object:', appointment);
     setSessionNotesLoading(true);
     setSelectedAppointmentIndex(null);
+    
+    // If we're viewing from client details, we already have the selected client
+    if (selectedClient) {
+      setSelectedSessionNote(appointment);
+      
+      // Fetch session notes
+      try {
+        const response = await fetch(`/api/session-notes?booking_id=${appointment.booking_id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setSessionNotesData(data);
+        } else {
+          setSessionNotesData({ error: 'Session notes not found for this appointment' });
+        }
+      } catch (error) {
+        console.error('Error fetching session notes:', error);
+        setSessionNotesData({ error: 'Failed to load session notes' });
+      }
+      
+      // Fetch additional notes
+      try {
+        const response = await fetch(`/api/additional-notes?booking_id=${appointment.booking_id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setAdditionalNotes(data);
+        }
+      } catch (error) {
+        console.error('Error fetching additional notes:', error);
+      }
+      
+      // Fetch timeline data
+      await fetchTimelineData(appointment.booking_id);
+      
+      setSessionNotesLoading(false);
+      return;
+    }
     
     // Fetch clients if not already loaded
     let clientsList = clients;
@@ -499,8 +681,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       }
     }
     
-    // Find client by phone number
-    const client = clientsList.find(c => c.client_phone === appointment.contact_info);
+    // Find client by phone number - use invitee_phone from appointments
+    const clientPhone = appointment.contact_info || appointment.invitee_phone;
+    const client = clientsList.find(c => c.client_phone === clientPhone);
     
     if (client) {
       // Switch to clients view
@@ -524,11 +707,25 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       } catch (error) {
         console.error('Error fetching session notes:', error);
         setSessionNotesData({ error: 'Failed to load session notes' });
-      } finally {
-        setSessionNotesLoading(false);
       }
+      
+      // Fetch additional notes
+      try {
+        const response = await fetch(`/api/additional-notes?booking_id=${appointment.booking_id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setAdditionalNotes(data);
+        }
+      } catch (error) {
+        console.error('Error fetching additional notes:', error);
+      }
+      
+      // Fetch timeline data
+      await fetchTimelineData(appointment.booking_id);
+      
+      setSessionNotesLoading(false);
     } else {
-      console.error('Client not found for phone:', appointment.contact_info);
+      console.error('Client not found for phone:', clientPhone);
       setSessionNotesLoading(false);
     }
   };
@@ -732,7 +929,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       
       <div className="bg-white rounded-lg border">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full" ref={appointmentActionsRef}>
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
@@ -1056,18 +1253,94 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                     </div>
                   )
                 ) : (
-                  <div className="bg-white rounded-lg border p-8 text-center text-gray-400">
-                    No timeline data available
+                  <div className="bg-white rounded-lg border p-6">
+                    <h3 className="font-semibold mb-4">Timeline</h3>
+                    {timelineData.length === 0 ? (
+                      <p className="text-gray-400 text-center py-8">No timeline data available</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {timelineData.map((item, index) => {
+                          const now = new Date();
+                          const createdAt = new Date(item.timestamp);
+                          const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+                          const canEdit = minutesSinceCreation <= 5;
+                          
+                          return (
+                            <div key={index} className="border-l-2 border-teal-700 pl-4 pb-4">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="font-medium text-sm">{item.action}</p>
+                                  <p className="text-xs text-gray-500">
+                                    {new Date(item.timestamp).toLocaleString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </p>
+                                </div>
+                                {item.type === 'additional_note' && (
+                                  <button
+                                    onClick={() => handleEditNote(item.data)}
+                                    className={`text-xs ${
+                                      canEdit ? 'text-teal-700 hover:underline' : 'text-gray-400 cursor-not-allowed'
+                                    }`}
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                              </div>
+                              {item.type === 'additional_note' && (
+                                <p className="text-sm text-gray-600 mt-2">{item.data.note_text}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              <div className="w-80">
-                <div className="bg-white rounded-lg border p-6">
-                  <h3 className="font-bold mb-4">Additional Notes</h3>
-                  <button className="text-teal-700 text-sm">+ Add Notes</button>
+              {sessionNoteTab === 'notes' && (
+                <div className="w-80">
+                  <div className="bg-white rounded-lg border p-6">
+                    <h3 className="font-bold mb-4">Additional Notes</h3>
+                    <button onClick={handleAddNote} className="text-teal-700 text-sm hover:underline">+ Add Notes</button>
+                    
+                    {additionalNotes.length > 0 && (
+                      <div className="mt-4 space-y-3">
+                        {additionalNotes.map((note) => {
+                          const now = new Date();
+                          const createdAt = new Date(note.created_at);
+                          const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+                          const canEdit = minutesSinceCreation <= 5;
+                          
+                          return (
+                            <div key={note.note_id} className="border-l-2 border-gray-300 pl-3 py-2">
+                              <div className="flex justify-between items-start mb-1">
+                                <p className="text-xs text-gray-500">
+                                  {new Date(note.created_at).toLocaleDateString()}
+                                </p>
+                                <button
+                                  onClick={() => handleEditNote(note)}
+                                  className={`text-xs ${
+                                    canEdit ? 'text-teal-700 hover:underline' : 'text-gray-400 cursor-not-allowed'
+                                  }`}
+                                >
+                                  Edit
+                                </button>
+                              </div>
+                              <p className="text-sm text-gray-700">{note.note_text}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         ) : selectedClient ? (
@@ -1089,7 +1362,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   </div>
                 </div>
               </div>
-              <div className="relative">
+              <div className="relative" ref={clientDropdownRef}>
                 <button 
                   onClick={() => setIsClientDateDropdownOpen(!isClientDateDropdownOpen)}
                   className="flex items-center gap-2 border rounded-lg px-4 py-2"
@@ -1247,7 +1520,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 <p className="text-gray-600">Welcome Back, {user.username}!</p>
               </div>
               <div className="flex items-center gap-4">
-                <div className="relative">
+                <div className="relative" ref={dropdownRef}>
                   <button 
                     onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
                     className="flex items-center gap-2 border rounded-lg px-4 py-2"
@@ -1349,7 +1622,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 <h2 className="text-xl font-bold">Upcoming Bookings</h2>
               </div>
               <div className="overflow-x-auto max-h-80 overflow-y-auto">
-                <table className="w-full">
+                <table className="w-full" ref={bookingActionsRef}>
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
@@ -1549,6 +1822,38 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 onClick={() => {
                   setShowReminderModal(false);
                   setSelectedReminderAppointment(null);
+                }}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showAddNoteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">{editingNoteId ? 'Edit Note' : 'Add Note'}</h3>
+            <textarea
+              value={additionalNoteText}
+              onChange={(e) => setAdditionalNoteText(e.target.value)}
+              placeholder="Type your note here..."
+              className="w-full h-32 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={handleSaveAdditionalNote}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddNoteModal(false);
+                  setAdditionalNoteText('');
+                  setEditingNoteId(null);
                 }}
                 className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
               >

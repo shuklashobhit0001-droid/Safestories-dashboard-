@@ -324,7 +324,7 @@ async function handleBookingRequests(req: VercelRequest, res: VercelResponse) {
   await notifyAllAdmins(
     'new_booking_request',
     'New Booking Request',
-    `New booking request from ${clientName} for ${therapyType}`,
+    `Booking request to ${clientName} for ${therapyType}`,
     result.rows[0].request_id
   );
   
