@@ -1349,7 +1349,7 @@ app.get('/api/refunds', async (req, res) => {
     
     const refunds = result.rows.map(row => ({
       ...row,
-      session_timings: convertToIST(row.session_timings),
+      session_timings: row.session_timings || 'N/A',
       refund_status: row.refund_status || 'Pending'
     }));
     
