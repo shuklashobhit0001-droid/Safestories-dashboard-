@@ -441,19 +441,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleEditNote = (note: any) => {
-    const now = new Date();
-    const createdAt = new Date(note.created_at);
-    const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
-    
-    console.log('Edit note check:', { now, createdAt, minutesSinceCreation });
-    
-    if (minutesSinceCreation > 5) {
-      console.log('Note too old to edit');
-      setToast({ message: 'Notes can only be edited within 5 minutes of creation', type: 'error' });
-      setTimeout(() => setToast(null), 3000);
-      return;
-    }
-    
     setShowAddNoteModal(true);
     setAdditionalNoteText(note.note_text);
     setEditingNoteId(note.note_id);
@@ -1292,8 +1279,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                                 </div>
                                 {item.type === 'additional_note' && (
                                   <button
-                                    onClick={() => canEdit && handleEditNote(item.data)}
-                                    disabled={!canEdit}
+                                    onClick={() => {
+                                      if (!canEdit) {
+                                        setToast({ message: 'Notes can only be edited within 5 minutes of creation', type: 'error' });
+                                        setTimeout(() => setToast(null), 3000);
+                                        return;
+                                      }
+                                      handleEditNote(item.data);
+                                    }}
                                     className={`text-xs ${
                                       canEdit ? 'text-teal-700 hover:underline' : 'text-gray-400 cursor-not-allowed'
                                     }`}
@@ -1335,8 +1328,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                                   {new Date(note.created_at).toLocaleDateString()}
                                 </p>
                                 <button
-                                  onClick={() => canEdit && handleEditNote(note)}
-                                  disabled={!canEdit}
+                                  onClick={() => {
+                                    if (!canEdit) {
+                                      setToast({ message: 'Notes can only be edited within 5 minutes of creation', type: 'error' });
+                                      setTimeout(() => setToast(null), 3000);
+                                      return;
+                                    }
+                                    handleEditNote(note);
+                                  }}
                                   className={`text-xs ${
                                     canEdit ? 'text-teal-700 hover:underline' : 'text-gray-400 cursor-not-allowed'
                                   }`}
