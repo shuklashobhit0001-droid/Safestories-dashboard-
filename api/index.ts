@@ -31,6 +31,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleTherapistAppointments(req, res);
       case 'therapist-clients':
         return await handleTherapistClients(req, res);
+      case 'client-details':
+        return await handleClientDetails(req, res);
       case 'client-appointments':
         return await handleClientAppointments(req, res);
       case 'therapist-details':
@@ -1042,6 +1044,54 @@ async function handleRefundStatus(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Error updating refund status:', error);
     res.status(500).json({ error: 'Failed to update refund status' });
+  }
+}
+
+async function handleClientDetails(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  
+  const { email, phone } = req.query;
+  
+  if (!email && !phone) {
+    return res.status(400).json({ error: 'Client email or phone is required' });
+  }
+  
+  try {
+    let query = `
+      SELECT 
+        invitee_name,
+        booking_resource_name,
+        booking_start_at,
+        booking_invitee_time,
+        booking_host_name
+      FROM bookings
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    
+    if (email) {
+      params.push(email);
+      query += ` AND invitee_email = $${params.length}`;
+    }
+    
+    if (phone) {
+      params.push(phone);
+      query += ` AND invitee_phone = $${params.length}`;
+    }
+    
+    query += ' ORDER BY booking_start_at DESC';
+    
+    const appointmentsResult = await pool.query(query, params);
+    
+    const appointments = appointmentsResult.rows.map(apt => ({
+      ...apt,
+      booking_invitee_time: apt.booking_invitee_time || 'N/A'
+    }));
+    
+    res.json({ appointments });
+  } catch (error) {
+    console.error('Error fetching client details:', error);
+    res.status(500).json({ error: 'Failed to fetch client details' });
   }
 }
 
