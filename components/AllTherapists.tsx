@@ -148,6 +148,7 @@ export const AllTherapists: React.FC = () => {
     try {
       const params = new URLSearchParams();
       if (client.invitee_email) params.append('email', client.invitee_email);
+      if (client.invitee_phone) params.append('phone', client.invitee_phone);
       
       const response = await fetch(`/api/client-details?${params.toString()}`);
       const data = await response.json();
