@@ -436,28 +436,11 @@ async function handleTherapistAppointments(req: VercelRequest, res: VercelRespon
     return `${date} at ${istStart} - ${istEnd} IST`;
   };
   
-  const appointments = appointmentsResult.rows.map(apt => {
-    let status = 'Scheduled';
-    const now = new Date();
-    const sessionDate = new Date(apt.booking_date);
-    
-    if (apt.booking_status === 'cancelled') {
-      status = 'Cancelled';
-    } else if (apt.booking_status === 'no_show') {
-      status = 'No Show';
-    } else if (apt.has_session_notes) {
-      status = 'Completed';
-    } else if (sessionDate < now) {
-      status = 'Pending Notes';
-    }
-    
-    return {
-      ...apt,
-      session_timings: convertToIST(apt.session_timings),
-      mode: apt.mode ? apt.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
-      booking_status: status
-    };
-  });
+  const appointments = appointmentsResult.rows.map(apt => ({
+    ...apt,
+    session_timings: convertToIST(apt.session_timings),
+    mode: apt.mode ? apt.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
+  }));
   
   res.json({ appointments });
 }
