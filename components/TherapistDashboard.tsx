@@ -342,6 +342,16 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     });
   };
 
+  const isMeetingStarted = (apt: any) => {
+    const timeMatch = apt.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+    if (timeMatch) {
+      const [, dateStr, startTimeStr] = timeMatch;
+      const startDateTime = new Date(`${dateStr} ${startTimeStr}`);
+      return new Date() >= startDateTime;
+    }
+    return false;
+  };
+
   const isMeetingEnded = (apt: any) => {
     const timeMatch = apt.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
     if (timeMatch) {
@@ -1044,9 +1054,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                               </button>
                               <button
                                 onClick={() => handleFillSessionNotes(appointment)}
-                                disabled={appointment.has_session_notes || appointment.booking_status === 'cancelled'}
+                                disabled={appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)}
                                 className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                                  appointment.has_session_notes || appointment.booking_status === 'cancelled'
+                                  appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)
                                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                     : 'border border-teal-600 text-teal-600 hover:bg-white'
                                 }`}
