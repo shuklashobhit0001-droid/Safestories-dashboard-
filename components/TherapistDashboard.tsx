@@ -1008,9 +1008,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                               </button>
                               <button
                                 onClick={() => handleReminderClick(appointment)}
-                                disabled={isMeetingEnded(appointment)}
+                                disabled={isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'}
                                 className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                                  isMeetingEnded(appointment)
+                                  isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'
                                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                     : 'border border-gray-400 text-gray-700 hover:bg-white'
                                 }`}
@@ -1020,16 +1020,21 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                               </button>
                               <button
                                 onClick={() => handleSOSClick(appointment)}
-                                className="px-6 py-2 border border-red-600 rounded-lg text-sm text-red-600 hover:bg-white flex items-center gap-2"
+                                disabled={appointment.booking_status === 'cancelled'}
+                                className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                  appointment.booking_status === 'cancelled'
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                    : 'border border-red-600 text-red-600 hover:bg-white'
+                                }`}
                               >
                                 <span className="font-bold">SOS</span>
                                 Raise Ticket
                               </button>
                               <button
                                 onClick={() => handleViewSessionNotes(appointment)}
-                                disabled={!appointment.has_session_notes}
+                                disabled={!appointment.has_session_notes || appointment.booking_status === 'cancelled'}
                                 className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                                  !appointment.has_session_notes
+                                  !appointment.has_session_notes || appointment.booking_status === 'cancelled'
                                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                     : 'border border-blue-600 text-blue-600 hover:bg-white'
                                 }`}
@@ -1039,9 +1044,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                               </button>
                               <button
                                 onClick={() => handleFillSessionNotes(appointment)}
-                                disabled={appointment.has_session_notes}
+                                disabled={appointment.has_session_notes || appointment.booking_status === 'cancelled'}
                                 className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                                  appointment.has_session_notes
+                                  appointment.has_session_notes || appointment.booking_status === 'cancelled'
                                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                     : 'border border-teal-600 text-teal-600 hover:bg-white'
                                 }`}
