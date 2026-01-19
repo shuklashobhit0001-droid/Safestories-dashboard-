@@ -33,13 +33,13 @@ export const Appointments: React.FC = () => {
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState('scheduled');
   const itemsPerPage = 10;
   const appointmentActionsRef = React.useRef<HTMLTableElement>(null);
 
   const tabs = [
+    { id: 'scheduled', label: 'Upcoming' },
     { id: 'all', label: 'All Appointments' },
-    { id: 'scheduled', label: 'Scheduled' },
     { id: 'completed', label: 'Completed' },
     { id: 'pending_notes', label: 'Pending Notes' },
     { id: 'cancelled', label: 'Cancelled' },

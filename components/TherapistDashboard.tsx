@@ -54,7 +54,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [sessionNotesLoading, setSessionNotesLoading] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedReminderAppointment, setSelectedReminderAppointment] = useState<any>(null);
-  const [activeAppointmentTab, setActiveAppointmentTab] = useState('all');
+  const [activeAppointmentTab, setActiveAppointmentTab] = useState('scheduled');
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [clientDetailLoading, setClientDetailLoading] = useState(false);
   const [clientStats, setClientStats] = useState({ sessions: 0, noShows: 0, cancelled: 0 });
@@ -92,8 +92,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const appointmentTabs = [
+    { id: 'scheduled', label: 'Upcoming' },
     { id: 'all', label: 'All Appointments' },
-    { id: 'scheduled', label: 'Scheduled' },
     { id: 'completed', label: 'Completed' },
     { id: 'pending_notes', label: 'Pending Notes' },
     { id: 'cancelled', label: 'Cancelled' },

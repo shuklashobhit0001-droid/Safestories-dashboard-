@@ -973,6 +973,18 @@ app.post('/api/transfer-client', async (req, res) => {
 
     const fromTherapistId = oldTherapistResult.rows[0]?.therapist_id || null;
 
+    // Update all bookings to new therapist
+    const updateResult = await pool.query(
+      `UPDATE bookings 
+       SET booking_host_name = $1, therapist_id = $2
+       WHERE ((invitee_email IS NOT NULL AND invitee_email = $3) 
+              OR (invitee_phone IS NOT NULL AND invitee_phone = $4))
+       AND booking_host_name = $5`,
+      [newTherapist.name, toTherapistId, clientEmail || '', clientPhone || '', fromTherapistName]
+    );
+    
+    console.log(`Updated ${updateResult.rowCount} bookings for client transfer`);
+
     // Insert transfer record
     await pool.query(
       `INSERT INTO client_transfer_history 
@@ -1070,11 +1082,20 @@ app.post('/api/transfer-client', async (req, res) => {
   }
 });
 
-// Get audit logs
+// Get audit logs (last 30 days only for frontend)
 app.get('/api/audit-logs', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM audit_logs WHERE is_visible = true ORDER BY timestamp DESC LIMIT 500'
+      `SELECT * FROM audit_logs 
+       WHERE is_visible = true 
+       AND log_id IN (
+         SELECT log_id FROM audit_logs 
+         WHERE is_visible = true 
+         AND timestamp >= TO_CHAR(CURRENT_DATE - INTERVAL '30 days', 'Dy, Mon DD, YYYY, HH12:MI AM') || ' IST'
+         ORDER BY log_id DESC
+       )
+       ORDER BY log_id DESC 
+       LIMIT 500`
     );
     res.json(result.rows);
   } catch (error) {
