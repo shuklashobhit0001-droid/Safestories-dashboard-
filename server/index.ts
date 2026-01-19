@@ -39,9 +39,9 @@ app.post('/api/login', async (req, res) => {
       if (user.role === 'therapist') {
         try {
           await pool.query(
-            `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, is_visible)
-             VALUES ($1, $2, $3, $4, true)`,
-            [user.therapist_id, username, 'login', `${username} logged into dashboard`]
+            `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
+             VALUES ($1, $2, $3, $4, $5, true)`,
+            [user.therapist_id, username, 'login', `${username} logged into dashboard`, getCurrentISTTimestamp()]
           );
           console.log('✅ Audit log created for login:', username, user.therapist_id);
         } catch (auditError) {
@@ -1120,9 +1120,9 @@ app.post('/api/audit-logs', async (req, res) => {
   try {
     const { therapist_id, therapist_name, action_type, action_description, client_name, ip_address } = req.body;
     await pool.query(
-      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, is_visible)
-       VALUES ($1, $2, $3, $4, $5, $6, true)`,
-      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address]
+      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp, is_visible)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address, getCurrentISTTimestamp()]
     );
     console.log('✅ Manual audit log created:', action_type, therapist_name);
     res.json({ success: true });
@@ -1140,9 +1140,9 @@ app.post('/api/logout', async (req, res) => {
     if (user?.role === 'therapist') {
       try {
         await pool.query(
-          `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, is_visible)
-           VALUES ($1, $2, $3, $4, true)`,
-          [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
+          `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          [user.therapist_id, user.username, 'logout', `${user.username} logged out`, getCurrentISTTimestamp()]
         );
         console.log('✅ Audit log created for logout:', user.username, user.therapist_id);
       } catch (auditError) {

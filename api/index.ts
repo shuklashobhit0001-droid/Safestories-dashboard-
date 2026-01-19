@@ -2,6 +2,21 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import pool from '../lib/db.js';
 import { notifyAllAdmins, notifyTherapist } from '../lib/notifications.js';
 
+// Helper function to get current IST timestamp as formatted string
+const getCurrentISTTimestamp = () => {
+  const now = new Date();
+  const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  return istDate.toLocaleString('en-US', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }) + ' IST';
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Extract route from URL path
   const urlPath = req.url?.split('?')[0] || '';
@@ -92,8 +107,8 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
       try {
         await pool.query(
           `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
-           VALUES ($1, $2, $3, $4, NOW(), true)`,
-          [user.therapist_id, username, 'login', `${username} logged into dashboard`]
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          [user.therapist_id, username, 'login', `${username} logged into dashboard`, getCurrentISTTimestamp()]
         );
         console.log('✅ Audit log created for login:', username, user.therapist_id);
       } catch (auditError) {
@@ -780,15 +795,26 @@ async function handleTransferClient(req: VercelRequest, res: VercelResponse) {
 
 async function handleAuditLogs(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
-    const result = await pool.query('SELECT * FROM audit_logs WHERE is_visible = true ORDER BY timestamp DESC LIMIT 500');
+    const result = await pool.query(
+      `SELECT * FROM audit_logs 
+       WHERE is_visible = true 
+       AND log_id IN (
+         SELECT log_id FROM audit_logs 
+         WHERE is_visible = true 
+         AND timestamp >= TO_CHAR(CURRENT_DATE - INTERVAL '30 days', 'Dy, Mon DD, YYYY, HH12:MI AM') || ' IST'
+         ORDER BY log_id DESC
+       )
+       ORDER BY log_id DESC 
+       LIMIT 500`
+    );
     return res.json(result.rows);
   }
   if (req.method === 'POST') {
     const { therapist_id, therapist_name, action_type, action_description, client_name, ip_address } = req.body;
     await pool.query(
       `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp, is_visible)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), true)`,
-      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address, getCurrentISTTimestamp()]
     );
     return res.json({ success: true });
   }
@@ -808,8 +834,8 @@ async function handleLogout(req: VercelRequest, res: VercelResponse) {
     try {
       await pool.query(
         `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
-         VALUES ($1, $2, $3, $4, NOW(), true)`,
-        [user.therapist_id, user.username, 'logout', `${user.username} logged out`]
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [user.therapist_id, user.username, 'logout', `${user.username} logged out`, getCurrentISTTimestamp()]
       );
       console.log('✅ Audit log created for logout:', user.username, user.therapist_id);
     } catch (auditError) {
