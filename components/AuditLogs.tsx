@@ -51,7 +51,16 @@ export const AuditLogs: React.FC = () => {
 
   const formatTimestamp = (timestamp: string) => {
     if (!timestamp) return 'Invalid Date';
+    
+    // If already in IST format, return as-is
+    if (timestamp.includes('IST')) {
+      return timestamp;
+    }
+    
+    // Parse PostgreSQL timestamp
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    
     return date.toLocaleString('en-US', {
       weekday: 'short',
       year: 'numeric',
