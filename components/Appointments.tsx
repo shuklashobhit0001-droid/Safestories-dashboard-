@@ -378,9 +378,9 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                             </button>
                             <button
                               onClick={() => handleReminderClick(apt)}
-                              disabled={isMeetingEnded(apt)}
+                              disabled={isMeetingEnded(apt) || apt.booking_status === 'cancelled'}
                               className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                                isMeetingEnded(apt)
+                                isMeetingEnded(apt) || apt.booking_status === 'cancelled'
                                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                   : 'border border-gray-400 text-gray-700 hover:bg-white'
                               }`}
@@ -390,9 +390,9 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                             </button>
                             <button
                               onClick={() => handleSessionNotesReminder(apt)}
-                              disabled={!isMeetingEnded(apt) || apt.has_session_notes}
+                              disabled={!isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'}
                               className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                                !isMeetingEnded(apt) || apt.has_session_notes
+                                !isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'
                                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                   : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
                               }`}

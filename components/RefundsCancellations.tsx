@@ -18,8 +18,7 @@ export const RefundsCancellations: React.FC = () => {
 
   const tabs = [
     { id: 'all', label: 'All Cancellations' },
-    { id: 'Pending', label: 'Refund Pending' },
-    { id: 'Completed', label: 'Refund Completed' },
+    { id: 'Pending', label: 'Refund Initiated' },
     { id: 'Failed', label: 'Refund Failed' },
   ];
 
