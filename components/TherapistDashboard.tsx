@@ -342,6 +342,54 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     });
   };
 
+  const handleViewClientFromAppointment = async (appointment: any) => {
+    // Find client by phone
+    let clientsList = clients;
+    if (clients.length === 0) {
+      try {
+        const response = await fetch(`/api/therapist-clients?therapist_id=${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          clientsList = data.clients || [];
+          setClients(clientsList);
+        }
+      } catch (error) {
+        console.error('Error fetching clients:', error);
+      }
+    }
+    
+    const client = clientsList.find(c => c.client_phone === appointment.contact_info);
+    if (client) {
+      setActiveView('clients');
+      setSelectedClient(client);
+      await fetchClientDetails(client);
+    }
+  };
+
+  const handleViewClientFromBooking = async (booking: any) => {
+    // Find client by name (from upcoming bookings)
+    let clientsList = clients;
+    if (clients.length === 0) {
+      try {
+        const response = await fetch(`/api/therapist-clients?therapist_id=${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          clientsList = data.clients || [];
+          setClients(clientsList);
+        }
+      } catch (error) {
+        console.error('Error fetching clients:', error);
+      }
+    }
+    
+    const client = clientsList.find(c => c.client_name === booking.client_name);
+    if (client) {
+      setActiveView('clients');
+      setSelectedClient(client);
+      await fetchClientDetails(client);
+    }
+  };
+
   const isMeetingStarted = (apt: any) => {
     const timeMatch = apt.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
     if (timeMatch) {
@@ -983,7 +1031,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                       >
                         <td className="px-6 py-4 text-sm">{appointment.session_timings}</td>
                         <td className="px-6 py-4 text-sm">{appointment.session_name}</td>
-                        <td className="px-6 py-4 text-sm">{appointment.client_name}</td>
+                        <td className="px-6 py-4 text-sm">
+                          <span 
+                            className="text-teal-700 hover:underline cursor-pointer"
+                            onClick={() => handleViewClientFromAppointment(appointment)}
+                          >
+                            {appointment.client_name}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 text-sm">{appointment.contact_info}</td>
                         <td className="px-6 py-4 text-sm">
                           {appointment.mode?.includes('_') 
@@ -1683,7 +1738,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                             }`}
                             onClick={() => setSelectedBookingIndex(selectedBookingIndex === index ? null : index)}
                           >
-                            <td className="px-6 py-4">{booking.client_name}</td>
+                            <td className="px-6 py-4">
+                              <span 
+                                className="text-teal-700 hover:underline cursor-pointer"
+                                onClick={() => handleViewClientFromBooking(booking)}
+                              >
+                                {booking.client_name}
+                              </span>
+                            </td>
                             <td className="px-6 py-4">{booking.therapy_type}</td>
                             <td className="px-6 py-4">{booking.mode}</td>
                             <td className="px-6 py-4">{booking.session_timings}</td>
