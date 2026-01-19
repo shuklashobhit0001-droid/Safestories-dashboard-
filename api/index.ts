@@ -798,12 +798,6 @@ async function handleAuditLogs(req: VercelRequest, res: VercelResponse) {
     const result = await pool.query(
       `SELECT * FROM audit_logs 
        WHERE is_visible = true 
-       AND log_id IN (
-         SELECT log_id FROM audit_logs 
-         WHERE is_visible = true 
-         AND timestamp >= TO_CHAR(CURRENT_DATE - INTERVAL '30 days', 'Dy, Mon DD, YYYY, HH12:MI AM') || ' IST'
-         ORDER BY log_id DESC
-       )
        ORDER BY log_id DESC 
        LIMIT 500`
     );
