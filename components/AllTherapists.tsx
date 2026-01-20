@@ -15,7 +15,7 @@ interface Appointment {
   booking_invitee_time: string;
 }
 
-export const AllTherapists: React.FC = () => {
+export const AllTherapists: React.FC<{ selectedClientProp?: any }> = ({ selectedClientProp }) => {
   const [therapists, setTherapists] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTherapist, setSelectedTherapist] = useState<any>(null);
@@ -30,7 +30,10 @@ export const AllTherapists: React.FC = () => {
 
   useEffect(() => {
     fetchTherapists();
-  }, []);
+    if (selectedClientProp) {
+      openClientDetails(selectedClientProp);
+    }
+  }, [selectedClientProp]);
 
   const fetchTherapists = async () => {
     try {
@@ -142,16 +145,29 @@ export const AllTherapists: React.FC = () => {
     setExpandedClientRows(newExpanded);
   };
 
-  const openClientDetails = async (client: Client) => {
-    setSelectedClient(client);
+  const openClientDetails = async (client: any) => {
+    console.log('Opening client details for:', client);
+    
+    // Normalize the client object to ensure we have the right property names
+    const normalizedClient = {
+      invitee_name: client.invitee_name || client.client_name,
+      invitee_email: client.invitee_email || client.client_email,
+      invitee_phone: client.invitee_phone || client.client_phone
+    };
+    
+    console.log('Normalized client:', normalizedClient);
+    setSelectedClient(normalizedClient);
     setClientDetailsLoading(true);
     try {
       const params = new URLSearchParams();
-      if (client.invitee_email) params.append('email', client.invitee_email);
-      if (client.invitee_phone) params.append('phone', client.invitee_phone);
       
+      if (normalizedClient.invitee_email) params.append('email', normalizedClient.invitee_email);
+      if (normalizedClient.invitee_phone) params.append('phone', normalizedClient.invitee_phone);
+      
+      console.log('Fetching client details with params:', params.toString());
       const response = await fetch(`/api/client-details?${params.toString()}`);
       const data = await response.json();
+      console.log('Client details response:', data);
       setClientAppointments(data.appointments || []);
     } catch (error) {
       console.error('Error fetching client details:', error);
@@ -224,7 +240,7 @@ export const AllTherapists: React.FC = () => {
                       <tr key={index} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm">{apt.booking_resource_name}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{selectedTherapist?.name || 'N/A'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_host_name || selectedTherapist?.name || 'N/A'}</td>
                       </tr>
                     ))
                   )}

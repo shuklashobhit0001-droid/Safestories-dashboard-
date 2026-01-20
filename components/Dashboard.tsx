@@ -21,6 +21,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     return localStorage.getItem('adminActiveView') || 'dashboard';
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedClientForView, setSelectedClientForView] = useState<any>(null);
 
   useEffect(() => {
     localStorage.setItem('adminActiveView', activeView);
@@ -51,8 +52,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [selectedBookingIndex, setSelectedBookingIndex] = useState<number | null>(null);
-  const [selectedClient, setSelectedClient] = useState<any>(null);
-  const [clientAppointments, setClientAppointments] = useState<any[]>([]);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
@@ -63,7 +62,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     setIsDateDropdownOpen(false);
     setShowCustomCalendar(false);
     setSelectedBookingIndex(null);
-    setSelectedClient(null);
+    setSelectedClientForView(null);
   };
 
   const copyBookingDetails = (booking: any) => {
@@ -300,11 +299,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       {/* Main Content */}
       <div className="flex-1 overflow-auto relative">
         {activeView === 'clients' ? (
-          <AllClients />
+          <AllClients onClientClick={(client) => {
+            setSelectedClientForView(client);
+            setActiveView('therapists');
+          }} />
         ) : activeView === 'therapists' ? (
-          <AllTherapists />
+          <AllTherapists selectedClientProp={selectedClientForView} />
         ) : activeView === 'appointments' ? (
-          <Appointments />
+          <Appointments onClientClick={(client) => {
+            setSelectedClientForView(client);
+            setActiveView('therapists');
+          }} />
         ) : activeView === 'refunds' ? (
           <RefundsCancellations />
         ) : activeView === 'audit' ? (
@@ -463,7 +468,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedClient(booking);
+                                setSelectedClientForView({
+                                  invitee_name: booking.client_name,
+                                  invitee_email: booking.client_email,
+                                  invitee_phone: booking.client_phone
+                                });
+                                setActiveView('therapists');
                               }}
                               className="text-teal-700 hover:underline font-medium"
                             >
@@ -586,34 +596,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           </div>
         </div>
       )}
-      {selectedClient && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-bold">{selectedClient.client_name}</h3>
-              <button onClick={() => setSelectedClient(null)} className="text-gray-500 hover:text-gray-700">
-                ✕
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600">Therapist</p>
-                  <p className="font-medium">{selectedClient.therapist_name || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Session Type</p>
-                  <p className="font-medium">{selectedClient.therapy_type || 'N/A'}</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Session Time</p>
-                <p className="font-medium">{selectedClient.booking_start_at || 'N/A'}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };

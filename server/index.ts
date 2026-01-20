@@ -259,14 +259,38 @@ app.get('/api/clients', async (req, res) => {
 
     // Group by email (primary) or phone (fallback)
     const clientMap = new Map();
+    const emailToKey = new Map();
+    const phoneToKey = new Map();
     
     result.rows.forEach(row => {
       const email = row.invitee_email ? row.invitee_email.toLowerCase().trim() : null;
       const phone = row.invitee_phone ? row.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : null;
       
-      // Use email as key if available, otherwise use phone
-      const key = email || phone;
-      if (!key) return; // Skip if both are missing
+      let key = null;
+      
+      // Find existing key by email or phone
+      if (email && emailToKey.has(email)) {
+        key = emailToKey.get(email);
+      } else if (phone && phoneToKey.has(phone)) {
+        key = phoneToKey.get(phone);
+        // If we now have an email for this phone-based entry, upgrade the key
+        if (email) {
+          const oldData = clientMap.get(key);
+          clientMap.delete(key);
+          key = email;
+          clientMap.set(key, oldData);
+          emailToKey.set(email, key);
+        }
+      } else {
+        // New client
+        key = email || phone;
+      }
+      
+      if (!key) return;
+      
+      // Track mappings
+      if (email) emailToKey.set(email, key);
+      if (phone) phoneToKey.set(phone, key);
       
       if (!clientMap.has(key)) {
         clientMap.set(key, {

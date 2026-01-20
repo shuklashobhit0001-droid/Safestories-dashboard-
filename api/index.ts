@@ -166,14 +166,38 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
   
   // Group by email (primary) or phone (fallback)
   const clientMap = new Map();
+  const emailToKey = new Map();
+  const phoneToKey = new Map();
   
   result.rows.forEach(row => {
     const email = row.invitee_email ? row.invitee_email.toLowerCase().trim() : null;
     const phone = row.invitee_phone ? row.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : null;
     
-    // Use email as key if available, otherwise use phone
-    const key = email || phone;
-    if (!key) return; // Skip if both are missing
+    let key = null;
+    
+    // Find existing key by email or phone
+    if (email && emailToKey.has(email)) {
+      key = emailToKey.get(email);
+    } else if (phone && phoneToKey.has(phone)) {
+      key = phoneToKey.get(phone);
+      // If we now have an email for this phone-based entry, upgrade the key
+      if (email) {
+        const oldData = clientMap.get(key);
+        clientMap.delete(key);
+        key = email;
+        clientMap.set(key, oldData);
+        emailToKey.set(email, key);
+      }
+    } else {
+      // New client
+      key = email || phone;
+    }
+    
+    if (!key) return;
+    
+    // Track mappings
+    if (email) emailToKey.set(email, key);
+    if (phone) phoneToKey.set(phone, key);
     
     if (!clientMap.has(key)) {
       clientMap.set(key, {
@@ -1140,6 +1164,8 @@ async function handleClientDetails(req: VercelRequest, res: VercelResponse) {
   
   const { email, phone } = req.query;
   
+  console.log('Client details request - email:', email, 'phone:', phone);
+  
   if (!email && !phone) {
     return res.status(400).json({ error: 'Client email or phone is required' });
   }
@@ -1159,7 +1185,7 @@ async function handleClientDetails(req: VercelRequest, res: VercelResponse) {
     
     if (email) {
       params.push(email);
-      query += ` AND invitee_email = $${params.length}`;
+      query += ` AND LOWER(invitee_email) = LOWER($${params.length})`;
     }
     
     if (phone) {
@@ -1169,7 +1195,9 @@ async function handleClientDetails(req: VercelRequest, res: VercelResponse) {
     
     query += ' ORDER BY booking_start_at DESC';
     
+    console.log('Executing query:', query, 'with params:', params);
     const appointmentsResult = await pool.query(query, params);
+    console.log('Found appointments:', appointmentsResult.rows.length);
     
     const appointments = appointmentsResult.rows.map(apt => ({
       ...apt,

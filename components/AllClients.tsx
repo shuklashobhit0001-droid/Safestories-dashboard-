@@ -20,7 +20,7 @@ interface Client {
   therapists: Therapist[];
 }
 
-export const AllClients: React.FC = () => {
+export const AllClients: React.FC<{ onClientClick?: (client: any) => void }> = ({ onClientClick }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -221,7 +221,15 @@ export const AllClients: React.FC = () => {
                           )}
                           <span>
                             <button
-                              onClick={() => openClientDetails(client)}
+                              onClick={() => {
+                                if (onClientClick) {
+                                  onClientClick({
+                                    invitee_name: client.invitee_name,
+                                    invitee_email: client.invitee_email,
+                                    invitee_phone: client.invitee_phone
+                                  });
+                                }
+                              }}
                               className="text-teal-700 hover:underline font-medium"
                             >
                               {client.invitee_name}

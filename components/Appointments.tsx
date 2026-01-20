@@ -23,7 +23,7 @@ interface Appointment {
   booking_status?: string;
 }
 
-export const Appointments: React.FC = () => {
+export const Appointments: React.FC<{ onClientClick?: (client: any) => void }> = ({ onClientClick }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -344,7 +344,23 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                     >
                       <td className="px-6 py-4 text-sm">{apt.booking_start_at}</td>
                       <td className="px-6 py-4 text-sm">{apt.booking_resource_name}</td>
-                      <td className="px-6 py-4 text-sm">{apt.invitee_name}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onClientClick) {
+                              onClientClick({
+                                invitee_name: apt.invitee_name,
+                                invitee_email: apt.invitee_email,
+                                invitee_phone: apt.invitee_phone
+                              });
+                            }
+                          }}
+                          className="text-teal-700 hover:underline font-medium"
+                        >
+                          {apt.invitee_name}
+                        </button>
+                      </td>
                       <td className="px-6 py-4 text-sm">
                         <div>{apt.invitee_phone}</div>
                         <div className="text-gray-500 text-xs">{apt.invitee_email}</div>
@@ -464,6 +480,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
           </div>
         </div>
       )}
+
     </div>
   );
 };
