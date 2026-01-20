@@ -555,14 +555,65 @@ async function handleTherapistClients(req: VercelRequest, res: VercelResponse) {
 async function handleTherapistDetails(req: VercelRequest, res: VercelResponse) {
   const { name } = req.query;
   if (!name) return res.status(400).json({ error: 'Therapist name is required' });
+  
   const clientsResult = await pool.query(`
-    WITH client_data AS (
-      SELECT DISTINCT invitee_name, invitee_email, invitee_phone
-      FROM bookings WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
-    )
-    SELECT invitee_name, invitee_email, STRING_AGG(DISTINCT invitee_phone, ', ') as invitee_phone
-    FROM client_data GROUP BY invitee_name, invitee_email ORDER BY invitee_name
+    SELECT DISTINCT invitee_name, invitee_email, invitee_phone, booking_start_at
+    FROM bookings WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
+    ORDER BY booking_start_at DESC
   `, [name]);
+  
+  // Group by email (primary) or phone (fallback)
+  const clientMap = new Map();
+  const emailToKey = new Map();
+  const phoneToKey = new Map();
+  
+  clientsResult.rows.forEach(row => {
+    const email = row.invitee_email ? row.invitee_email.toLowerCase().trim() : null;
+    const phone = row.invitee_phone ? row.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : null;
+    
+    let key = null;
+    
+    if (email && emailToKey.has(email)) {
+      key = emailToKey.get(email);
+    } else if (phone && phoneToKey.has(phone)) {
+      key = phoneToKey.get(phone);
+      if (email) {
+        const oldData = clientMap.get(key);
+        clientMap.delete(key);
+        key = email;
+        clientMap.set(key, oldData);
+        emailToKey.set(email, key);
+      }
+    } else {
+      key = email || phone;
+    }
+    
+    if (!key) return;
+    
+    if (email) emailToKey.set(email, key);
+    if (phone) phoneToKey.set(phone, key);
+    
+    if (!clientMap.has(key)) {
+      clientMap.set(key, {
+        invitee_name: row.invitee_name,
+        invitee_email: row.invitee_email,
+        invitee_phone: row.invitee_phone,
+        latest_booking_date: row.booking_start_at
+      });
+    } else {
+      const client = clientMap.get(key);
+      if (new Date(row.booking_start_at) > new Date(client.latest_booking_date)) {
+        client.latest_booking_date = row.booking_start_at;
+        client.invitee_phone = row.invitee_phone;
+      }
+      if (row.invitee_email && !client.invitee_email) {
+        client.invitee_email = row.invitee_email;
+      }
+    }
+  });
+  
+  const clients = Array.from(clientMap.values()).map(({ latest_booking_date, ...client }) => client);
+  
   const appointmentsResult = await pool.query(`
     SELECT invitee_name, booking_resource_name, booking_start_at, booking_invitee_time
     FROM bookings WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
@@ -601,7 +652,7 @@ async function handleTherapistDetails(req: VercelRequest, res: VercelResponse) {
     booking_invitee_time: convertToIST(apt.booking_invitee_time)
   }));
   
-  res.json({ clients: clientsResult.rows, appointments });
+  res.json({ clients, appointments });
 }
 
 async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {

@@ -507,24 +507,71 @@ app.get('/api/therapist-details', async (req, res) => {
       return res.status(400).json({ error: 'Therapist name is required' });
     }
 
-    // Get unique clients for this therapist (grouped by email OR phone)
+    // Get unique clients for this therapist
     const clientsResult = await pool.query(`
-      WITH client_data AS (
-        SELECT DISTINCT 
-          invitee_name,
-          invitee_email,
-          invitee_phone
-        FROM bookings
-        WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
-      )
-      SELECT 
+      SELECT DISTINCT 
         invitee_name,
         invitee_email,
-        STRING_AGG(DISTINCT invitee_phone, ', ') as invitee_phone
-      FROM client_data
-      GROUP BY invitee_name, invitee_email
-      ORDER BY invitee_name
+        invitee_phone,
+        booking_start_at
+      FROM bookings
+      WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
+      ORDER BY booking_start_at DESC
     `, [name]);
+
+    // Group by email (primary) or phone (fallback)
+    const clientMap = new Map();
+    const emailToKey = new Map();
+    const phoneToKey = new Map();
+    
+    clientsResult.rows.forEach(row => {
+      const email = row.invitee_email ? row.invitee_email.toLowerCase().trim() : null;
+      const phone = row.invitee_phone ? row.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : null;
+      
+      let key = null;
+      
+      if (email && emailToKey.has(email)) {
+        key = emailToKey.get(email);
+      } else if (phone && phoneToKey.has(phone)) {
+        key = phoneToKey.get(phone);
+        if (email) {
+          const oldData = clientMap.get(key);
+          clientMap.delete(key);
+          key = email;
+          clientMap.set(key, oldData);
+          emailToKey.set(email, key);
+        }
+      } else {
+        key = email || phone;
+      }
+      
+      if (!key) return;
+      
+      if (email) emailToKey.set(email, key);
+      if (phone) phoneToKey.set(phone, key);
+      
+      if (!clientMap.has(key)) {
+        clientMap.set(key, {
+          invitee_name: row.invitee_name,
+          invitee_email: row.invitee_email,
+          invitee_phone: row.invitee_phone,
+          latest_booking_date: row.booking_start_at
+        });
+      } else {
+        const client = clientMap.get(key);
+        // Update to most recent phone number
+        if (new Date(row.booking_start_at) > new Date(client.latest_booking_date)) {
+          client.latest_booking_date = row.booking_start_at;
+          client.invitee_phone = row.invitee_phone;
+        }
+        // Fill in missing email
+        if (row.invitee_email && !client.invitee_email) {
+          client.invitee_email = row.invitee_email;
+        }
+      }
+    });
+
+    const clients = Array.from(clientMap.values()).map(({ latest_booking_date, ...client }) => client);
 
     // Get recent appointments for this therapist
     const appointmentsResult = await pool.query(`
@@ -545,7 +592,7 @@ app.get('/api/therapist-details', async (req, res) => {
     }));
 
     res.json({
-      clients: clientsResult.rows,
+      clients,
       appointments
     });
   } catch (error) {

@@ -21,16 +21,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     return localStorage.getItem('adminActiveView') || 'dashboard';
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedClientForView, setSelectedClientForView] = useState<any>(null);
-  const [clientViewSource, setClientViewSource] = useState<string>('');
+  const [selectedClientForView, setSelectedClientForView] = useState<any>(() => {
+    const saved = localStorage.getItem('selectedClientForView');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [clientViewSource, setClientViewSource] = useState<string>(() => {
+    return localStorage.getItem('clientViewSource') || '';
+  });
 
   useEffect(() => {
     localStorage.setItem('adminActiveView', activeView);
     if (activeView !== 'therapists') {
       setSelectedClientForView(null);
       setClientViewSource('');
+      localStorage.removeItem('selectedClientForView');
+      localStorage.removeItem('clientViewSource');
     }
   }, [activeView]);
+
+  useEffect(() => {
+    if (selectedClientForView) {
+      localStorage.setItem('selectedClientForView', JSON.stringify(selectedClientForView));
+    } else {
+      localStorage.removeItem('selectedClientForView');
+    }
+  }, [selectedClientForView]);
+
+  useEffect(() => {
+    if (clientViewSource) {
+      localStorage.setItem('clientViewSource', clientViewSource);
+    } else {
+      localStorage.removeItem('clientViewSource');
+    }
+  }, [clientViewSource]);
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('All Time');
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
@@ -313,9 +336,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <AllTherapists 
             selectedClientProp={selectedClientForView} 
             onBack={() => {
+              const sourceView = clientViewSource || 'therapists';
               setSelectedClientForView(null);
-              setActiveView(clientViewSource || 'therapists');
               setClientViewSource('');
+              localStorage.removeItem('selectedClientForView');
+              localStorage.removeItem('clientViewSource');
+              setActiveView(sourceView);
             }}
           />
         ) : activeView === 'appointments' ? (
