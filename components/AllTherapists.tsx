@@ -15,7 +15,7 @@ interface Appointment {
   booking_invitee_time: string;
 }
 
-export const AllTherapists: React.FC<{ selectedClientProp?: any }> = ({ selectedClientProp }) => {
+export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => void }> = ({ selectedClientProp, onBack }) => {
   const [therapists, setTherapists] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTherapist, setSelectedTherapist] = useState<any>(null);
@@ -148,23 +148,28 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any }> = ({ selected
   const openClientDetails = async (client: any) => {
     console.log('Opening client details for:', client);
     
-    // Normalize the client object to ensure we have the right property names
     const normalizedClient = {
-      invitee_name: client.invitee_name || client.client_name,
-      invitee_email: client.invitee_email || client.client_email,
-      invitee_phone: client.invitee_phone || client.client_phone
+      invitee_name: client.invitee_name || client.client_name || 'Unknown',
+      invitee_email: client.invitee_email || '',
+      invitee_phone: client.invitee_phone || ''
     };
     
     console.log('Normalized client:', normalizedClient);
     setSelectedClient(normalizedClient);
+    
+    if (!normalizedClient.invitee_email && !normalizedClient.invitee_phone) {
+      console.log('No email or phone, skipping API call');
+      setClientAppointments([]);
+      return;
+    }
+    
     setClientDetailsLoading(true);
     try {
       const params = new URLSearchParams();
-      
       if (normalizedClient.invitee_email) params.append('email', normalizedClient.invitee_email);
       if (normalizedClient.invitee_phone) params.append('phone', normalizedClient.invitee_phone);
       
-      console.log('Fetching client details with params:', params.toString());
+      console.log('Fetching with params:', params.toString());
       const response = await fetch(`/api/client-details?${params.toString()}`);
       const data = await response.json();
       console.log('Client details response:', data);
@@ -179,6 +184,9 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any }> = ({ selected
   const closeClientDetails = () => {
     setSelectedClient(null);
     setClientAppointments([]);
+    if (onBack) {
+      onBack();
+    }
   };
 
   if (selectedClient) {

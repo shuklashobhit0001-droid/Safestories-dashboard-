@@ -22,9 +22,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedClientForView, setSelectedClientForView] = useState<any>(null);
+  const [clientViewSource, setClientViewSource] = useState<string>('');
 
   useEffect(() => {
     localStorage.setItem('adminActiveView', activeView);
+    if (activeView !== 'therapists') {
+      setSelectedClientForView(null);
+      setClientViewSource('');
+    }
   }, [activeView]);
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('All Time');
@@ -301,13 +306,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         {activeView === 'clients' ? (
           <AllClients onClientClick={(client) => {
             setSelectedClientForView(client);
+            setClientViewSource('clients');
             setActiveView('therapists');
           }} />
         ) : activeView === 'therapists' ? (
-          <AllTherapists selectedClientProp={selectedClientForView} />
+          <AllTherapists 
+            selectedClientProp={selectedClientForView} 
+            onBack={() => {
+              setSelectedClientForView(null);
+              setActiveView(clientViewSource || 'therapists');
+              setClientViewSource('');
+            }}
+          />
         ) : activeView === 'appointments' ? (
           <Appointments onClientClick={(client) => {
             setSelectedClientForView(client);
+            setClientViewSource('appointments');
             setActiveView('therapists');
           }} />
         ) : activeView === 'refunds' ? (
@@ -468,11 +482,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                console.log('Booking object:', booking);
                                 setSelectedClientForView({
                                   invitee_name: booking.client_name,
                                   invitee_email: booking.client_email,
                                   invitee_phone: booking.client_phone
                                 });
+                                setClientViewSource('dashboard');
                                 setActiveView('therapists');
                               }}
                               className="text-teal-700 hover:underline font-medium"

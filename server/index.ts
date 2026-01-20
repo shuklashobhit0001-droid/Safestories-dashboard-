@@ -191,6 +191,8 @@ app.get('/api/dashboard/bookings', async (req, res) => {
       ? await pool.query(
           `SELECT 
             invitee_name as client_name,
+            invitee_email as client_email,
+            invitee_phone as client_phone,
             booking_resource_name as therapy_type,
             booking_mode as mode,
             booking_host_name as therapist_name,
@@ -205,6 +207,8 @@ app.get('/api/dashboard/bookings', async (req, res) => {
       : await pool.query(
           `SELECT 
             invitee_name as client_name,
+            invitee_email as client_email,
+            invitee_phone as client_phone,
             booking_resource_name as therapy_type,
             booking_mode as mode,
             booking_host_name as therapist_name,

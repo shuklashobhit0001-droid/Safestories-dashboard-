@@ -696,14 +696,16 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
   const { start, end } = req.query;
   const result = start && end
     ? await pool.query(`
-        SELECT invitee_name as client_name, booking_resource_name as therapy_type, booking_mode as mode,
-          booking_host_name as therapist_name, booking_invitee_time
+        SELECT invitee_name as client_name, invitee_email as client_email, invitee_phone as client_phone,
+          booking_resource_name as therapy_type, booking_mode as mode,
+          booking_host_name as therapist_name, booking_invitee_time, booking_joining_link, booking_checkin_url
         FROM bookings WHERE booking_status != 'cancelled' AND booking_start_at BETWEEN $1 AND $2
         ORDER BY booking_start_at ASC LIMIT 10
       `, [start, `${end} 23:59:59`])
     : await pool.query(`
-        SELECT invitee_name as client_name, booking_resource_name as therapy_type, booking_mode as mode,
-          booking_host_name as therapist_name, booking_invitee_time
+        SELECT invitee_name as client_name, invitee_email as client_email, invitee_phone as client_phone,
+          booking_resource_name as therapy_type, booking_mode as mode,
+          booking_host_name as therapist_name, booking_invitee_time, booking_joining_link, booking_checkin_url
         FROM bookings WHERE booking_status != 'cancelled' AND booking_start_at >= CURRENT_DATE
         ORDER BY booking_start_at ASC LIMIT 10
       `);
