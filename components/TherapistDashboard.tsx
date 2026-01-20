@@ -850,46 +850,15 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 </tr>
               ) : (
                 paginatedClients.map((client, index) => (
-                    <React.Fragment key={index}>
-                      <tr className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => {
-                        setSelectedClient(client);
-                        fetchClientDetails(client);
-                      }}>
-                        <td className="px-6 py-4 text-sm">
-                          <div className="flex items-center gap-2">
-                            {client.therapists && client.therapists.length > 1 && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleRow(index);
-                                }}
-                                className="text-gray-500 hover:text-gray-700"
-                              >
-                                {expandedRows.has(index) ? (
-                                  <ChevronDown size={16} />
-                                ) : (
-                                  <ChevronRight size={16} />
-                                )}
-                              </button>
-                            )}
-                            <span>{client.client_name}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm">{client.client_phone}</td>
-                        <td className="px-6 py-4 text-sm">{client.client_email}</td>
-                        <td className="px-6 py-4 text-sm">{client.total_sessions}</td>
-                      </tr>
-                      {expandedRows.has(index) && client.therapists && client.therapists.length > 1 && (
-                        client.therapists.map((therapist: any, tIndex: number) => (
-                          <tr key={`${index}-${tIndex}`} className="bg-gray-50 border-b">
-                            <td className="px-6 py-4 text-sm pl-16 text-gray-600">{therapist.client_name}</td>
-                            <td className="px-6 py-4 text-sm text-gray-600">{therapist.client_phone}</td>
-                            <td className="px-6 py-4 text-sm text-gray-600">{client.client_email}</td>
-                            <td className="px-6 py-4 text-sm text-gray-600">{therapist.total_sessions}</td>
-                          </tr>
-                        ))
-                      )}
-                    </React.Fragment>
+                    <tr key={index} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => {
+                      setSelectedClient(client);
+                      fetchClientDetails(client);
+                    }}>
+                      <td className="px-6 py-4 text-sm">{client.client_name}</td>
+                      <td className="px-6 py-4 text-sm">{client.client_phone}</td>
+                      <td className="px-6 py-4 text-sm">{client.client_email}</td>
+                      <td className="px-6 py-4 text-sm">{client.total_sessions}</td>
+                    </tr>
                   ))
               )}
             </tbody>

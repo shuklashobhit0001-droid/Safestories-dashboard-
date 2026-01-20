@@ -219,7 +219,14 @@ export const AllClients: React.FC = () => {
                               )}
                             </button>
                           )}
-                          <span>{client.invitee_name}</span>
+                          <span>
+                            <button
+                              onClick={() => openClientDetails(client)}
+                              className="text-teal-700 hover:underline font-medium"
+                            >
+                              {client.invitee_name}
+                            </button>
+                          </span>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm">{client.invitee_phone}</td>

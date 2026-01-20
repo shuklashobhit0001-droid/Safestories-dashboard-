@@ -429,7 +429,6 @@ export const AllTherapists: React.FC = () => {
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapists Name</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Specialization</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Total sessions lifetime</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Sessions this month</th>
               </tr>
@@ -437,7 +436,7 @@ export const AllTherapists: React.FC = () => {
             <tbody>
               {filteredTherapists.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center text-gray-400 py-20">
+                  <td colSpan={4} className="text-center text-gray-400 py-20">
                     No therapists found
                   </td>
                 </tr>
@@ -461,7 +460,6 @@ export const AllTherapists: React.FC = () => {
                         ))}
                       </div>
                     </td>
-                    <td className="px-6 py-4">{therapist.contact_info || '-'}</td>
                     <td className="px-6 py-4">{therapist.total_sessions_lifetime}</td>
                     <td className="px-6 py-4">{therapist.sessions_this_month}</td>
                   </tr>

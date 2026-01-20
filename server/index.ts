@@ -233,11 +233,6 @@ app.get('/api/dashboard/bookings', async (req, res) => {
 // Get all clients
 app.get('/api/clients', async (req, res) => {
   try {
-    // Helper function to normalize phone numbers
-    const normalizePhone = (phone: string | null) => {
-      return phone ? phone.replace(/[\s\-\(\)\+]/g, '').toLowerCase() : '';
-    };
-
     const result = await pool.query(`
       SELECT 
         invitee_name,
@@ -262,25 +257,16 @@ app.get('/api/clients', async (req, res) => {
       FROM booking_requests
     `);
 
-    // Group by unique client (email OR phone)
+    // Group by email (primary) or phone (fallback)
     const clientMap = new Map();
-    const emailToKey = new Map();
-    const phoneToKey = new Map();
     
     result.rows.forEach(row => {
-      let key = null;
-      const normalizedPhone = normalizePhone(row.invitee_phone);
-      const normalizedEmail = row.invitee_email ? row.invitee_email.toLowerCase().trim() : '';
+      const email = row.invitee_email ? row.invitee_email.toLowerCase().trim() : null;
+      const phone = row.invitee_phone ? row.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : null;
       
-      if (normalizedEmail && emailToKey.has(normalizedEmail)) {
-        key = emailToKey.get(normalizedEmail);
-      } else if (normalizedPhone && phoneToKey.has(normalizedPhone)) {
-        key = phoneToKey.get(normalizedPhone);
-      } else {
-        key = `client-${clientMap.size}`;
-        if (normalizedEmail) emailToKey.set(normalizedEmail, key);
-        if (normalizedPhone) phoneToKey.set(normalizedPhone, key);
-      }
+      // Use email as key if available, otherwise use phone
+      const key = email || phone;
+      if (!key) return; // Skip if both are missing
       
       if (!clientMap.has(key)) {
         clientMap.set(key, {
@@ -298,20 +284,23 @@ app.get('/api/clients', async (req, res) => {
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
       
-      // Fill empty email with existing email from same client
+      // Update to most recent phone number and therapist
+      if (new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
+        client.latest_booking_date = row.latest_booking_date;
+        client.invitee_phone = row.invitee_phone;
+        if (parseInt(row.session_count) > 0) {
+          client.booking_host_name = row.booking_host_name;
+        }
+      }
+      
+      // Fill in missing email if found
       if (row.invitee_email && !client.invitee_email) {
         client.invitee_email = row.invitee_email;
       }
       
-      // Fill empty phone with existing phone from same client
-      if (row.invitee_phone && !client.invitee_phone) {
-        client.invitee_phone = row.invitee_phone;
-      }
-      
-      // Add all booking records to therapists array (group by phone + email + therapist)
+      // Add to therapists array only if different therapist
       if (parseInt(row.session_count) > 0) {
         const existing = client.therapists.find((t: any) => 
-          t.invitee_phone === row.invitee_phone && 
           t.booking_host_name === row.booking_host_name
         );
         
@@ -322,16 +311,9 @@ app.get('/api/clients', async (req, res) => {
             invitee_name: row.invitee_name,
             invitee_phone: row.invitee_phone,
             booking_host_name: row.booking_host_name,
-            session_count: parseInt(row.session_count) || 0,
-            latest_booking_date: row.latest_booking_date
+            session_count: parseInt(row.session_count) || 0
           });
         }
-      }
-      
-      // Update to show therapist with most recent booking (only if has sessions)
-      if (parseInt(row.session_count) > 0 && new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
-        client.latest_booking_date = row.latest_booking_date;
-        client.booking_host_name = row.booking_host_name;
       }
     });
 
@@ -815,31 +797,24 @@ app.get('/api/therapist-clients', async (req, res) => {
         invitee_name as client_name,
         invitee_email as client_email,
         invitee_phone as client_phone,
+        booking_start_at,
         COUNT(*) as total_sessions
       FROM bookings
       WHERE booking_host_name ILIKE $1
-      GROUP BY invitee_name, invitee_email, invitee_phone
-      ORDER BY MAX(booking_start_at) DESC
+      GROUP BY invitee_name, invitee_email, invitee_phone, booking_start_at
+      ORDER BY booking_start_at DESC
     `, [`%${therapistFirstName}%`]);
 
-    // Group by unique client (email OR phone)
+    // Group by email (primary) or phone (fallback)
     const clientMap = new Map();
-    const emailToKey = new Map();
-    const phoneToKey = new Map();
     
     clientsResult.rows.forEach(row => {
-      let key = null;
+      const email = row.client_email ? row.client_email.toLowerCase().trim() : null;
+      const phone = row.client_phone ? row.client_phone.replace(/[\s\-\(\)\+]/g, '') : null;
       
-      if (row.client_email && emailToKey.has(row.client_email)) {
-        key = emailToKey.get(row.client_email);
-      } else if (row.client_phone && phoneToKey.has(row.client_phone)) {
-        key = phoneToKey.get(row.client_phone);
-      } else {
-        key = `client-${clientMap.size}`;
-      }
-      
-      if (row.client_email) emailToKey.set(row.client_email, key);
-      if (row.client_phone) phoneToKey.set(row.client_phone, key);
+      // Use email as key if available, otherwise use phone
+      const key = email || phone;
+      if (!key) return; // Skip if both are missing
       
       if (!clientMap.has(key)) {
         clientMap.set(key, {
@@ -847,33 +822,26 @@ app.get('/api/therapist-clients', async (req, res) => {
           client_phone: row.client_phone,
           client_email: row.client_email,
           total_sessions: 0,
-          therapists: []
+          latest_booking_date: row.booking_start_at
         });
       }
       
       const client = clientMap.get(key);
       client.total_sessions += parseInt(row.total_sessions) || 0;
       
-      // Fill empty email with existing email from same client
+      // Update to most recent phone number
+      if (new Date(row.booking_start_at) > new Date(client.latest_booking_date)) {
+        client.latest_booking_date = row.booking_start_at;
+        client.client_phone = row.client_phone;
+      }
+      
+      // Fill in missing email if found
       if (row.client_email && !client.client_email) {
         client.client_email = row.client_email;
       }
-      
-      // Add to therapists array (group by phone)
-      const existing = client.therapists.find((t: any) => t.client_phone === row.client_phone);
-      
-      if (existing) {
-        existing.total_sessions += parseInt(row.total_sessions) || 0;
-      } else {
-        client.therapists.push({
-          client_name: row.client_name,
-          client_phone: row.client_phone,
-          total_sessions: parseInt(row.total_sessions) || 0
-        });
-      }
     });
 
-    const clients = Array.from(clientMap.values());
+    const clients = Array.from(clientMap.values()).map(({ latest_booking_date, ...client }) => client);
 
     res.json({ clients });
 

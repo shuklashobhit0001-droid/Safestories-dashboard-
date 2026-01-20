@@ -140,11 +140,6 @@ async function handleTherapists(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleClients(req: VercelRequest, res: VercelResponse) {
-  // Helper function to normalize phone numbers
-  const normalizePhone = (phone: string | null) => {
-    return phone ? phone.replace(/[\s\-\(\)\+]/g, '').toLowerCase() : '';
-  };
-
   const result = await pool.query(`
     SELECT 
       invitee_name,
@@ -168,23 +163,18 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
       created_at as latest_booking_date
     FROM booking_requests
   `);
+  
+  // Group by email (primary) or phone (fallback)
   const clientMap = new Map();
-  const emailToKey = new Map();
-  const phoneToKey = new Map();
+  
   result.rows.forEach(row => {
-    let key = null;
-    const normalizedPhone = normalizePhone(row.invitee_phone);
-    const normalizedEmail = row.invitee_email ? row.invitee_email.toLowerCase().trim() : '';
+    const email = row.invitee_email ? row.invitee_email.toLowerCase().trim() : null;
+    const phone = row.invitee_phone ? row.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : null;
     
-    if (normalizedEmail && emailToKey.has(normalizedEmail)) {
-      key = emailToKey.get(normalizedEmail);
-    } else if (normalizedPhone && phoneToKey.has(normalizedPhone)) {
-      key = phoneToKey.get(normalizedPhone);
-    } else {
-      key = `client-${clientMap.size}`;
-    }
-    if (normalizedEmail) emailToKey.set(normalizedEmail, key);
-    if (normalizedPhone) phoneToKey.set(normalizedPhone, key);
+    // Use email as key if available, otherwise use phone
+    const key = email || phone;
+    if (!key) return; // Skip if both are missing
+    
     if (!clientMap.has(key)) {
       clientMap.set(key, {
         invitee_name: row.invitee_name,
@@ -197,22 +187,27 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
         therapists: []
       });
     }
+    
     const client = clientMap.get(key);
     client.session_count += parseInt(row.session_count) || 0;
     
-    // Fill empty email with existing email from same client
+    // Update to most recent phone number and therapist
+    if (new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
+      client.latest_booking_date = row.latest_booking_date;
+      client.invitee_phone = row.invitee_phone;
+      if (parseInt(row.session_count) > 0) {
+        client.booking_host_name = row.booking_host_name;
+      }
+    }
+    
+    // Fill in missing email if found
     if (row.invitee_email && !client.invitee_email) {
       client.invitee_email = row.invitee_email;
     }
     
-    // Fill empty phone with existing phone from same client
-    if (row.invitee_phone && !client.invitee_phone) {
-      client.invitee_phone = row.invitee_phone;
-    }
-    
+    // Add to therapists array only if different therapist
     if (parseInt(row.session_count) > 0) {
       const existing = client.therapists.find((t: any) => 
-        t.invitee_phone === row.invitee_phone && 
         t.booking_host_name === row.booking_host_name
       );
       
@@ -223,16 +218,12 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
           invitee_name: row.invitee_name,
           invitee_phone: row.invitee_phone,
           booking_host_name: row.booking_host_name,
-          session_count: parseInt(row.session_count) || 0,
-          latest_booking_date: row.latest_booking_date
+          session_count: parseInt(row.session_count) || 0
         });
       }
     }
-    if (new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
-      client.latest_booking_date = row.latest_booking_date;
-      client.booking_host_name = row.booking_host_name;
-    }
   });
+  
   const clients = Array.from(clientMap.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   res.json(clients);
 }
@@ -490,38 +481,50 @@ async function handleTherapistClients(req: VercelRequest, res: VercelResponse) {
   const therapist = therapistResult.rows[0];
   const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
   const clientsResult = await pool.query(`
-    SELECT invitee_name as client_name, invitee_email as client_email, invitee_phone as client_phone, COUNT(*) as total_sessions
+    SELECT invitee_name as client_name, invitee_email as client_email, invitee_phone as client_phone,
+      booking_start_at, COUNT(*) as total_sessions
     FROM bookings WHERE booking_host_name ILIKE $1
-    GROUP BY invitee_name, invitee_email, invitee_phone ORDER BY MAX(booking_start_at) DESC
+    GROUP BY invitee_name, invitee_email, invitee_phone, booking_start_at
+    ORDER BY booking_start_at DESC
   `, [`%${therapistFirstName}%`]);
+  
+  // Group by email (primary) or phone (fallback)
   const clientMap = new Map();
-  const emailToKey = new Map();
-  const phoneToKey = new Map();
+  
   clientsResult.rows.forEach(row => {
-    let key = null;
-    if (row.client_email && emailToKey.has(row.client_email)) {
-      key = emailToKey.get(row.client_email);
-    } else if (row.client_phone && phoneToKey.has(row.client_phone)) {
-      key = phoneToKey.get(row.client_phone);
-    } else {
-      key = `client-${clientMap.size}`;
-    }
-    if (row.client_email) emailToKey.set(row.client_email, key);
-    if (row.client_phone) phoneToKey.set(row.client_phone, key);
+    const email = row.client_email ? row.client_email.toLowerCase().trim() : null;
+    const phone = row.client_phone ? row.client_phone.replace(/[\s\-\(\)\+]/g, '') : null;
+    
+    // Use email as key if available, otherwise use phone
+    const key = email || phone;
+    if (!key) return; // Skip if both are missing
+    
     if (!clientMap.has(key)) {
-      clientMap.set(key, { client_name: row.client_name, client_phone: row.client_phone, client_email: row.client_email, total_sessions: 0, therapists: [] });
+      clientMap.set(key, {
+        client_name: row.client_name,
+        client_phone: row.client_phone,
+        client_email: row.client_email,
+        total_sessions: 0,
+        latest_booking_date: row.booking_start_at
+      });
     }
+    
     const client = clientMap.get(key);
     client.total_sessions += parseInt(row.total_sessions) || 0;
-    const existing = client.therapists.find((t: any) => t.client_phone === row.client_phone);
     
-    if (existing) {
-      existing.total_sessions += parseInt(row.total_sessions) || 0;
-    } else {
-      client.therapists.push({ client_name: row.client_name, client_phone: row.client_phone, total_sessions: parseInt(row.total_sessions) || 0 });
+    // Update to most recent phone number
+    if (new Date(row.booking_start_at) > new Date(client.latest_booking_date)) {
+      client.latest_booking_date = row.booking_start_at;
+      client.client_phone = row.client_phone;
+    }
+    
+    // Fill in missing email if found
+    if (row.client_email && !client.client_email) {
+      client.client_email = row.client_email;
     }
   });
-  const clients = Array.from(clientMap.values());
+  
+  const clients = Array.from(clientMap.values()).map(({ latest_booking_date, ...client }) => client);
   res.json({ clients });
 }
 

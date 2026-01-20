@@ -32,6 +32,8 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
       const response = await fetch(`/api/notifications?user_id=${userId}&user_role=${userRole}`);
       if (response.ok) {
         const data = await response.json();
+        console.log('📥 Received notifications:', data.length);
+        console.log('📅 First notification created_at:', data[0]?.created_at);
         setNotifications(data);
       }
     } catch (error) {
@@ -43,10 +45,8 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
 
   const markAsRead = async (notificationId: number) => {
     try {
-      const response = await fetch(`/api/notifications/read`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notification_id: notificationId })
+      const response = await fetch(`/api/notifications/${notificationId}/read`, {
+        method: 'PUT'
       });
       if (response.ok) {
         setNotifications(notifications.map(n => 
@@ -82,7 +82,17 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   const formatTime = (timestamp: string) => {
+    if (!timestamp) {
+      console.warn('⚠️ Missing timestamp');
+      return 'Unknown';
+    }
+    
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) {
+      console.warn('⚠️ Invalid timestamp:', timestamp);
+      return 'Invalid date';
+    }
+    
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const minutes = Math.floor(diff / 60000);
