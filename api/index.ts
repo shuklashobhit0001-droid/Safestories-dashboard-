@@ -1236,23 +1236,26 @@ async function handleClientDetails(req: VercelRequest, res: VercelResponse) {
         booking_resource_name,
         booking_start_at,
         booking_invitee_time,
-        booking_host_name
-      FROM bookings
-      WHERE 1=1
+        booking_host_name,
+        booking_status,
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+      FROM bookings b
+      LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+      WHERE 1=0
     `;
     const params: any[] = [];
     
     if (email) {
       params.push(email);
-      query += ` AND LOWER(invitee_email) = LOWER($${params.length})`;
+      query += ` OR LOWER(b.invitee_email) = LOWER($${params.length})`;
     }
     
     if (phone) {
       params.push(phone);
-      query += ` AND invitee_phone = $${params.length}`;
+      query += ` OR b.invitee_phone = $${params.length}`;
     }
     
-    query += ' ORDER BY booking_start_at DESC';
+    query += ' ORDER BY b.booking_start_at DESC';
     
     console.log('Executing query:', query, 'with params:', params);
     const appointmentsResult = await pool.query(query, params);
