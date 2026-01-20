@@ -13,6 +13,10 @@ interface Appointment {
   booking_resource_name: string;
   booking_start_at: string;
   booking_invitee_time: string;
+  booking_host_name?: string;
+  booking_status?: string;
+  has_session_notes?: boolean;
+  booking_start_at_raw?: string;
 }
 
 export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => void }> = ({ selectedClientProp, onBack }) => {
@@ -27,6 +31,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [clients, setClients] = useState<Client[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expandedClientRows, setExpandedClientRows] = useState<Set<number>>(new Set());
+  const [clientAppointmentTab, setClientAppointmentTab] = useState('all');
 
   useEffect(() => {
     fetchTherapists();
@@ -173,7 +178,26 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       const response = await fetch(`/api/client-details?${params.toString()}`);
       const data = await response.json();
       console.log('Client details response:', data);
-      setClientAppointments(data.appointments || []);
+      
+      const appointmentsWithStatus = (data.appointments || []).map((apt: any) => {
+        let status = apt.booking_status || 'confirmed';
+        const now = new Date();
+        const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+        
+        if (status !== 'cancelled' && status !== 'no_show') {
+          if (apt.has_session_notes) {
+            status = 'completed';
+          } else if (sessionDate < now) {
+            status = 'pending_notes';
+          } else {
+            status = 'scheduled';
+          }
+        }
+        
+        return { ...apt, booking_status: status };
+      });
+      
+      setClientAppointments(appointmentsWithStatus);
     } catch (error) {
       console.error('Error fetching client details:', error);
     } finally {
@@ -228,7 +252,39 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
           <Loader />
         ) : (
           <div>
-            <h3 className="text-lg font-semibold mb-3">Appointment History ({clientAppointments.length})</h3>
+            <div className="flex gap-6 mb-4">
+              {[
+                { id: 'upcoming', label: 'Upcoming' },
+                { id: 'all', label: 'All Appointments' },
+                { id: 'completed', label: 'Completed' },
+                { id: 'pending_notes', label: 'Pending Notes' },
+                { id: 'cancelled', label: 'Cancelled' },
+                { id: 'no_show', label: 'No Show' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setClientAppointmentTab(tab.id)}
+                  className={`pb-2 font-medium ${
+                    clientAppointmentTab === tab.id
+                      ? 'text-teal-700 border-b-2 border-teal-700'
+                      : 'text-gray-400'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            
+            <h3 className="text-lg font-semibold mb-3">
+              Appointment History ({clientAppointments.filter(apt => {
+                if (clientAppointmentTab === 'all') return true;
+                if (clientAppointmentTab === 'upcoming') {
+                  const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                  return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                }
+                return apt.booking_status === clientAppointmentTab;
+              }).length})
+            </h3>
             <div className="bg-white border rounded-lg overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b">
@@ -236,19 +292,48 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Session Type</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Date & Time</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Therapist</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {clientAppointments.length === 0 ? (
+                  {clientAppointments.filter(apt => {
+                    if (clientAppointmentTab === 'all') return true;
+                    if (clientAppointmentTab === 'upcoming') {
+                      const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                      return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                    }
+                    return apt.booking_status === clientAppointmentTab;
+                  }).length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
+                      <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
                     </tr>
                   ) : (
-                    clientAppointments.map((apt, index) => (
+                    clientAppointments.filter(apt => {
+                      if (clientAppointmentTab === 'all') return true;
+                      if (clientAppointmentTab === 'upcoming') {
+                        const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                        return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                      }
+                      return apt.booking_status === clientAppointmentTab;
+                    }).map((apt, index) => (
                       <tr key={index} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm">{apt.booking_resource_name}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_host_name || selectedTherapist?.name || 'N/A'}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                            apt.booking_status === 'completed' ? 'bg-green-100 text-green-700' :
+                            apt.booking_status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                            apt.booking_status === 'no_show' ? 'bg-orange-100 text-orange-700' :
+                            apt.booking_status === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {apt.booking_status === 'pending_notes' ? 'Pending Notes' :
+                             apt.booking_status === 'no_show' ? 'No Show' :
+                             apt.booking_status === 'scheduled' ? 'Scheduled' :
+                             apt.booking_status?.charAt(0).toUpperCase() + apt.booking_status?.slice(1)}
+                          </span>
+                        </td>
                       </tr>
                     ))
                   )}

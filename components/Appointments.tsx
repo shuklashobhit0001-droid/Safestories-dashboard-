@@ -344,7 +344,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                     >
                       <td className="px-6 py-4 text-sm">{apt.booking_start_at}</td>
                       <td className="px-6 py-4 text-sm">{apt.booking_resource_name}</td>
-                      <td className="px-6 py-4 text-sm">
+                      <td className="px-6 py-4 text-sm whitespace-nowrap">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

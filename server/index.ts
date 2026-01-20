@@ -565,33 +565,37 @@ app.get('/api/client-details', async (req, res) => {
 
     let query = `
       SELECT 
-        invitee_name,
-        booking_resource_name,
-        booking_start_at,
-        booking_invitee_time,
-        booking_host_name
-      FROM bookings
+        b.invitee_name,
+        b.booking_resource_name,
+        b.booking_start_at,
+        b.booking_invitee_time,
+        b.booking_host_name,
+        b.booking_status,
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+      FROM bookings b
+      LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
       WHERE 1=1
     `;
     const params: any[] = [];
     
     if (email) {
       params.push(email);
-      query += ` AND invitee_email = $${params.length}`;
+      query += ` AND b.invitee_email = $${params.length}`;
     }
     
     if (phone) {
       params.push(phone);
-      query += ` AND invitee_phone = $${params.length}`;
+      query += ` AND b.invitee_phone = $${params.length}`;
     }
     
-    query += ' ORDER BY booking_start_at DESC';
+    query += ' ORDER BY b.booking_start_at DESC';
 
     const appointmentsResult = await pool.query(query, params);
 
     const appointments = appointmentsResult.rows.map(apt => ({
       ...apt,
-      booking_invitee_time: convertToIST(apt.booking_invitee_time)
+      booking_invitee_time: convertToIST(apt.booking_invitee_time),
+      booking_start_at_raw: apt.booking_start_at
     }));
 
     res.json({
