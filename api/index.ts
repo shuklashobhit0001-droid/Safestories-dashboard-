@@ -140,6 +140,11 @@ async function handleTherapists(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleClients(req: VercelRequest, res: VercelResponse) {
+  // Helper function to normalize phone numbers
+  const normalizePhone = (phone: string | null) => {
+    return phone ? phone.replace(/[\s\-\(\)\+]/g, '').toLowerCase() : '';
+  };
+
   const result = await pool.query(`
     SELECT 
       invitee_name,
@@ -168,15 +173,18 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
   const phoneToKey = new Map();
   result.rows.forEach(row => {
     let key = null;
-    if (row.invitee_email && emailToKey.has(row.invitee_email)) {
-      key = emailToKey.get(row.invitee_email);
-    } else if (row.invitee_phone && phoneToKey.has(row.invitee_phone)) {
-      key = phoneToKey.get(row.invitee_phone);
+    const normalizedPhone = normalizePhone(row.invitee_phone);
+    const normalizedEmail = row.invitee_email ? row.invitee_email.toLowerCase().trim() : '';
+    
+    if (normalizedEmail && emailToKey.has(normalizedEmail)) {
+      key = emailToKey.get(normalizedEmail);
+    } else if (normalizedPhone && phoneToKey.has(normalizedPhone)) {
+      key = phoneToKey.get(normalizedPhone);
     } else {
       key = `client-${clientMap.size}`;
     }
-    if (row.invitee_email) emailToKey.set(row.invitee_email, key);
-    if (row.invitee_phone) phoneToKey.set(row.invitee_phone, key);
+    if (normalizedEmail) emailToKey.set(normalizedEmail, key);
+    if (normalizedPhone) phoneToKey.set(normalizedPhone, key);
     if (!clientMap.has(key)) {
       clientMap.set(key, {
         invitee_name: row.invitee_name,
@@ -191,6 +199,17 @@ async function handleClients(req: VercelRequest, res: VercelResponse) {
     }
     const client = clientMap.get(key);
     client.session_count += parseInt(row.session_count) || 0;
+    
+    // Fill empty email with existing email from same client
+    if (row.invitee_email && !client.invitee_email) {
+      client.invitee_email = row.invitee_email;
+    }
+    
+    // Fill empty phone with existing phone from same client
+    if (row.invitee_phone && !client.invitee_phone) {
+      client.invitee_phone = row.invitee_phone;
+    }
+    
     if (parseInt(row.session_count) > 0) {
       const existing = client.therapists.find((t: any) => 
         t.invitee_phone === row.invitee_phone && 
