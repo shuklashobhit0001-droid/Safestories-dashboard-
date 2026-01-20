@@ -32,6 +32,11 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expandedClientRows, setExpandedClientRows] = useState<Set<number>>(new Set());
   const [clientAppointmentTab, setClientAppointmentTab] = useState('upcoming');
+  const [selectedAppointmentIndex, setSelectedAppointmentIndex] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [selectedAppointmentForReminder, setSelectedAppointmentForReminder] = useState<Appointment | null>(null);
+  const appointmentActionsRef = React.useRef<HTMLTableElement>(null);
 
   useEffect(() => {
     fetchTherapists();
@@ -39,6 +44,16 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       openClientDetails(selectedClientProp);
     }
   }, [selectedClientProp]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (appointmentActionsRef.current && !appointmentActionsRef.current.contains(event.target as Node)) {
+        setSelectedAppointmentIndex(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchTherapists = async () => {
     try {
@@ -213,6 +228,101 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     }
   };
 
+  const copyAppointmentDetails = (apt: Appointment) => {
+    const details = `${apt.booking_resource_name}\n${apt.booking_invitee_time}\nTime zone: Asia/Kolkata\n${apt.booking_host_name ? 'Therapist: ' + apt.booking_host_name : ''}`;
+    navigator.clipboard.writeText(details).then(() => {
+      setToast({ message: 'Appointment details copied to clipboard!', type: 'success' });
+    }).catch(() => {
+      setToast({ message: 'Failed to copy details', type: 'error' });
+    });
+  };
+
+  const isMeetingEnded = (apt: Appointment) => {
+    if (apt.booking_start_at_raw) {
+      return new Date(apt.booking_start_at_raw) < new Date();
+    }
+    return false;
+  };
+
+  const handleReminderClick = async (apt: Appointment) => {
+    if (isMeetingEnded(apt)) {
+      setToast({ message: 'Cannot send reminder after meeting has ended', type: 'error' });
+      return;
+    }
+    
+    setSelectedAppointmentForReminder(apt);
+    setShowReminderModal(true);
+  };
+
+  const sendWhatsAppNotification = async () => {
+    if (!selectedAppointmentForReminder || !selectedClient) return;
+    
+    const webhookData = {
+      sessionTimings: selectedAppointmentForReminder.booking_invitee_time,
+      sessionName: selectedAppointmentForReminder.booking_resource_name,
+      clientName: selectedClient.invitee_name,
+      phone: selectedClient.invitee_phone,
+      email: selectedClient.invitee_email,
+      therapistName: selectedAppointmentForReminder.booking_host_name || selectedTherapist?.name,
+      mode: 'Online',
+      meetingLink: '',
+      checkinUrl: ''
+    };
+
+    try {
+      const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/0d1db363-bf04-41e5-a667-a9fe1b5ffc83', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookData)
+      });
+
+      if (response.ok) {
+        setToast({ message: 'WhatsApp notification sent successfully!', type: 'success' });
+      } else {
+        setToast({ message: 'Failed to send WhatsApp notification', type: 'error' });
+      }
+    } catch (err) {
+      setToast({ message: 'Failed to send WhatsApp notification', type: 'error' });
+    }
+    setShowReminderModal(false);
+    setSelectedAppointmentForReminder(null);
+  };
+
+  const handleSessionNotesReminder = async (apt: Appointment) => {
+    if (!isMeetingEnded(apt)) {
+      setToast({ message: 'Cannot send reminder before meeting ends', type: 'error' });
+      return;
+    }
+    
+    if (apt.has_session_notes) {
+      setToast({ message: 'Session notes already filled for this appointment', type: 'error' });
+      return;
+    }
+
+    const webhookData = {
+      therapistName: apt.booking_host_name || selectedTherapist?.name,
+      clientName: selectedClient?.invitee_name,
+      sessionName: apt.booking_resource_name,
+      sessionTimings: apt.booking_invitee_time
+    };
+
+    try {
+      const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/fd13ea75-06b4-49e5-8188-75a88a9aaade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookData)
+      });
+
+      if (response.ok) {
+        setToast({ message: 'Reminder sent to therapist to fill session notes', type: 'success' });
+      } else {
+        setToast({ message: 'Failed to send reminder', type: 'error' });
+      }
+    } catch (err) {
+      setToast({ message: 'Failed to send reminder', type: 'error' });
+    }
+  };
+
   if (selectedClient) {
     return (
       <div className="p-8 h-full flex flex-col">
@@ -286,7 +396,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               }).length})
             </h3>
             <div className="bg-white border rounded-lg overflow-hidden">
-              <table className="w-full">
+              <table className="w-full" ref={appointmentActionsRef}>
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Session Type</th>
@@ -316,29 +426,109 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                       }
                       return apt.booking_status === clientAppointmentTab;
                     }).map((apt, index) => (
-                      <tr key={index} className="border-b hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm">{apt.booking_resource_name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_host_name || selectedTherapist?.name || 'N/A'}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                            apt.booking_status === 'completed' ? 'bg-green-100 text-green-700' :
-                            apt.booking_status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                            apt.booking_status === 'no_show' ? 'bg-orange-100 text-orange-700' :
-                            apt.booking_status === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-blue-100 text-blue-700'
-                          }`}>
-                            {apt.booking_status === 'pending_notes' ? 'Pending Notes' :
-                             apt.booking_status === 'no_show' ? 'No Show' :
-                             apt.booking_status === 'scheduled' ? 'Scheduled' :
-                             apt.booking_status?.charAt(0).toUpperCase() + apt.booking_status?.slice(1)}
-                          </span>
-                        </td>
-                      </tr>
+                      <React.Fragment key={index}>
+                        <tr 
+                          className={`border-b cursor-pointer transition-colors ${
+                            selectedAppointmentIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                          }`}
+                          onClick={() => setSelectedAppointmentIndex(selectedAppointmentIndex === index ? null : index)}
+                        >
+                          <td className="px-4 py-3 text-sm">{apt.booking_resource_name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_host_name || selectedTherapist?.name || 'N/A'}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                              apt.booking_status === 'completed' ? 'bg-green-100 text-green-700' :
+                              apt.booking_status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                              apt.booking_status === 'no_show' ? 'bg-orange-100 text-orange-700' :
+                              apt.booking_status === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
+                              {apt.booking_status === 'pending_notes' ? 'Pending Notes' :
+                               apt.booking_status === 'no_show' ? 'No Show' :
+                               apt.booking_status === 'scheduled' ? 'Scheduled' :
+                               apt.booking_status?.charAt(0).toUpperCase() + apt.booking_status?.slice(1)}
+                            </span>
+                          </td>
+                        </tr>
+                        {selectedAppointmentIndex === index && (
+                          <tr className="bg-gray-100">
+                            <td colSpan={4} className="px-4 py-4">
+                              <div className="flex gap-3 justify-center">
+                                <button
+                                  onClick={() => copyAppointmentDetails(apt)}
+                                  className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                  Copy to Clipboard
+                                </button>
+                                <button
+                                  onClick={() => handleReminderClick(apt)}
+                                  disabled={isMeetingEnded(apt) || apt.booking_status === 'cancelled'}
+                                  className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                    isMeetingEnded(apt) || apt.booking_status === 'cancelled'
+                                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                      : 'border border-gray-400 text-gray-700 hover:bg-white'
+                                  }`}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                  Send Manual Reminder to Client
+                                </button>
+                                <button
+                                  onClick={() => handleSessionNotesReminder(apt)}
+                                  disabled={!isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'}
+                                  className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                    !isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'
+                                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                      : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                                  }`}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                  Send Session Note Reminder to Therapist
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+        {toast && (
+          <div className="fixed bottom-4 right-4 bg-white border rounded-lg shadow-lg p-4 flex items-center gap-3 z-50">
+            <div className={`w-2 h-2 rounded-full ${
+              toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+            }`}></div>
+            <span className="text-sm">{toast.message}</span>
+            <button onClick={() => setToast(null)} className="ml-2 text-gray-400 hover:text-gray-600">✕</button>
+          </div>
+        )}
+        {showReminderModal && selectedAppointmentForReminder && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4">Sending Manual Reminder</h3>
+              <p className="text-gray-600 mb-4">This will send a reminder message to {selectedClient?.invitee_name} on Whatsapp</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={sendWhatsAppNotification}
+                  className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+                >
+                  Send
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReminderModal(false);
+                    setSelectedAppointmentForReminder(null);
+                  }}
+                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}
