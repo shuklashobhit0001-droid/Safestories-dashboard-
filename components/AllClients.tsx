@@ -205,7 +205,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void }> = (
                 paginatedClients.map((client, index) => (
                   <React.Fragment key={index}>
                     <tr className="border-b hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm">
+                      <td className="px-6 py-4 text-sm whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           {client.therapists && client.therapists.length > 1 && (
                             <button

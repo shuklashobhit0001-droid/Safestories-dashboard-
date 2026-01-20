@@ -478,7 +478,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                           }`}
                           onClick={() => setSelectedBookingIndex(selectedBookingIndex === index ? null : index)}
                         >
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
