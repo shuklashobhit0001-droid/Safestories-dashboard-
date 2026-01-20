@@ -31,7 +31,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [clients, setClients] = useState<Client[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expandedClientRows, setExpandedClientRows] = useState<Set<number>>(new Set());
-  const [clientAppointmentTab, setClientAppointmentTab] = useState('all');
+  const [clientAppointmentTab, setClientAppointmentTab] = useState('upcoming');
 
   useEffect(() => {
     fetchTherapists();
