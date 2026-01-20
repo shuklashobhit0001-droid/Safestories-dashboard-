@@ -111,12 +111,20 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
     const refunds = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE refund_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
-          ['completed', 'processed', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE refund_status IS NOT NULL AND booking_start_at BETWEEN $1 AND $2',
+          [start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE refund_status IN ($1, $2)',
-          ['completed', 'processed']
+          'SELECT COUNT(*) as total FROM bookings WHERE refund_status IS NOT NULL'
+        );
+
+    const refundedAmount = hasDateFilter
+      ? await pool.query(
+          'SELECT COALESCE(SUM(refund_amount), 0) as total FROM bookings WHERE refund_status IS NOT NULL AND booking_start_at BETWEEN $1 AND $2',
+          [start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COALESCE(SUM(refund_amount), 0) as total FROM bookings WHERE refund_status IS NOT NULL'
         );
 
     const noShows = hasDateFilter
@@ -156,6 +164,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
     res.json({
       revenue: revenue.rows[0].total,
+      refundedAmount: refundedAmount.rows[0].total,
       sessions: sessions.rows[0].total,
       lastMonthSessions: lastMonthSessions.rows[0].total,
       freeConsultations: freeConsultations.rows[0].total,
@@ -224,6 +233,11 @@ app.get('/api/dashboard/bookings', async (req, res) => {
 // Get all clients
 app.get('/api/clients', async (req, res) => {
   try {
+    // Helper function to normalize phone numbers
+    const normalizePhone = (phone: string | null) => {
+      return phone ? phone.replace(/[\s\-\(\)\+]/g, '').toLowerCase() : '';
+    };
+
     const result = await pool.query(`
       SELECT 
         invitee_name,
@@ -255,15 +269,17 @@ app.get('/api/clients', async (req, res) => {
     
     result.rows.forEach(row => {
       let key = null;
+      const normalizedPhone = normalizePhone(row.invitee_phone);
+      const normalizedEmail = row.invitee_email ? row.invitee_email.toLowerCase().trim() : '';
       
-      if (row.invitee_email && emailToKey.has(row.invitee_email)) {
-        key = emailToKey.get(row.invitee_email);
-      } else if (row.invitee_phone && phoneToKey.has(row.invitee_phone)) {
-        key = phoneToKey.get(row.invitee_phone);
+      if (normalizedEmail && emailToKey.has(normalizedEmail)) {
+        key = emailToKey.get(normalizedEmail);
+      } else if (normalizedPhone && phoneToKey.has(normalizedPhone)) {
+        key = phoneToKey.get(normalizedPhone);
       } else {
         key = `client-${clientMap.size}`;
-        if (row.invitee_email) emailToKey.set(row.invitee_email, key);
-        if (row.invitee_phone) phoneToKey.set(row.invitee_phone, key);
+        if (normalizedEmail) emailToKey.set(normalizedEmail, key);
+        if (normalizedPhone) phoneToKey.set(normalizedPhone, key);
       }
       
       if (!clientMap.has(key)) {
@@ -285,6 +301,11 @@ app.get('/api/clients', async (req, res) => {
       // Fill empty email with existing email from same client
       if (row.invitee_email && !client.invitee_email) {
         client.invitee_email = row.invitee_email;
+      }
+      
+      // Fill empty phone with existing phone from same client
+      if (row.invitee_phone && !client.invitee_phone) {
+        client.invitee_phone = row.invitee_phone;
       }
       
       // Add all booking records to therapists array (group by phone + email + therapist)
