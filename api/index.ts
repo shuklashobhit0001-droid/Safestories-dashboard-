@@ -749,10 +749,16 @@ async function handleDashboardStats(req: VercelRequest, res: VercelResponse) {
   const freeConsultations = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL) ${dateFilter}`);
   const cancelled = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status = 'cancelled' ${dateFilter}`);
   const refunds = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE refund_status IN ('completed', 'processed') ${dateFilter}`);
+  const refundedAmount = await pool.query(`SELECT COALESCE(SUM(refund_amount), 0) as total FROM bookings WHERE refund_status IS NOT NULL ${dateFilter}`);
   const noShows = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status = 'no_show' ${dateFilter}`);
   res.json({
-    revenue: revenue.rows[0].total, sessions: sessions.rows[0].total, freeConsultations: freeConsultations.rows[0].total,
-    cancelled: cancelled.rows[0].total, refunds: refunds.rows[0].total, noShows: noShows.rows[0].total
+    revenue: revenue.rows[0].total, 
+    refundedAmount: refundedAmount.rows[0].total,
+    sessions: sessions.rows[0].total, 
+    freeConsultations: freeConsultations.rows[0].total,
+    cancelled: cancelled.rows[0].total, 
+    refunds: refunds.rows[0].total, 
+    noShows: noShows.rows[0].total
   });
 }
 
