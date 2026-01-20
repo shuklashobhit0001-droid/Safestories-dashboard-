@@ -1261,10 +1261,28 @@ async function handleClientDetails(req: VercelRequest, res: VercelResponse) {
     const appointmentsResult = await pool.query(query, params);
     console.log('Found appointments:', appointmentsResult.rows.length);
     
-    const appointments = appointmentsResult.rows.map(apt => ({
-      ...apt,
-      booking_invitee_time: apt.booking_invitee_time || 'N/A'
-    }));
+    const appointments = appointmentsResult.rows.map(apt => {
+      let status = apt.booking_status || 'confirmed';
+      const now = new Date();
+      const sessionDate = apt.booking_start_at ? new Date(apt.booking_start_at) : new Date();
+      
+      if (status !== 'cancelled' && status !== 'no_show') {
+        if (apt.has_session_notes) {
+          status = 'completed';
+        } else if (sessionDate < now) {
+          status = 'pending_notes';
+        } else {
+          status = 'scheduled';
+        }
+      }
+      
+      return {
+        ...apt,
+        booking_invitee_time: apt.booking_invitee_time || 'N/A',
+        booking_status: status,
+        booking_start_at_raw: apt.booking_start_at
+      };
+    });
     
     res.json({ appointments });
   } catch (error) {
