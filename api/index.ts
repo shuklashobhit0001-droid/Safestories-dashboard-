@@ -279,7 +279,7 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
       const now = new Date();
       const sessionDate = new Date(row.booking_start_at);
       
-      if (row.booking_status !== 'cancelled' && row.booking_status !== 'no_show') {
+      if (row.booking_status !== 'cancelled' && row.booking_status !== 'canceled' && row.booking_status !== 'no_show' && row.booking_status !== 'no show') {
         if (row.has_session_notes) {
           status = 'completed';
         } else if (sessionDate < now) {
@@ -800,7 +800,7 @@ async function handleDashboardStats(req: VercelRequest, res: VercelResponse) {
   const cancelled = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status = 'cancelled' ${dateFilter}`);
   const refunds = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE refund_status IS NOT NULL ${dateFilter}`);
   const refundedAmount = await pool.query(`SELECT COALESCE(SUM(refund_amount), 0) as total FROM bookings WHERE refund_status IS NOT NULL ${dateFilter}`);
-  const noShows = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status = 'no_show' ${dateFilter}`);
+  const noShows = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ('no_show', 'no show') ${dateFilter}`);
   res.json({
     revenue: revenue.rows[0].total, 
     refundedAmount: refundedAmount.rows[0].total,
