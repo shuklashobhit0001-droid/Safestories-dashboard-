@@ -1077,7 +1077,7 @@ app.get('/api/client-appointments', async (req, res) => {
 
     const appointments = appointmentsResult.rows.map(row => ({
       booking_id: row.booking_id,
-      session_timings: row.session_timings || 'N/A',
+      session_timings: convertToIST(row.session_timings) || row.session_timings || 'N/A',
       mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
       has_session_notes: row.has_session_notes,
       booking_status: row.booking_status,
