@@ -1,7 +1,51 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import pool from '../lib/db.js';
 import { notifyAllAdmins, notifyTherapist } from '../lib/notifications.js';
-import { convertToIST } from '../lib/timezone.js';
+
+// Timezone conversion function
+const convertToIST = (timeStr: string): string => {
+  if (!timeStr) return timeStr;
+  const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+  if (!match) return timeStr;
+  try {
+    const [, dateStr, startTime, endTime, offset] = match;
+    const dateParts = dateStr.match(/(\w+), (\w+) (\d+), (\d+)/);
+    if (!dateParts) return timeStr;
+    const [, , month, day, year] = dateParts;
+    const monthMap: { [key: string]: number } = {
+      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+    };
+    const [h, rest] = startTime.split(':');
+    const [m, period] = rest.split(' ');
+    let hour = parseInt(h);
+    if (period === 'PM' && hour !== 12) hour += 12;
+    if (period === 'AM' && hour === 12) hour = 0;
+    const originalDate = new Date(Date.UTC(parseInt(year), monthMap[month], parseInt(day), hour, parseInt(m)));
+    const [offsetHours, offsetMins] = offset.split(':').map(n => parseInt(n));
+    const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+    const istOffset = 330;
+    const diffMinutes = istOffset - offsetTotal;
+    const istDate = new Date(originalDate.getTime() + diffMinutes * 60 * 1000);
+    const istEndDate = new Date(istDate.getTime() + 50 * 60 * 1000);
+    const formatDate = (d: Date) => {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+    };
+    const formatTime = (d: Date) => {
+      const hours = d.getUTCHours();
+      const minutes = d.getUTCMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const hour12 = hours % 12 || 12;
+      return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+    };
+    return `${formatDate(istDate)} at ${formatTime(istDate)} - ${formatTime(istEndDate)} IST`;
+  } catch (error) {
+    console.error('Error converting time:', error);
+    return timeStr;
+  }
+};
 
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
