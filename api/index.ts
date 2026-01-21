@@ -27,6 +27,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     switch (route) {
+      case 'live-sessions-count':
+        return await handleLiveSessionsCount(req, res);
+      case 'therapists-live-status':
+        return await handleTherapistsLiveStatus(req, res);
       case 'login':
         return await handleLogin(req, res);
       case 'therapists':
@@ -93,6 +97,80 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('API error:', error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) {
+  try {
+    const bookings = await pool.query(`
+      SELECT booking_id, booking_invitee_time, booking_status
+      FROM bookings
+      WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+      AND booking_invitee_time IS NOT NULL
+    `);
+
+    const now = new Date();
+    let liveCount = 0;
+
+    for (const booking of bookings.rows) {
+      try {
+        const timeMatch = booking.booking_invitee_time.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M)/i);
+        if (!timeMatch) continue;
+        
+        const dateStr = timeMatch[1];
+        const timeStr = timeMatch[2];
+        const startTime = new Date(`${dateStr} ${timeStr} GMT+0530`);
+        const endTime = new Date(startTime.getTime() + 50 * 60 * 1000);
+        
+        if (now >= startTime && now <= endTime) {
+          liveCount++;
+        }
+      } catch (error) {
+        console.error('Error parsing booking time:', error);
+      }
+    }
+
+    res.json({ liveCount });
+  } catch (error) {
+    console.error('Error fetching live sessions count:', error);
+    res.status(500).json({ error: 'Failed to fetch live sessions count' });
+  }
+}
+
+async function handleTherapistsLiveStatus(req: VercelRequest, res: VercelResponse) {
+  try {
+    const bookings = await pool.query(`
+      SELECT booking_host_name, booking_invitee_time, booking_status
+      FROM bookings
+      WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+      AND booking_invitee_time IS NOT NULL
+    `);
+
+    const now = new Date();
+    const liveStatus: { [key: string]: boolean } = {};
+
+    for (const booking of bookings.rows) {
+      try {
+        const timeMatch = booking.booking_invitee_time.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M)/i);
+        if (!timeMatch) continue;
+        
+        const dateStr = timeMatch[1];
+        const timeStr = timeMatch[2];
+        const startTime = new Date(`${dateStr} ${timeStr} GMT+0530`);
+        const endTime = new Date(startTime.getTime() + 50 * 60 * 1000);
+        
+        if (now >= startTime && now <= endTime) {
+          liveStatus[booking.booking_host_name] = true;
+        }
+      } catch (error) {
+        console.error('Error parsing booking time:', error);
+      }
+    }
+
+    res.json(liveStatus);
+  } catch (error) {
+    console.error('Error fetching therapists live status:', error);
+    res.status(500).json({ error: 'Failed to fetch therapists live status' });
   }
 }
 
