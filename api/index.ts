@@ -291,196 +291,45 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
         if (!timeStr) return timeStr;
         const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
         if (!match) return timeStr;
-        const [, date, startTime, endTime, offset] = match;
-        const parseTime = (time: string) => {
-          const [h, rest] = time.split(':');
+        try {
+          const [, dateStr, startTime, endTime, offset] = match;
+          const dateParts = dateStr.match(/(\w+), (\w+) (\d+), (\d+)/);
+          if (!dateParts) return timeStr;
+          const [, , month, day, year] = dateParts;
+          const monthMap: { [key: string]: number } = {
+            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+          };
+          const [h, rest] = startTime.split(':');
           const [m, period] = rest.split(' ');
           let hour = parseInt(h);
           if (period === 'PM' && hour !== 12) hour += 12;
           if (period === 'AM' && hour === 12) hour = 0;
-          const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
+          const originalDate = new Date(Date.UTC(parseInt(year), monthMap[month], parseInt(day), hour, parseInt(m)));
+          const [offsetHours, offsetMins] = offset.split(':').map(n => parseInt(n));
           const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
           const istOffset = 330;
-          const diff = istOffset - offsetTotal;
-          let totalMins = hour * 60 + parseInt(m) + diff;
-          const newHour = Math.floor(totalMins / 60) % 24;
-          const newMin = totalMins % 60;
-          const period12 = newHour >= 12 ? 'PM' : 'AM';
-          const hour12 = newHour % 12 || 12;
-          return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-        };
-        const istStart = parseTime(startTime);
-        const istEnd = parseTime(endTime);
-        return `${date} at ${istStart} - ${istEnd} IST`;
+          const diffMinutes = istOffset - offsetTotal;
+          const istDate = new Date(originalDate.getTime() + diffMinutes * 60 * 1000);
+          const istEndDate = new Date(istDate.getTime() + 50 * 60 * 1000);
+          const formatDate = (d: Date) => {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+          };
+          const formatTime = (d: Date) => {
+            const hours = d.getUTCHours();
+            const minutes = d.getUTCMinutes();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const hour12 = hours % 12 || 12;
+            return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+          };
+          return `${formatDate(istDate)} at ${formatTime(istDate)} - ${formatTime(istEndDate)} IST`;
+        } catch (error) {
+          console.error('Error converting time:', error);
+          return timeStr;
+        }
       };
-      
-      return {
-        booking_id: row.booking_id,
-        booking_start_at: convertToIST(row.booking_invitee_time),
-        booking_resource_name: row.booking_resource_name,
-        invitee_name: row.invitee_name,
-        invitee_phone: row.invitee_phone,
-        invitee_email: row.invitee_email,
-        booking_host_name: row.booking_host_name,
-        booking_mode: row.booking_mode ? row.booking_mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
-        booking_joining_link: row.booking_joining_link,
-        booking_checkin_url: row.booking_checkin_url,
-        therapist_id: row.therapist_id,
-        has_session_notes: row.has_session_notes,
-        booking_status: status,
-        booking_start_at_raw: row.booking_start_at
-      };
-    });
-
-    res.json(appointments);
-  } catch (error) {
-    console.error('Error fetching appointments:', error);
-    res.status(500).json({ error: 'Failed to fetch appointments' });
-  }
-}
-
-async function handleTherapies(req: VercelRequest, res: VercelResponse) {
-  const result = await pool.query('SELECT DISTINCT specialization FROM therapists WHERE specialization IS NOT NULL');
-  const therapySet = new Set<string>();
-  result.rows.forEach(row => {
-    const specializations = row.specialization.split(',').map((s: string) => s.trim());
-    specializations.forEach((spec: string) => therapySet.add(spec));
-  });
-  const therapies = Array.from(therapySet).sort().map(therapy => ({ therapy_name: therapy }));
-  res.json(therapies);
-}
-
-async function handleRefunds(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' });
-  
-  const { status } = req.query;
-  
-  let query = `
-    SELECT 
-      r.client_name,
-      r.session_name,
-      r.session_timings,
-      r.refund_status,
-      COALESCE(b.invitee_phone, '') as invitee_phone,
-      COALESCE(b.invitee_email, '') as invitee_email,
-      COALESCE(b.refund_amount, 0) as refund_amount
-    FROM refund_cancellation_table r
-    LEFT JOIN bookings b ON r.session_id = b.booking_id
-    WHERE b.booking_status IN ('cancelled', 'canceled')
-      AND r.refund_status IS NOT NULL
-      AND r.refund_status IN ('initiated', 'failed', 'completed', 'processed')
-  `;
-  
-  const params: any[] = [];
-  
-  if (status && status !== 'all') {
-    query += ' AND LOWER(r.refund_status) = LOWER($1)';
-    params.push(status);
-  }
-  
-  query += ' ORDER BY r.session_timings DESC';
-  
-  const result = await pool.query(query, params);
-  
-  const refunds = result.rows.map(row => {
-    let formattedTimings = 'N/A';
-    if (row.session_timings) {
-      const date = new Date(row.session_timings);
-      const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
-      const endDate = new Date(istDate.getTime() + (50 * 60 * 1000));
-      
-      const formatTime = (d: Date) => {
-        const hours = d.getHours();
-        const minutes = d.getMinutes();
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        const hour12 = hours % 12 || 12;
-        return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-      };
-      
-      const weekday = istDate.toLocaleDateString('en-US', { weekday: 'long' });
-      const month = istDate.toLocaleDateString('en-US', { month: 'short' });
-      const day = istDate.getDate();
-      const year = istDate.getFullYear();
-      
-      formattedTimings = `${weekday}, ${month} ${day}, ${year} at ${formatTime(istDate)} - ${formatTime(endDate)} IST`;
-    }
-    
-    return {
-      ...row,
-      session_timings: formattedTimings,
-      refund_status: row.refund_status || 'Pending'
-    };
-  });
-  
-  res.status(200).json(refunds);
-}
-
-async function handleBookingRequests(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation } = req.body;
-  const result = await pool.query(
-    `INSERT INTO booking_requests (client_name, client_whatsapp, client_email, therapy_type, therapist_name, booking_link, status, is_free_consultation)
-     VALUES ($1, $2, $3, $4, $5, $6, 'sent', $7) RETURNING *`,
-    [clientName, clientWhatsapp, clientEmail, therapyType, therapistName, bookingLink, isFreeConsultation || false]
-  );
-  
-  // Notify admins about new booking request
-  await notifyAllAdmins(
-    'new_booking_request',
-    'New Booking Request',
-    `Booking request to ${clientName} for ${therapyType}`,
-    result.rows[0].request_id
-  );
-  
-  res.json({ success: true, data: result.rows[0] });
-}
-
-async function handleTherapistAppointments(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const { therapist_id } = req.query;
-  if (!therapist_id) return res.status(400).json({ error: 'Therapist ID is required' });
-  const userResult = await pool.query('SELECT therapist_id FROM users WHERE id = $1 AND role = $2', [therapist_id, 'therapist']);
-  if (userResult.rows.length === 0) return res.status(404).json({ error: 'Therapist user not found' });
-  const therapistUserId = userResult.rows[0].therapist_id;
-  const therapistResult = await pool.query('SELECT * FROM therapists WHERE therapist_id = $1', [therapistUserId]);
-  const therapist = therapistResult.rows[0];
-  const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
-  const appointmentsResult = await pool.query(`
-    SELECT b.invitee_name as client_name, b.invitee_phone as contact_info, b.booking_resource_name as session_name,
-      b.booking_invitee_time as session_timings, b.booking_mode as mode, b.booking_start_at as booking_date, 
-      b.booking_status, b.booking_id,
-      CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
-    FROM bookings b
-    LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-    WHERE b.booking_host_name ILIKE $1 ORDER BY b.booking_start_at DESC
-  `, [`%${therapistFirstName}%`]);
-  
-  const convertToIST = (timeStr: string) => {
-    if (!timeStr) return timeStr;
-    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-    if (!match) return timeStr;
-    const [, date, startTime, endTime, offset] = match;
-    const parseTime = (time: string) => {
-      const [h, rest] = time.split(':');
-      const [m, period] = rest.split(' ');
-      let hour = parseInt(h);
-      if (period === 'PM' && hour !== 12) hour += 12;
-      if (period === 'AM' && hour === 12) hour = 0;
-      const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
-      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-      const istOffset = 330;
-      const diff = istOffset - offsetTotal;
-      let totalMins = hour * 60 + parseInt(m) + diff;
-      const newHour = Math.floor(totalMins / 60) % 24;
-      const newMin = totalMins % 60;
-      const period12 = newHour >= 12 ? 'PM' : 'AM';
-      const hour12 = newHour % 12 || 12;
-      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-    };
-    const istStart = parseTime(startTime);
-    const istEnd = parseTime(endTime);
-    return `${date} at ${istStart} - ${istEnd} IST`;
-  };
   
   const appointments = appointmentsResult.rows.map(apt => ({
     ...apt,
@@ -618,31 +467,48 @@ async function handleTherapistDetails(req: VercelRequest, res: VercelResponse) {
   `, [name]);
   
   const convertToIST = (timeStr: string) => {
-    if (!timeStr) return timeStr;
-    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-    if (!match) return timeStr;
-    const [, date, startTime, endTime, offset] = match;
-    const parseTime = (time: string) => {
-      const [h, rest] = time.split(':');
-      const [m, period] = rest.split(' ');
-      let hour = parseInt(h);
-      if (period === 'PM' && hour !== 12) hour += 12;
-      if (period === 'AM' && hour === 12) hour = 0;
-      const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
-      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-      const istOffset = 330;
-      const diff = istOffset - offsetTotal;
-      let totalMins = hour * 60 + parseInt(m) + diff;
-      const newHour = Math.floor(totalMins / 60) % 24;
-      const newMin = totalMins % 60;
-      const period12 = newHour >= 12 ? 'PM' : 'AM';
-      const hour12 = newHour % 12 || 12;
-      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-    };
-    const istStart = parseTime(startTime);
-    const istEnd = parseTime(endTime);
-    return `${date} at ${istStart} - ${istEnd} IST`;
-  };
+        if (!timeStr) return timeStr;
+        const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+        if (!match) return timeStr;
+        try {
+          const [, dateStr, startTime, endTime, offset] = match;
+          const dateParts = dateStr.match(/(\w+), (\w+) (\d+), (\d+)/);
+          if (!dateParts) return timeStr;
+          const [, , month, day, year] = dateParts;
+          const monthMap: { [key: string]: number } = {
+            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+          };
+          const [h, rest] = startTime.split(':');
+          const [m, period] = rest.split(' ');
+          let hour = parseInt(h);
+          if (period === 'PM' && hour !== 12) hour += 12;
+          if (period === 'AM' && hour === 12) hour = 0;
+          const originalDate = new Date(Date.UTC(parseInt(year), monthMap[month], parseInt(day), hour, parseInt(m)));
+          const [offsetHours, offsetMins] = offset.split(':').map(n => parseInt(n));
+          const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+          const istOffset = 330;
+          const diffMinutes = istOffset - offsetTotal;
+          const istDate = new Date(originalDate.getTime() + diffMinutes * 60 * 1000);
+          const istEndDate = new Date(istDate.getTime() + 50 * 60 * 1000);
+          const formatDate = (d: Date) => {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+          };
+          const formatTime = (d: Date) => {
+            const hours = d.getUTCHours();
+            const minutes = d.getUTCMinutes();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const hour12 = hours % 12 || 12;
+            return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+          };
+          return `${formatDate(istDate)} at ${formatTime(istDate)} - ${formatTime(istEndDate)} IST`;
+        } catch (error) {
+          console.error('Error converting time:', error);
+          return timeStr;
+        }
+      };
   
   const appointments = appointmentsResult.rows.map(apt => ({
     ...apt,
@@ -695,31 +561,48 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
   `, [`%${therapistFirstName}%`]);
   
   const convertToIST = (timeStr: string) => {
-    if (!timeStr) return timeStr;
-    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-    if (!match) return timeStr;
-    const [, date, startTime, endTime, offset] = match;
-    const parseTime = (time: string) => {
-      const [h, rest] = time.split(':');
-      const [m, period] = rest.split(' ');
-      let hour = parseInt(h);
-      if (period === 'PM' && hour !== 12) hour += 12;
-      if (period === 'AM' && hour === 12) hour = 0;
-      const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
-      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-      const istOffset = 330;
-      const diff = istOffset - offsetTotal;
-      let totalMins = hour * 60 + parseInt(m) + diff;
-      const newHour = Math.floor(totalMins / 60) % 24;
-      const newMin = totalMins % 60;
-      const period12 = newHour >= 12 ? 'PM' : 'AM';
-      const hour12 = newHour % 12 || 12;
-      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-    };
-    const istStart = parseTime(startTime);
-    const istEnd = parseTime(endTime);
-    return `${date} at ${istStart} - ${istEnd} IST`;
-  };
+        if (!timeStr) return timeStr;
+        const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+        if (!match) return timeStr;
+        try {
+          const [, dateStr, startTime, endTime, offset] = match;
+          const dateParts = dateStr.match(/(\w+), (\w+) (\d+), (\d+)/);
+          if (!dateParts) return timeStr;
+          const [, , month, day, year] = dateParts;
+          const monthMap: { [key: string]: number } = {
+            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+          };
+          const [h, rest] = startTime.split(':');
+          const [m, period] = rest.split(' ');
+          let hour = parseInt(h);
+          if (period === 'PM' && hour !== 12) hour += 12;
+          if (period === 'AM' && hour === 12) hour = 0;
+          const originalDate = new Date(Date.UTC(parseInt(year), monthMap[month], parseInt(day), hour, parseInt(m)));
+          const [offsetHours, offsetMins] = offset.split(':').map(n => parseInt(n));
+          const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+          const istOffset = 330;
+          const diffMinutes = istOffset - offsetTotal;
+          const istDate = new Date(originalDate.getTime() + diffMinutes * 60 * 1000);
+          const istEndDate = new Date(istDate.getTime() + 50 * 60 * 1000);
+          const formatDate = (d: Date) => {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+          };
+          const formatTime = (d: Date) => {
+            const hours = d.getUTCHours();
+            const minutes = d.getUTCMinutes();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const hour12 = hours % 12 || 12;
+            return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+          };
+          return `${formatDate(istDate)} at ${formatTime(istDate)} - ${formatTime(istEndDate)} IST`;
+        } catch (error) {
+          console.error('Error converting time:', error);
+          return timeStr;
+        }
+      };
   
   res.json({
     therapist: { name: therapist.name, specialization: therapist.specialization },
@@ -758,606 +641,48 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
         ORDER BY booking_start_at ASC LIMIT 10
       `);
   const convertToIST = (timeStr: string) => {
-    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-    if (!match) return timeStr;
-    const [, date, startTime, endTime, offset] = match;
-    const parseTime = (time: string, dateStr: string, tz: string) => {
-      const [h, rest] = time.split(':');
-      const [m, period] = rest.split(' ');
-      let hour = parseInt(h);
-      if (period === 'PM' && hour !== 12) hour += 12;
-      if (period === 'AM' && hour === 12) hour = 0;
-      const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
-      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-      const istOffset = 330;
-      const diff = istOffset - offsetTotal;
-      let totalMins = hour * 60 + parseInt(m) + diff;
-      const newHour = Math.floor(totalMins / 60) % 24;
-      const newMin = totalMins % 60;
-      const period12 = newHour >= 12 ? 'PM' : 'AM';
-      const hour12 = newHour % 12 || 12;
-      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-    };
-    const istStart = parseTime(startTime, date, `GMT${offset}`);
-    const istEnd = parseTime(endTime, date, `GMT${offset}`);
-    return `${date} at ${istStart} - ${istEnd} IST`;
-  };
-  const bookings = result.rows.map(row => ({
-    ...row, booking_start_at: convertToIST(row.booking_invitee_time),
-    mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
-  }));
-  res.json(bookings);
-}
-
-async function handleDashboardStats(req: VercelRequest, res: VercelResponse) {
-  const { start, end } = req.query;
-  const dateFilter = start && end ? `AND invitee_created_at BETWEEN '${start}' AND '${end} 23:59:59'` : '';
-  const revenue = await pool.query(`SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status != 'cancelled' ${dateFilter}`);
-  const sessions = await pool.query(`SELECT COUNT(invitee_created_at) as total FROM bookings WHERE booking_status IN ('confirmed', 'rescheduled') ${dateFilter}`);
-  const freeConsultations = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL) ${dateFilter}`);
-  const cancelled = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status = 'cancelled' ${dateFilter}`);
-  const refunds = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE refund_status IS NOT NULL ${dateFilter}`);
-  const refundedAmount = await pool.query(`SELECT COALESCE(SUM(refund_amount), 0) as total FROM bookings WHERE refund_status IS NOT NULL ${dateFilter}`);
-  const noShows = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ('no_show', 'no show') ${dateFilter}`);
-  res.json({
-    revenue: revenue.rows[0].total, 
-    refundedAmount: refundedAmount.rows[0].total,
-    sessions: sessions.rows[0].total, 
-    freeConsultations: freeConsultations.rows[0].total,
-    cancelled: cancelled.rows[0].total, 
-    refunds: refunds.rows[0].total, 
-    noShows: noShows.rows[0].total
-  });
-}
-
-async function handleTransferClient(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  
-  try {
-    const {
-      clientName, clientEmail, clientPhone, fromTherapistName, toTherapistId,
-      transferredByAdminId, transferredByAdminName, reason
-    } = req.body;
-
-    const therapistResult = await pool.query('SELECT * FROM therapists WHERE therapist_id = $1', [toTherapistId]);
-    if (therapistResult.rows.length === 0) return res.status(404).json({ error: 'Therapist not found' });
-
-    const newTherapist = therapistResult.rows[0];
-    const oldTherapistResult = await pool.query('SELECT therapist_id FROM therapists WHERE name = $1', [fromTherapistName]);
-    const fromTherapistId = oldTherapistResult.rows[0]?.therapist_id || null;
-
-    const clientResult = await pool.query(
-      'SELECT invitee_uuid FROM bookings WHERE invitee_email = $1 OR invitee_phone = $2 LIMIT 1',
-      [clientEmail, clientPhone]
-    );
-    const clientId = clientResult.rows[0]?.invitee_uuid || null;
-
-    await pool.query(
-      `INSERT INTO client_transfer_history 
-       (client_name, client_email, client_phone, from_therapist_id, from_therapist_name, 
-        to_therapist_id, to_therapist_name, transferred_by_admin_id, transferred_by_admin_name, reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [clientName, clientEmail, clientPhone, fromTherapistId, fromTherapistName,
-       toTherapistId, newTherapist.name, transferredByAdminId, transferredByAdminName, reason]
-    );
-
-    // Notify old therapist about transfer out
-    if (fromTherapistId) {
-      await notifyTherapist(
-        fromTherapistId,
-        'client_transfer_out',
-        'Client Transferred',
-        `Client ${clientName} has been transferred to ${newTherapist.name}`,
-        clientId
-      );
-    }
-    
-    // Notify new therapist about transfer in
-    await notifyTherapist(
-      toTherapistId,
-      'client_transfer_in',
-      'New Client Assigned',
-      `Client ${clientName} has been transferred to you from ${fromTherapistName}`,
-      clientId
-    );
-    
-    // Notify admins
-    await notifyAllAdmins(
-      'client_transfer',
-      'Client Transfer Completed',
-      `${clientName} transferred from ${fromTherapistName} to ${newTherapist.name}`,
-      clientId
-    );
-
-    const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/efc4396f-401b-4d46-bfdb-e990a3ac3846';
-    
-    try {
-      await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client: { id: clientId, name: clientName, email: clientEmail, phone: clientPhone },
-          fromTherapist: { name: fromTherapistName, id: fromTherapistId },
-          toTherapist: { name: newTherapist.name, id: toTherapistId },
-          admin: { id: transferredByAdminId, name: transferredByAdminName },
-          reason: reason || 'No reason provided',
-          timestamp: new Date().toISOString()
-        })
-      });
-    } catch (webhookError) {
-      console.error('Webhook error:', webhookError);
-    }
-
-    res.json({ success: true, message: 'Client transferred successfully' });
-  } catch (error) {
-    console.error('Error transferring client:', error);
-    res.status(500).json({ success: false, error: 'Failed to transfer client' });
-  }
-}
-
-async function handleAuditLogs(req: VercelRequest, res: VercelResponse) {
-  if (req.method === 'GET') {
-    const result = await pool.query(
-      `SELECT * FROM audit_logs 
-       WHERE is_visible = true 
-       ORDER BY log_id DESC 
-       LIMIT 500`
-    );
-    return res.json(result.rows);
-  }
-  if (req.method === 'POST') {
-    const { therapist_id, therapist_name, action_type, action_description, client_name, ip_address } = req.body;
-    await pool.query(
-      `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, ip_address, timestamp, is_visible)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
-      [therapist_id, therapist_name, action_type, action_description, client_name, ip_address, getCurrentISTTimestamp()]
-    );
-    return res.json({ success: true });
-  }
-  return res.status(405).json({ error: 'Method not allowed' });
-}
-
-async function handleClearAuditLogs(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  await pool.query('UPDATE audit_logs SET is_visible = false WHERE is_visible = true');
-  res.json({ success: true });
-}
-
-async function handleLogout(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { user } = req.body;
-  if (user?.role === 'therapist') {
-    try {
-      await pool.query(
-        `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, timestamp, is_visible)
-         VALUES ($1, $2, $3, $4, $5, true)`,
-        [user.therapist_id, user.username, 'logout', `${user.username} logged out`, getCurrentISTTimestamp()]
-      );
-      console.log('✅ Audit log created for logout:', user.username, user.therapist_id);
-    } catch (auditError) {
-      console.error('❌ Failed to create audit log for logout:', auditError);
-    }
-  }
-  res.json({ success: true });
-}
-
-async function handleAdditionalNotes(req: VercelRequest, res: VercelResponse) {
-  if (req.method === 'GET') {
-    const { booking_id } = req.query;
-    if (!booking_id) return res.status(400).json({ error: 'Booking ID is required' });
-    
-    const result = await pool.query(
-      'SELECT * FROM client_additional_notes WHERE booking_id = $1 ORDER BY created_at DESC',
-      [booking_id]
-    );
-    return res.json(result.rows);
-  }
-  
-  if (req.method === 'POST') {
-    const { note_id, booking_id, therapist_id, therapist_name, note_text } = req.body;
-    
-    if (!booking_id || !therapist_id || !note_text) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    if (note_id) {
-      await pool.query(
-        'UPDATE client_additional_notes SET note_text = $1, updated_at = CURRENT_TIMESTAMP WHERE note_id = $2',
-        [note_text, note_id]
-      );
-    } else {
-      await pool.query(
-        'INSERT INTO client_additional_notes (booking_id, therapist_id, therapist_name, note_text) VALUES ($1, $2, $3, $4)',
-        [booking_id, therapist_id, therapist_name, note_text]
-      );
-    }
-    return res.json({ success: true });
-  }
-  
-  return res.status(405).json({ error: 'Method not allowed' });
-}
-
-async function handleSessionNotes(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const { booking_id } = req.query;
-  if (!booking_id) return res.status(400).json({ error: 'Booking ID is required' });
-  const result = await pool.query('SELECT * FROM client_session_notes WHERE booking_id = $1', [booking_id]);
-  if (result.rows.length === 0) return res.status(404).json({ error: 'Session notes not found' });
-  res.json(result.rows[0]);
-}
-
-async function handlePaperformLink(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const { booking_id } = req.query;
-  if (!booking_id) return res.status(400).json({ error: 'Booking ID is required' });
-  
-  try {
-    const result = await pool.query(
-      'SELECT paperform_link FROM client_doc_form WHERE booking_id = $1',
-      [booking_id]
-    );
-    
-    if (result.rows.length > 0) {
-      res.json({ paperform_link: result.rows[0].paperform_link });
-    } else {
-      res.json({ paperform_link: null });
-    }
-  } catch (error) {
-    console.error('Error fetching paperform link:', error);
-    res.status(500).json({ error: 'Failed to fetch paperform link' });
-  }
-}
-
-async function handleNotifications(req: VercelRequest, res: VercelResponse) {
-  if (req.method === 'GET') {
-    const { user_id, user_role } = req.query;
-    if (!user_id || !user_role) return res.status(400).json({ error: 'User ID and role required' });
-    
-    const result = await pool.query(
-      'SELECT * FROM notifications WHERE user_id = $1 AND user_role = $2 ORDER BY created_at DESC LIMIT 50',
-      [user_id, user_role]
-    );
-    return res.json(result.rows);
-  }
-  
-  return res.status(405).json({ error: 'Method not allowed' });
-}
-
-async function handleNotificationsMarkAllRead(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const { user_id, user_role } = req.body;
-  await pool.query(
-    'UPDATE notifications SET is_read = true WHERE user_id = $1 AND user_role = $2',
-    [user_id, user_role]
-  );
-  return res.json({ success: true });
-}
-
-async function handleNotificationRead(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const { notification_id } = req.body;
-  if (!notification_id) return res.status(400).json({ error: 'Notification ID required' });
-  
-  await pool.query('UPDATE notifications SET is_read = true WHERE notification_id = $1', [notification_id]);
-  return res.json({ success: true });
-}
-
-async function handleNotificationDelete(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const { notification_id } = req.body;
-  if (!notification_id) return res.status(400).json({ error: 'Notification ID required' });
-  
-  await pool.query('DELETE FROM notifications WHERE notification_id = $1', [notification_id]);
-  return res.json({ success: true });
-}
-
-async function handleBookingStatus(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const { booking_id, status, therapist_id, client_name, session_name } = req.body;
-  
-  try {
-    await pool.query('UPDATE bookings SET booking_status = $1 WHERE booking_id = $2', [status, booking_id]);
-    
-    // Notify based on status change
-    if (status === 'cancelled') {
-      await notifyAllAdmins(
-        'booking_cancelled',
-        'Booking Cancelled',
-        `Session "${session_name}" with ${client_name} has been cancelled`,
-        booking_id
-      );
-      
-      if (therapist_id) {
-        await notifyTherapist(
-          therapist_id,
-          'booking_cancelled',
-          'Session Cancelled',
-          `Your session "${session_name}" with ${client_name} has been cancelled`,
-          booking_id
-        );
-      }
-    } else if (status === 'rescheduled') {
-      await notifyAllAdmins(
-        'booking_rescheduled',
-        'Booking Rescheduled',
-        `Session "${session_name}" with ${client_name} has been rescheduled`,
-        booking_id
-      );
-      
-      if (therapist_id) {
-        await notifyTherapist(
-          therapist_id,
-          'booking_rescheduled',
-          'Session Rescheduled',
-          `Your session "${session_name}" with ${client_name} has been rescheduled`,
-          booking_id
-        );
-      }
-    } else if (status === 'no_show') {
-      await notifyAllAdmins(
-        'no_show',
-        'Client No-Show',
-        `${client_name} did not show up for session "${session_name}"`,
-        booking_id
-      );
-    } else if (status === 'confirmed') {
-      if (therapist_id) {
-        await notifyTherapist(
-          therapist_id,
-          'new_booking',
-          'New Booking Assigned',
-          `New session "${session_name}" booked with ${client_name}`,
-          booking_id
-        );
-      }
-      
-      await notifyAllAdmins(
-        'new_booking',
-        'New Booking',
-        `New session "${session_name}" booked with ${client_name}`,
-        booking_id
-      );
-    }
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error updating booking status:', error);
-    res.status(500).json({ error: 'Failed to update booking status' });
-  }
-}
-
-async function handleSessionNotesSubmit(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const { booking_id, therapist_id, therapist_name, client_name } = req.body;
-  
-  try {
-    // Notify admins about session notes submission
-    await notifyAllAdmins(
-      'session_notes_submitted',
-      'Session Notes Submitted',
-      `${therapist_name} submitted session notes for ${client_name}`,
-      booking_id
-    );
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error handling session notes:', error);
-    res.status(500).json({ error: 'Failed to process session notes' });
-  }
-}
-
-async function handleBookingWebhook(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const { booking_id, client_name, session_name, therapist_name, therapist_id } = req.body;
-  
-  try {
-    // Notify therapist about new booking
-    if (therapist_id) {
-      await notifyTherapist(
-        therapist_id,
-        'new_booking',
-        'New Booking Assigned',
-        `New session "${session_name}" booked with ${client_name}`,
-        booking_id
-      );
-    }
-    
-    // Notify admins
-    await notifyAllAdmins(
-      'new_booking',
-      'New Booking Created',
-      `${client_name} booked "${session_name}" with ${therapist_name}`,
-      booking_id
-    );
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error handling booking webhook:', error);
-    res.status(500).json({ error: 'Failed to process booking webhook' });
-  }
-}
-
-async function handleRefundStatus(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const { booking_id, refund_status, client_name, therapist_id, refund_amount } = req.body;
-  
-  try {
-    await pool.query('UPDATE bookings SET refund_status = $1 WHERE booking_id = $2', [refund_status, booking_id]);
-    
-    if (refund_status === 'completed' || refund_status === 'processed') {
-      // Notify admins only
-      await notifyAllAdmins(
-        'refund_processed',
-        'Refund Completed',
-        `Refund of ₹${refund_amount} processed for ${client_name}`,
-        booking_id
-      );
-    } else if (refund_status === 'requested') {
-      await notifyAllAdmins(
-        'refund_requested',
-        'Refund Requested',
-        `${client_name} requested a refund of ₹${refund_amount}`,
-        booking_id
-      );
-    }
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error updating refund status:', error);
-    res.status(500).json({ error: 'Failed to update refund status' });
-  }
-}
-
-async function handleClientDetails(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const { email, phone } = req.query;
-  
-  console.log('Client details request - email:', email, 'phone:', phone);
-  
-  if (!email && !phone) {
-    return res.status(400).json({ error: 'Client email or phone is required' });
-  }
-  
-  try {
-    let query = `
-      SELECT 
-        invitee_name,
-        booking_resource_name,
-        booking_start_at,
-        booking_invitee_time,
-        booking_host_name,
-        booking_status,
-        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
-      FROM bookings b
-      LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-      WHERE 1=0
-    `;
-    const params: any[] = [];
-    
-    if (email) {
-      params.push(email);
-      query += ` OR LOWER(b.invitee_email) = LOWER($${params.length})`;
-    }
-    
-    if (phone) {
-      params.push(phone);
-      query += ` OR b.invitee_phone = $${params.length}`;
-    }
-    
-    query += ' ORDER BY b.booking_start_at DESC';
-    
-    console.log('Executing query:', query, 'with params:', params);
-    const appointmentsResult = await pool.query(query, params);
-    console.log('Found appointments:', appointmentsResult.rows.length);
-    
-    const appointments = appointmentsResult.rows.map(apt => {
-      let status = apt.booking_status || 'confirmed';
-      const now = new Date();
-      const sessionDate = apt.booking_start_at ? new Date(apt.booking_start_at) : new Date();
-      
-      if (status !== 'cancelled' && status !== 'no_show') {
-        if (apt.has_session_notes) {
-          status = 'completed';
-        } else if (sessionDate < now) {
-          status = 'pending_notes';
-        } else {
-          status = 'scheduled';
+        if (!timeStr) return timeStr;
+        const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
+        if (!match) return timeStr;
+        try {
+          const [, dateStr, startTime, endTime, offset] = match;
+          const dateParts = dateStr.match(/(\w+), (\w+) (\d+), (\d+)/);
+          if (!dateParts) return timeStr;
+          const [, , month, day, year] = dateParts;
+          const monthMap: { [key: string]: number } = {
+            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+          };
+          const [h, rest] = startTime.split(':');
+          const [m, period] = rest.split(' ');
+          let hour = parseInt(h);
+          if (period === 'PM' && hour !== 12) hour += 12;
+          if (period === 'AM' && hour === 12) hour = 0;
+          const originalDate = new Date(Date.UTC(parseInt(year), monthMap[month], parseInt(day), hour, parseInt(m)));
+          const [offsetHours, offsetMins] = offset.split(':').map(n => parseInt(n));
+          const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
+          const istOffset = 330;
+          const diffMinutes = istOffset - offsetTotal;
+          const istDate = new Date(originalDate.getTime() + diffMinutes * 60 * 1000);
+          const istEndDate = new Date(istDate.getTime() + 50 * 60 * 1000);
+          const formatDate = (d: Date) => {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+          };
+          const formatTime = (d: Date) => {
+            const hours = d.getUTCHours();
+            const minutes = d.getUTCMinutes();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const hour12 = hours % 12 || 12;
+            return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+          };
+          return `${formatDate(istDate)} at ${formatTime(istDate)} - ${formatTime(istEndDate)} IST`;
+        } catch (error) {
+          console.error('Error converting time:', error);
+          return timeStr;
         }
-      }
-      
-      return {
-        ...apt,
-        booking_invitee_time: apt.booking_invitee_time || 'N/A',
-        booking_status: status,
-        booking_start_at_raw: apt.booking_start_at
       };
-    });
-    
-    res.json({ appointments });
-  } catch (error) {
-    console.error('Error fetching client details:', error);
-    res.status(500).json({ error: 'Failed to fetch client details' });
-  }
-}
-
-async function handleClientAppointments(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  
-  const { client_phone, therapist_id } = req.query;
-  
-  if (!client_phone) {
-    return res.status(400).json({ error: 'Client phone is required' });
-  }
-  
-  try {
-    let therapistFirstName = '';
-    if (therapist_id) {
-      const userResult = await pool.query(
-        'SELECT therapist_id FROM users WHERE id = $1 AND role = $2',
-        [therapist_id, 'therapist']
-      );
-
-      if (userResult.rows.length > 0) {
-        const therapistUserId = userResult.rows[0].therapist_id;
-        const therapistResult = await pool.query(
-          'SELECT * FROM therapists WHERE therapist_id = $1',
-          [therapistUserId]
-        );
-        const therapist = therapistResult.rows[0];
-        therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
-      }
-    }
-
-    const query = therapistFirstName
-      ? `SELECT b.booking_id, b.booking_invitee_time as session_timings, b.booking_mode as mode,
-          b.booking_start_at as booking_date, b.booking_status,
-          CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
-        FROM bookings b LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-        WHERE b.invitee_phone = $1 AND b.booking_host_name ILIKE $2
-        ORDER BY b.booking_start_at DESC`
-      : `SELECT b.booking_id, b.booking_invitee_time as session_timings, b.booking_mode as mode,
-          b.booking_start_at as booking_date, b.booking_status,
-          CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
-        FROM bookings b LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-        WHERE b.invitee_phone = $1 ORDER BY b.booking_start_at DESC`;
-
-    const params = therapistFirstName ? [client_phone, `%${therapistFirstName}%`] : [client_phone];
-    const appointmentsResult = await pool.query(query, params);
-
-    const convertToIST = (timeStr: string) => {
-      if (!timeStr) return timeStr;
-      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-      if (!match) return timeStr;
-      const [, date, startTime, endTime, offset] = match;
-      const parseTime = (time: string) => {
-        const [h, rest] = time.split(':');
-        const [m, period] = rest.split(' ');
-        let hour = parseInt(h);
-        if (period === 'PM' && hour !== 12) hour += 12;
-        if (period === 'AM' && hour === 12) hour = 0;
-        const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
-        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-        const istOffset = 330;
-        const diff = istOffset - offsetTotal;
-        let totalMins = hour * 60 + parseInt(m) + diff;
-        const newHour = Math.floor(totalMins / 60) % 24;
-        const newMin = totalMins % 60;
-        const period12 = newHour >= 12 ? 'PM' : 'AM';
-        const hour12 = newHour % 12 || 12;
-        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-      };
-      const istStart = parseTime(startTime);
-      const istEnd = parseTime(endTime);
-      return `${date} at ${istStart} - ${istEnd} IST`;
-    };
 
     const appointments = appointmentsResult.rows.map(row => ({
       booking_id: row.booking_id,
