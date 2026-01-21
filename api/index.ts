@@ -409,44 +409,20 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
           status = 'pending_notes';
         }
       }
-          const [h, rest] = startTime.split(':');
-          const [m, period] = rest.split(' ');
-          let hour = parseInt(h);
-          if (period === 'PM' && hour !== 12) hour += 12;
-          if (period === 'AM' && hour === 12) hour = 0;
-          const originalDate = new Date(Date.UTC(parseInt(year), monthMap[month], parseInt(day), hour, parseInt(m)));
-          const [offsetHours, offsetMins] = offset.split(':').map(n => parseInt(n));
-          const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-          const istOffset = 330;
-          const diffMinutes = istOffset - offsetTotal;
-          const istDate = new Date(originalDate.getTime() + diffMinutes * 60 * 1000);
-          const istEndDate = new Date(istDate.getTime() + 50 * 60 * 1000);
-          const formatDate = (d: Date) => {
-            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
-          };
-          const formatTime = (d: Date) => {
-            const hours = d.getUTCHours();
-            const minutes = d.getUTCMinutes();
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            const hour12 = hours % 12 || 12;
-            return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-          };
-          return `${formatDate(istDate)} at ${formatTime(istDate)} - ${formatTime(istEndDate)} IST`;
-        } catch (error) {
-          console.error('Error converting time:', error);
-          return timeStr;
-        }
+
+      return {
+        ...row,
+        booking_status: status,
+        booking_invitee_time: convertToIST(row.booking_invitee_time),
+        booking_mode: row.booking_mode ? row.booking_mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
       };
+    });
   
-  const appointments = appointmentsResult.rows.map(apt => ({
-    ...apt,
-    session_timings: convertToIST(apt.session_timings),
-    mode: apt.mode ? apt.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
-  }));
-  
-  res.json({ appointments });
+    res.json(appointments);
+  } catch (error) {
+    console.error('Error fetching appointments:', error);
+    res.status(500).json({ error: 'Failed to fetch appointments' });
+  }
 }
 
 async function handleTherapistClients(req: VercelRequest, res: VercelResponse) {
@@ -574,36 +550,6 @@ async function handleTherapistDetails(req: VercelRequest, res: VercelResponse) {
     FROM bookings WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
     ORDER BY booking_start_at DESC LIMIT 10
   `, [name]);
-          const [h, rest] = startTime.split(':');
-          const [m, period] = rest.split(' ');
-          let hour = parseInt(h);
-          if (period === 'PM' && hour !== 12) hour += 12;
-          if (period === 'AM' && hour === 12) hour = 0;
-          const originalDate = new Date(Date.UTC(parseInt(year), monthMap[month], parseInt(day), hour, parseInt(m)));
-          const [offsetHours, offsetMins] = offset.split(':').map(n => parseInt(n));
-          const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-          const istOffset = 330;
-          const diffMinutes = istOffset - offsetTotal;
-          const istDate = new Date(originalDate.getTime() + diffMinutes * 60 * 1000);
-          const istEndDate = new Date(istDate.getTime() + 50 * 60 * 1000);
-          const formatDate = (d: Date) => {
-            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
-          };
-          const formatTime = (d: Date) => {
-            const hours = d.getUTCHours();
-            const minutes = d.getUTCMinutes();
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            const hour12 = hours % 12 || 12;
-            return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-          };
-          return `${formatDate(istDate)} at ${formatTime(istDate)} - ${formatTime(istEndDate)} IST`;
-        } catch (error) {
-          console.error('Error converting time:', error);
-          return timeStr;
-        }
-      };
   
   const appointments = appointmentsResult.rows.map(apt => ({
     ...apt,
@@ -654,36 +600,6 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
     FROM bookings WHERE booking_host_name ILIKE $1 AND booking_start_at >= NOW() AND booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show')
     ORDER BY booking_start_at ASC LIMIT 10
   `, [`%${therapistFirstName}%`]);
-          const [h, rest] = startTime.split(':');
-          const [m, period] = rest.split(' ');
-          let hour = parseInt(h);
-          if (period === 'PM' && hour !== 12) hour += 12;
-          if (period === 'AM' && hour === 12) hour = 0;
-          const originalDate = new Date(Date.UTC(parseInt(year), monthMap[month], parseInt(day), hour, parseInt(m)));
-          const [offsetHours, offsetMins] = offset.split(':').map(n => parseInt(n));
-          const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-          const istOffset = 330;
-          const diffMinutes = istOffset - offsetTotal;
-          const istDate = new Date(originalDate.getTime() + diffMinutes * 60 * 1000);
-          const istEndDate = new Date(istDate.getTime() + 50 * 60 * 1000);
-          const formatDate = (d: Date) => {
-            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
-          };
-          const formatTime = (d: Date) => {
-            const hours = d.getUTCHours();
-            const minutes = d.getUTCMinutes();
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            const hour12 = hours % 12 || 12;
-            return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-          };
-          return `${formatDate(istDate)} at ${formatTime(istDate)} - ${formatTime(istEndDate)} IST`;
-        } catch (error) {
-          console.error('Error converting time:', error);
-          return timeStr;
-        }
-      };
   
   res.json({
     therapist: { name: therapist.name, specialization: therapist.specialization },
@@ -799,48 +715,12 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
         FROM bookings WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show') AND booking_start_at >= NOW()
         ORDER BY booking_start_at ASC LIMIT 10
       `);
-          const [h, rest] = startTime.split(':');
-          const [m, period] = rest.split(' ');
-          let hour = parseInt(h);
-          if (period === 'PM' && hour !== 12) hour += 12;
-          if (period === 'AM' && hour === 12) hour = 0;
-          const originalDate = new Date(Date.UTC(parseInt(year), monthMap[month], parseInt(day), hour, parseInt(m)));
-          const [offsetHours, offsetMins] = offset.split(':').map(n => parseInt(n));
-          const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-          const istOffset = 330;
-          const diffMinutes = istOffset - offsetTotal;
-          const istDate = new Date(originalDate.getTime() + diffMinutes * 60 * 1000);
-          const istEndDate = new Date(istDate.getTime() + 50 * 60 * 1000);
-          const formatDate = (d: Date) => {
-            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
-          };
-          const formatTime = (d: Date) => {
-            const hours = d.getUTCHours();
-            const minutes = d.getUTCMinutes();
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            const hour12 = hours % 12 || 12;
-            return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-          };
-          return `${formatDate(istDate)} at ${formatTime(istDate)} - ${formatTime(istEndDate)} IST`;
-        } catch (error) {
-          console.error('Error converting time:', error);
-          return timeStr;
-        }
-      };
 
-    const appointments = appointmentsResult.rows.map(row => ({
-      booking_id: row.booking_id,
-      session_timings: convertToIST(row.session_timings),
-      mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
-      has_session_notes: row.has_session_notes,
-      booking_status: row.booking_status
-    }));
+  const bookings = result.rows.map(row => ({
+    ...row,
+    booking_invitee_time: convertToIST(row.booking_invitee_time),
+    mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
+  }));
 
-    res.json({ appointments });
-  } catch (error) {
-    console.error('Client appointments error:', error);
-    res.status(500).json({ error: 'Failed to fetch client appointments' });
-  }
+  res.json(bookings);
 }
