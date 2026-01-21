@@ -22,7 +22,7 @@ async function populateRefundTable() {
 
     const result = await pool.query(`
       INSERT INTO refund_cancellation_table 
-        (client_id, client_name, session_id, session_name, session_timings, payment_id, payment_status)
+        (client_id, client_name, session_id, session_name, session_timings, payment_id, refund_status)
       SELECT 
         invitee_id,
         invitee_name,
@@ -30,9 +30,10 @@ async function populateRefundTable() {
         booking_resource_name,
         booking_start_at,
         invitee_payment_reference_id,
-        COALESCE(refund_status, 'Pending')
+        refund_status
       FROM bookings
       WHERE booking_status IN ('cancelled', 'canceled')
+        AND refund_status IN ('initiated', 'failed')
       RETURNING *;
     `);
 
