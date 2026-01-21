@@ -366,18 +366,16 @@ async function handleRefunds(req: VercelRequest, res: VercelResponse) {
       COALESCE(b.refund_amount, 0) as refund_amount
     FROM refund_cancellation_table r
     LEFT JOIN bookings b ON r.session_id = b.booking_id
-    WHERE 1=1
+    WHERE b.booking_status IN ('cancelled', 'canceled')
+      AND r.refund_status IS NOT NULL
+      AND r.refund_status IN ('initiated', 'failed', 'completed', 'processed')
   `;
   
   const params: any[] = [];
   
   if (status && status !== 'all') {
-    if (String(status).toLowerCase() === 'pending') {
-      query += " AND (LOWER(r.refund_status) = 'pending' OR LOWER(r.refund_status) = 'initiated' OR r.refund_status IS NULL)";
-    } else {
-      query += ' AND LOWER(r.refund_status) = LOWER($1)';
-      params.push(status);
-    }
+    query += ' AND LOWER(r.refund_status) = LOWER($1)';
+    params.push(status);
   }
   
   query += ' ORDER BY r.session_timings DESC';

@@ -261,7 +261,7 @@ app.get('/api/dashboard/bookings', async (req, res) => {
 
     const bookings = result.rows.map(row => ({
       ...row,
-      booking_start_at: row.booking_invitee_time || 'N/A',
+      booking_start_at: convertToIST(row.booking_invitee_time) || row.booking_invitee_time || 'N/A',
       mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
     }));
 
@@ -433,7 +433,7 @@ app.get('/api/appointments', async (req, res) => {
       
       return {
         booking_id: row.booking_id,
-        booking_start_at: row.booking_invitee_time || 'N/A',
+        booking_start_at: convertToIST(row.booking_invitee_time) || row.booking_invitee_time || 'N/A',
         booking_resource_name: row.booking_resource_name,
         invitee_name: row.invitee_name,
         invitee_phone: row.invitee_phone,
@@ -1501,18 +1501,16 @@ app.get('/api/refunds', async (req, res) => {
         COALESCE(b.refund_amount, 0) as refund_amount
       FROM refund_cancellation_table r
       LEFT JOIN bookings b ON r.session_id = b.booking_id
-      WHERE 1=1
+      WHERE b.booking_status IN ('cancelled', 'canceled')
+        AND r.refund_status IS NOT NULL
+        AND r.refund_status IN ('initiated', 'failed', 'completed', 'processed')
     `;
     
     const params: any[] = [];
     
     if (status && status !== 'all') {
-      if (status.toLowerCase() === 'pending') {
-        query += " AND (LOWER(r.refund_status) = 'pending' OR LOWER(r.refund_status) = 'initiated' OR r.refund_status IS NULL)";
-      } else {
-        query += ' AND LOWER(r.refund_status) = LOWER($1)';
-        params.push(status);
-      }
+      query += ' AND LOWER(r.refund_status) = LOWER($1)';
+      params.push(status);
     }
     
     query += ' ORDER BY r.session_timings DESC';
