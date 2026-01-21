@@ -1636,20 +1636,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               ))}
             </div>
 
-            {/* Search Bar */}
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  type="text"
-                  placeholder="Search appointments by session type..."
-                  value={clientAppointmentSearchTerm}
-                  onChange={(e) => setClientAppointmentSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-            </div>
-
             {clientDetailLoading ? (
               <div className="p-8 text-center"><Loader /></div>
             ) : (

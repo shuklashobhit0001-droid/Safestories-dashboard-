@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, ChevronDown, ChevronRight, ArrowRightLeft } from 'lucide-react';
+import { MessageCircle, Search, Download, ChevronDown, ChevronRight, ArrowRightLeft, Plus } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { TransferClientModal } from './TransferClientModal';
 import { Loader } from './Loader';
@@ -20,7 +20,7 @@ interface Client {
   therapists: Therapist[];
 }
 
-export const AllClients: React.FC<{ onClientClick?: (client: any) => void }> = ({ onClientClick }) => {
+export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCreateBooking?: () => void }> = ({ onClientClick, onCreateBooking }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,13 +141,22 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void }> = (
           <h1 className="text-3xl font-bold mb-1">All Clients</h1>
           <p className="text-gray-600">View Client Details, Sessions and more...</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800"
-        >
-          <MessageCircle size={18} />
-          Send Booking Link
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={onCreateBooking}
+            className="bg-white border-2 border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
+          >
+            <Plus size={18} />
+            Create New Booking
+          </button>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800"
+          >
+            <MessageCircle size={18} />
+            Send Booking Link
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}

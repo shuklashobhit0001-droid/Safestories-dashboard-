@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, User, Mail, Phone, Calendar } from 'lucide-react';
+import { X, User, Mail, Phone, Calendar, Search } from 'lucide-react';
 
 interface Client {
   invitee_name: string;
@@ -32,6 +32,7 @@ export const TherapistDetailsModal: React.FC<TherapistDetailsModalProps> = ({ is
   const [clients, setClients] = useState<Client[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
 
   useEffect(() => {
     if (isOpen && therapist) {
@@ -149,6 +150,19 @@ export const TherapistDetailsModal: React.FC<TherapistDetailsModalProps> = ({ is
             {/* Recent Appointments */}
             <div>
               <h3 className="text-lg font-semibold mb-3">Recent Appointments ({appointments.length})</h3>
+              <div style={{backgroundColor: 'red', padding: '10px', marginBottom: '10px'}}>TEST SEARCH BAR</div>
+              <div className="mb-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Search by client name or session type..."
+                    value={appointmentSearchTerm}
+                    onChange={(e) => setAppointmentSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
               <div className="bg-white border rounded-lg overflow-hidden">
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b">
@@ -159,12 +173,20 @@ export const TherapistDetailsModal: React.FC<TherapistDetailsModalProps> = ({ is
                     </tr>
                   </thead>
                   <tbody>
-                    {appointments.length === 0 ? (
+                    {appointments.filter(apt => 
+                      appointmentSearchTerm === '' || 
+                      apt.invitee_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                      apt.booking_resource_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
+                    ).length === 0 ? (
                       <tr>
                         <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
                       </tr>
                     ) : (
-                      appointments.map((apt, index) => (
+                      appointments.filter(apt => 
+                        appointmentSearchTerm === '' || 
+                        apt.invitee_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                        apt.booking_resource_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
+                      ).map((apt, index) => (
                         <tr key={index} className="border-b hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm">{apt.invitee_name}</td>
                           <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_resource_name}</td>

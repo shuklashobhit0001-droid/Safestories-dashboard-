@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell, Copy, Send } from 'lucide-react';
+import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell, Copy, Send, Plus } from 'lucide-react';
 import { Logo } from './Logo';
 import { AllClients } from './AllClients';
 import { AllTherapists } from './AllTherapists';
 import { Appointments } from './Appointments';
 import { RefundsCancellations } from './RefundsCancellations';
 import { SendBookingModal } from './SendBookingModal';
+import { CreateBooking } from './CreateBooking';
 import { AuditLogs } from './AuditLogs';
 import { Notifications } from './Notifications';
 import { Loader } from './Loader';
@@ -83,6 +84,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [liveSessionsCount, setLiveSessionsCount] = useState(0);
   const bookingActionsRef = React.useRef<HTMLTableElement>(null);
 
   const resetAllStates = () => {
@@ -170,6 +172,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
+
+  useEffect(() => {
+    const fetchLiveCount = async () => {
+      try {
+        const response = await fetch('/api/live-sessions-count');
+        if (response.ok) {
+          const data = await response.json();
+          setLiveSessionsCount(data.liveCount);
+        }
+      } catch (error) {
+        console.error('Error fetching live sessions count:', error);
+      }
+    };
+
+    fetchLiveCount();
+    const interval = setInterval(fetchLiveCount, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -326,12 +346,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto relative">
-        {activeView === 'clients' ? (
+        {activeView === 'createBooking' ? (
+          <CreateBooking onBack={() => setActiveView('dashboard')} />
+        ) : activeView === 'clients' ? (
           <AllClients onClientClick={(client) => {
             setSelectedClientForView(client);
             setClientViewSource('clients');
             setActiveView('therapists');
-          }} />
+          }} onCreateBooking={() => setActiveView('createBooking')} />
         ) : activeView === 'therapists' ? (
           <AllTherapists 
             selectedClientProp={selectedClientForView} 
@@ -349,7 +371,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             setSelectedClientForView(client);
             setClientViewSource('appointments');
             setActiveView('therapists');
-          }} />
+          }} onCreateBooking={() => setActiveView('createBooking')} />
         ) : activeView === 'refunds' ? (
           <RefundsCancellations />
         ) : activeView === 'audit' ? (
@@ -367,6 +389,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
               <p className="text-gray-600">Welcome Back, {user?.full_name || user?.username}!</p>
             </div>
             <div className="flex items-center gap-4">
+              <button className="flex items-center gap-2 border rounded-lg px-4 py-2 bg-white hover:bg-gray-50">
+                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                <span className="text-sm font-medium">Live Sessions: {liveSessionsCount}</span>
+              </button>
               <div className="relative" ref={dropdownRef}>
                 <button 
                   onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
@@ -469,13 +495,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <div className="bg-white rounded-lg border">
             <div className="p-6 border-b flex justify-between items-center">
               <h2 className="text-xl font-bold">Upcoming Bookings</h2>
-              <button 
-                onClick={() => setIsModalOpen(true)}
-                className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800"
-              >
-                <MessageCircle size={18} />
-                Send Booking Link
-              </button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setActiveView('createBooking')}
+                  className="bg-white border-2 border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
+                >
+                  <Plus size={18} />
+                  Create New Booking
+                </button>
+                <button 
+                  onClick={() => setIsModalOpen(true)}
+                  className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800"
+                >
+                  <MessageCircle size={18} />
+                  Send Booking Link
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto max-h-80 overflow-y-auto">
               <table className="w-full" ref={bookingActionsRef}>

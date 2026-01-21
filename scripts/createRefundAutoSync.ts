@@ -9,8 +9,8 @@ async function createAutoSyncTrigger() {
       CREATE OR REPLACE FUNCTION sync_refund_cancellation()
       RETURNS TRIGGER AS $$
       BEGIN
-        -- Only sync if booking is cancelled
-        IF NEW.booking_status IN ('cancelled', 'canceled') THEN
+        -- Only sync if booking is cancelled AND refund is initiated or failed
+        IF NEW.booking_status IN ('cancelled', 'canceled') AND NEW.refund_status IN ('initiated', 'failed') THEN
           
           -- Ensure client exists in all_clients_table
           INSERT INTO all_clients_table (client_id, client_name, email_id, phone_number)
@@ -27,10 +27,10 @@ async function createAutoSyncTrigger() {
             (client_id, client_name, session_id, session_name, session_timings, payment_id, refund_status)
           VALUES 
             (NEW.invitee_id, NEW.invitee_name, NEW.booking_id, NEW.booking_resource_name, 
-             NEW.booking_start_at, NEW.invitee_payment_reference_id, COALESCE(NEW.refund_status, 'Pending'))
+             NEW.booking_start_at, NEW.invitee_payment_reference_id, NEW.refund_status)
           ON CONFLICT (session_id) 
           DO UPDATE SET 
-            refund_status = COALESCE(NEW.refund_status, 'Pending'),
+            refund_status = NEW.refund_status,
             session_timings = NEW.booking_start_at;
         END IF;
         

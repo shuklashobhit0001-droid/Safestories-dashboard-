@@ -58,6 +58,40 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Get live sessions count
+app.get('/api/live-sessions-count', async (req, res) => {
+  try {
+    const bookings = await pool.query(`
+      SELECT booking_id, booking_start_at, booking_invitee_time, booking_status
+      FROM bookings
+      WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+      AND booking_start_at IS NOT NULL
+    `);
+
+    const now = new Date();
+    let liveCount = 0;
+
+    for (const booking of bookings.rows) {
+      try {
+        const startTime = new Date(booking.booking_start_at);
+        // Assume 50-minute sessions
+        const endTime = new Date(startTime.getTime() + 50 * 60 * 1000);
+        
+        if (now >= startTime && now <= endTime) {
+          liveCount++;
+        }
+      } catch (error) {
+        console.error('Error parsing booking time:', error);
+      }
+    }
+
+    res.json({ liveCount });
+  } catch (error) {
+    console.error('Error fetching live sessions count:', error);
+    res.status(500).json({ error: 'Failed to fetch live sessions count' });
+  }
+});
+
 // Get dashboard stats
 app.get('/api/dashboard/stats', async (req, res) => {
   try {
@@ -1468,7 +1502,7 @@ app.get('/api/refunds', async (req, res) => {
       return {
         ...row,
         session_timings: formattedTimings,
-        refund_status: row.refund_status || 'Pending'
+        refund_status: row.refund_status
       };
     });
     

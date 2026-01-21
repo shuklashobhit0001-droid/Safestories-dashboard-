@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, Copy, Send, FileText } from 'lucide-react';
+import { MessageCircle, Search, Download, Copy, Send, FileText, Plus } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { Toast } from './Toast';
 import { Loader } from './Loader';
@@ -23,7 +23,7 @@ interface Appointment {
   booking_status?: string;
 }
 
-export const Appointments: React.FC<{ onClientClick?: (client: any) => void }> = ({ onClientClick }) => {
+export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onCreateBooking?: () => void }> = ({ onClientClick, onCreateBooking }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -252,13 +252,22 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
           <h1 className="text-3xl font-bold mb-1">Appointments</h1>
           <p className="text-gray-600">View Recently Book Session, Send Invite and more...</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800"
-        >
-          <MessageCircle size={18} />
-          Send Booking Link
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={onCreateBooking}
+            className="bg-white border-2 border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
+          >
+            <Plus size={18} />
+            Create New Booking
+          </button>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800"
+          >
+            <MessageCircle size={18} />
+            Send Booking Link
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
