@@ -701,6 +701,84 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
   });
 }
 
+async function handleDashboardStats(req: VercelRequest, res: VercelResponse) {
+  try {
+    const { start, end } = req.query;
+    const hasDateFilter = start && end;
+    const now = new Date();
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    
+    const revenue = hasDateFilter
+      ? await pool.query('SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status NOT IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+          ['cancelled', 'canceled', start, `${end} 23:59:59`])
+      : await pool.query('SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status NOT IN ($1, $2)', ['cancelled', 'canceled']);
+
+    const sessions = hasDateFilter
+      ? await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+          ['confirmed', 'rescheduled', start, `${end} 23:59:59`])
+      : await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2)', ['confirmed', 'rescheduled']);
+
+    const freeConsultations = hasDateFilter
+      ? await pool.query('SELECT COUNT(*) as total FROM bookings WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL) AND booking_start_at BETWEEN $1 AND $2',
+          [start, `${end} 23:59:59`])
+      : await pool.query('SELECT COUNT(*) as total FROM bookings WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL)');
+
+    const cancelled = hasDateFilter
+      ? await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+          ['cancelled', 'canceled', start, `${end} 23:59:59`])
+      : await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2)', ['cancelled', 'canceled']);
+
+    const refunds = hasDateFilter
+      ? await pool.query('SELECT COUNT(*) as total FROM bookings WHERE refund_status IS NOT NULL AND booking_start_at BETWEEN $1 AND $2',
+          [start, `${end} 23:59:59`])
+      : await pool.query('SELECT COUNT(*) as total FROM bookings WHERE refund_status IS NOT NULL');
+
+    const refundedAmount = hasDateFilter
+      ? await pool.query('SELECT COALESCE(SUM(refund_amount), 0) as total FROM bookings WHERE refund_status IS NOT NULL AND booking_start_at BETWEEN $1 AND $2',
+          [start, `${end} 23:59:59`])
+      : await pool.query('SELECT COALESCE(SUM(refund_amount), 0) as total FROM bookings WHERE refund_status IS NOT NULL');
+
+    const noShows = hasDateFilter
+      ? await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+          ['no_show', 'no show', start, `${end} 23:59:59`])
+      : await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2)', ['no_show', 'no show']);
+
+    const lastMonthSessions = await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+      ['confirmed', 'rescheduled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]);
+
+    const lastMonthFreeConsultations = await pool.query('SELECT COUNT(*) as total FROM bookings WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL) AND booking_start_at BETWEEN $1 AND $2',
+      [lastMonthStart.toISOString(), lastMonthEnd.toISOString()]);
+
+    const lastMonthCancelled = await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+      ['cancelled', 'canceled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]);
+
+    const lastMonthRefunds = await pool.query('SELECT COUNT(*) as total FROM bookings WHERE refund_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+      ['completed', 'processed', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]);
+
+    const lastMonthNoShows = await pool.query('SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+      ['no_show', 'no show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]);
+
+    res.json({
+      revenue: revenue.rows[0].total,
+      refundedAmount: refundedAmount.rows[0].total,
+      sessions: sessions.rows[0].total,
+      lastMonthSessions: lastMonthSessions.rows[0].total,
+      freeConsultations: freeConsultations.rows[0].total,
+      lastMonthFreeConsultations: lastMonthFreeConsultations.rows[0].total,
+      cancelled: cancelled.rows[0].total,
+      lastMonthCancelled: lastMonthCancelled.rows[0].total,
+      refunds: refunds.rows[0].total,
+      lastMonthRefunds: lastMonthRefunds.rows[0].total,
+      noShows: noShows.rows[0].total,
+      lastMonthNoShows: lastMonthNoShows.rows[0].total,
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+}
+
 async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) {
   const { start, end } = req.query;
   const result = start && end
