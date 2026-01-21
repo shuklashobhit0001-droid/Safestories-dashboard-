@@ -413,7 +413,7 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
       return {
         ...row,
         booking_status: status,
-        booking_invitee_time: convertToIST(row.booking_invitee_time),
+        booking_invitee_time: convertToIST(row.booking_invitee_time) || row.booking_invitee_time,
         booking_mode: row.booking_mode ? row.booking_mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
       };
     });
@@ -553,7 +553,7 @@ async function handleTherapistDetails(req: VercelRequest, res: VercelResponse) {
   
   const appointments = appointmentsResult.rows.map(apt => ({
     ...apt,
-    booking_invitee_time: convertToIST(apt.booking_invitee_time)
+    booking_invitee_time: convertToIST(apt.booking_invitee_time) || apt.booking_invitee_time
   }));
   
   res.json({ clients, appointments });
@@ -615,7 +615,7 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
       client_name: booking.client_name,
       therapy_type: booking.session_name,
       mode: booking.mode ? booking.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
-      session_timings: convertToIST(booking.session_timings)
+      session_timings: convertToIST(booking.session_timings) || booking.session_timings
     }))
   });
 }
@@ -718,7 +718,7 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
 
   const bookings = result.rows.map(row => ({
     ...row,
-    booking_invitee_time: convertToIST(row.booking_invitee_time),
+    booking_invitee_time: convertToIST(row.booking_invitee_time) || row.booking_invitee_time,
     mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
   }));
 
