@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import pool from '../lib/db.js';
 import { notifyAllAdmins, notifyTherapist } from '../lib/notifications.js';
+import { convertToIST } from '../lib/timezone.js';
 
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
@@ -364,20 +365,6 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
           status = 'pending_notes';
         }
       }
-      
-      const convertToIST = (timeStr: string) => {
-        if (!timeStr) return timeStr;
-        const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-        if (!match) return timeStr;
-        try {
-          const [, dateStr, startTime, endTime, offset] = match;
-          const dateParts = dateStr.match(/(\w+), (\w+) (\d+), (\d+)/);
-          if (!dateParts) return timeStr;
-          const [, , month, day, year] = dateParts;
-          const monthMap: { [key: string]: number } = {
-            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-          };
           const [h, rest] = startTime.split(':');
           const [m, period] = rest.split(' ');
           let hour = parseInt(h);
@@ -543,20 +530,6 @@ async function handleTherapistDetails(req: VercelRequest, res: VercelResponse) {
     FROM bookings WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
     ORDER BY booking_start_at DESC LIMIT 10
   `, [name]);
-  
-  const convertToIST = (timeStr: string) => {
-        if (!timeStr) return timeStr;
-        const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-        if (!match) return timeStr;
-        try {
-          const [, dateStr, startTime, endTime, offset] = match;
-          const dateParts = dateStr.match(/(\w+), (\w+) (\d+), (\d+)/);
-          if (!dateParts) return timeStr;
-          const [, , month, day, year] = dateParts;
-          const monthMap: { [key: string]: number } = {
-            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-          };
           const [h, rest] = startTime.split(':');
           const [m, period] = rest.split(' ');
           let hour = parseInt(h);
@@ -637,20 +610,6 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
     FROM bookings WHERE booking_host_name ILIKE $1 AND booking_start_at >= NOW() AND booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show')
     ORDER BY booking_start_at ASC LIMIT 10
   `, [`%${therapistFirstName}%`]);
-  
-  const convertToIST = (timeStr: string) => {
-        if (!timeStr) return timeStr;
-        const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-        if (!match) return timeStr;
-        try {
-          const [, dateStr, startTime, endTime, offset] = match;
-          const dateParts = dateStr.match(/(\w+), (\w+) (\d+), (\d+)/);
-          if (!dateParts) return timeStr;
-          const [, , month, day, year] = dateParts;
-          const monthMap: { [key: string]: number } = {
-            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-          };
           const [h, rest] = startTime.split(':');
           const [m, period] = rest.split(' ');
           let hour = parseInt(h);
@@ -796,19 +755,6 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
         FROM bookings WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show') AND booking_start_at >= NOW()
         ORDER BY booking_start_at ASC LIMIT 10
       `);
-  const convertToIST = (timeStr: string) => {
-        if (!timeStr) return timeStr;
-        const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-        if (!match) return timeStr;
-        try {
-          const [, dateStr, startTime, endTime, offset] = match;
-          const dateParts = dateStr.match(/(\w+), (\w+) (\d+), (\d+)/);
-          if (!dateParts) return timeStr;
-          const [, , month, day, year] = dateParts;
-          const monthMap: { [key: string]: number } = {
-            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-          };
           const [h, rest] = startTime.split(':');
           const [m, period] = rest.split(' ');
           let hour = parseInt(h);
