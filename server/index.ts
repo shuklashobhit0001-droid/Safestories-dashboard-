@@ -62,10 +62,10 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
     const bookings = await pool.query(`
-      SELECT booking_id, booking_start_at, booking_invitee_time, booking_status
+      SELECT booking_id, booking_invitee_time, booking_status
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-      AND booking_start_at IS NOT NULL
+      AND booking_invitee_time IS NOT NULL
     `);
 
     const now = new Date();
@@ -73,8 +73,13 @@ app.get('/api/live-sessions-count', async (req, res) => {
 
     for (const booking of bookings.rows) {
       try {
-        const startTime = new Date(booking.booking_start_at);
-        // Assume 50-minute sessions
+        // Parse booking_invitee_time: "Wednesday, Jan 21, 2026 at 5:00 PM - 5:50 PM (GMT+05:30)"
+        const timeMatch = booking.booking_invitee_time.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M)/i);
+        if (!timeMatch) continue;
+        
+        const dateStr = timeMatch[1];
+        const timeStr = timeMatch[2];
+        const startTime = new Date(`${dateStr} ${timeStr} GMT+0530`);
         const endTime = new Date(startTime.getTime() + 50 * 60 * 1000);
         
         if (now >= startTime && now <= endTime) {
@@ -162,12 +167,12 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
     const noShows = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1 AND booking_start_at BETWEEN $2 AND $3',
-          ['no_show', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+          ['no_show', 'no show', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1',
-          ['no_show']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2)',
+          ['no_show', 'no show']
         );
 
     const lastMonthSessions = await pool.query(
@@ -191,8 +196,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
     );
 
     const lastMonthNoShows = await pool.query(
-      'SELECT COUNT(*) as total FROM bookings WHERE booking_status = $1 AND booking_start_at BETWEEN $2 AND $3',
-      ['no_show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
+      ['no_show', 'no show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
     );
 
     res.json({
@@ -418,7 +423,7 @@ app.get('/api/appointments', async (req, res) => {
       const now = new Date();
       const sessionDate = new Date(row.booking_start_at);
       
-      if (row.booking_status !== 'cancelled' && row.booking_status !== 'no_show') {
+      if (row.booking_status !== 'cancelled' && row.booking_status !== 'canceled' && row.booking_status !== 'no_show' && row.booking_status !== 'no show') {
         if (row.has_session_notes) {
           status = 'completed';
         } else if (sessionDate < now) {

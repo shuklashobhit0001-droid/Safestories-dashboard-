@@ -188,8 +188,8 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
   };
 
   const getAppointmentStatus = (apt: Appointment) => {
-    if (apt.booking_status === 'cancelled') return 'cancelled';
-    if (apt.booking_status === 'no_show') return 'no_show';
+    if (apt.booking_status === 'cancelled' || apt.booking_status === 'canceled') return 'cancelled';
+    if (apt.booking_status === 'no_show' || apt.booking_status === 'no show') return 'no_show';
     if (apt.has_session_notes) return 'completed';
     
     if (apt.booking_start_at_raw) {
