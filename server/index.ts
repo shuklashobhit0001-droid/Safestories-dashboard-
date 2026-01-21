@@ -252,11 +252,11 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_host_name as therapist_name,
             booking_invitee_time
           FROM bookings
-          WHERE booking_status NOT IN ($1, $2)
-            AND booking_start_at >= CURRENT_DATE
+          WHERE booking_status NOT IN ($1, $2, $3, $4)
+            AND booking_start_at >= NOW()
           ORDER BY booking_start_at ASC
           LIMIT 10`,
-          ['cancelled', 'canceled']
+          ['cancelled', 'canceled', 'no_show', 'no show']
         );
 
     const bookings = result.rows.map(row => ({
@@ -495,6 +495,44 @@ app.post('/api/booking-requests', async (req, res) => {
   } catch (error) {
     console.error('Error saving booking request:', error);
     res.status(500).json({ success: false, error: 'Failed to save booking request' });
+  }
+});
+
+// Get therapists live status
+app.get('/api/therapists-live-status', async (req, res) => {
+  try {
+    const bookings = await pool.query(`
+      SELECT booking_host_name, booking_invitee_time, booking_status
+      FROM bookings
+      WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+      AND booking_invitee_time IS NOT NULL
+    `);
+
+    const now = new Date();
+    const liveStatus: { [key: string]: boolean } = {};
+
+    for (const booking of bookings.rows) {
+      try {
+        const timeMatch = booking.booking_invitee_time.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M)/i);
+        if (!timeMatch) continue;
+        
+        const dateStr = timeMatch[1];
+        const timeStr = timeMatch[2];
+        const startTime = new Date(`${dateStr} ${timeStr} GMT+0530`);
+        const endTime = new Date(startTime.getTime() + 50 * 60 * 1000);
+        
+        if (now >= startTime && now <= endTime) {
+          liveStatus[booking.booking_host_name] = true;
+        }
+      } catch (error) {
+        console.error('Error parsing booking time:', error);
+      }
+    }
+
+    res.json(liveStatus);
+  } catch (error) {
+    console.error('Error fetching therapists live status:', error);
+    res.status(500).json({ error: 'Failed to fetch therapists live status' });
   }
 });
 
@@ -787,8 +825,8 @@ app.get('/api/therapist-stats', async (req, res) => {
         booking_start_at as booking_date
       FROM bookings
       WHERE booking_host_name ILIKE $1
-        AND booking_start_at >= CURRENT_DATE
-        AND booking_status NOT IN ('cancelled', 'canceled')
+        AND booking_start_at >= NOW()
+        AND booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show')
       ORDER BY booking_start_at ASC
       LIMIT 10
     `, [`%${therapistFirstName}%`]);

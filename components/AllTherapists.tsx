@@ -72,9 +72,19 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const fetchTherapists = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/therapists');
-      const data = await response.json();
-      setTherapists(data);
+      const [therapistsRes, liveSessionsRes] = await Promise.all([
+        fetch('/api/therapists'),
+        fetch('/api/therapists-live-status')
+      ]);
+      const therapistsData = await therapistsRes.json();
+      const liveStatusData = await liveSessionsRes.json();
+      
+      const therapistsWithStatus = therapistsData.map((t: any) => ({
+        ...t,
+        isLive: liveStatusData[t.name] || false
+      }));
+      
+      setTherapists(therapistsWithStatus);
     } catch (error) {
       console.error('Error fetching therapists:', error);
     } finally {
@@ -909,12 +919,13 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Specialization</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Total sessions lifetime</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Sessions this month</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
               </tr>
             </thead>
             <tbody>
               {filteredTherapists.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="text-center text-gray-400 py-20">
+                  <td colSpan={5} className="text-center text-gray-400 py-20">
                     No therapists found
                   </td>
                 </tr>
@@ -940,6 +951,14 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                     </td>
                     <td className="px-6 py-4">{therapist.total_sessions_lifetime}</td>
                     <td className="px-6 py-4">{therapist.sessions_this_month}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${therapist.isLive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <span className={`text-sm font-medium ${therapist.isLive ? 'text-green-700' : 'text-red-700'}`}>
+                          {therapist.isLive ? 'Live' : 'Idle'}
+                        </span>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}

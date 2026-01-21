@@ -692,7 +692,7 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
   const upcomingResult = await pool.query(`
     SELECT invitee_name as client_name, booking_resource_name as session_name, booking_mode as mode,
       booking_invitee_time as session_timings, booking_start_at as booking_date
-    FROM bookings WHERE booking_host_name ILIKE $1 AND booking_start_at >= CURRENT_DATE AND booking_status != 'cancelled'
+    FROM bookings WHERE booking_host_name ILIKE $1 AND booking_start_at >= NOW() AND booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show')
     ORDER BY booking_start_at ASC LIMIT 10
   `, [`%${therapistFirstName}%`]);
   
@@ -756,7 +756,7 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
         SELECT invitee_name as client_name, invitee_email as client_email, invitee_phone as client_phone,
           booking_resource_name as therapy_type, booking_mode as mode,
           booking_host_name as therapist_name, booking_invitee_time, booking_joining_link, booking_checkin_url
-        FROM bookings WHERE booking_status != 'cancelled' AND booking_start_at >= CURRENT_DATE
+        FROM bookings WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show') AND booking_start_at >= NOW()
         ORDER BY booking_start_at ASC LIMIT 10
       `);
   const convertToIST = (timeStr: string) => {
