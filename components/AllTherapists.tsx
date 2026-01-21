@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ArrowLeft, User, Mail } from 'lucide-react';
 import { Loader } from './Loader';
+import { Toast } from './Toast';
 
 interface Client {
   invitee_name: string;
@@ -37,6 +38,14 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedAppointmentForReminder, setSelectedAppointmentForReminder] = useState<Appointment | null>(null);
   const appointmentActionsRef = React.useRef<HTMLTableElement>(null);
+  const [clientDateFilter, setClientDateFilter] = useState({ start: '', end: '' });
+  const [clientSelectedMonth, setClientSelectedMonth] = useState('All Time');
+  const [isClientDateDropdownOpen, setIsClientDateDropdownOpen] = useState(false);
+  const [showClientCustomCalendar, setShowClientCustomCalendar] = useState(false);
+  const [clientStartDate, setClientStartDate] = useState('');
+  const [clientEndDate, setClientEndDate] = useState('');
+  const clientDropdownRef = React.useRef<HTMLDivElement>(null);
+  const [clientAppointmentSearchTerm, setClientAppointmentSearchTerm] = useState('');
 
   useEffect(() => {
     fetchTherapists();
@@ -49,6 +58,10 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     const handleClickOutside = (event: MouseEvent) => {
       if (appointmentActionsRef.current && !appointmentActionsRef.current.contains(event.target as Node)) {
         setSelectedAppointmentIndex(null);
+      }
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(event.target as Node)) {
+        setIsClientDateDropdownOpen(false);
+        setShowClientCustomCalendar(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -288,6 +301,32 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     setSelectedAppointmentForReminder(null);
   };
 
+  const handleClientMonthSelect = (month: string) => {
+    setClientSelectedMonth(month);
+    setIsClientDateDropdownOpen(false);
+    setShowClientCustomCalendar(false);
+    
+    const [monthName, year] = month.split(' ');
+    const monthMap: { [key: string]: number } = {
+      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+    };
+    const monthNum = monthMap[monthName];
+    const start = new Date(parseInt(year), monthNum, 1).toISOString().split('T')[0];
+    const end = new Date(parseInt(year), monthNum + 1, 0).toISOString().split('T')[0];
+    
+    setClientDateFilter({ start, end });
+  };
+
+  const handleClientCustomDateApply = () => {
+    if (clientStartDate && clientEndDate) {
+      setClientDateFilter({ start: clientStartDate, end: clientEndDate });
+      setClientSelectedMonth(`${clientStartDate} to ${clientEndDate}`);
+      setShowClientCustomCalendar(false);
+      setIsClientDateDropdownOpen(false);
+    }
+  };
+
   const handleSessionNotesReminder = async (apt: Appointment) => {
     if (!isMeetingEnded(apt)) {
       setToast({ message: 'Cannot send reminder before meeting ends', type: 'error' });
@@ -334,9 +373,92 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
           >
             <ArrowLeft size={24} />
           </button>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-1">
             <User size={24} className="text-teal-700" />
             <h1 className="text-3xl font-bold">{selectedClient.invitee_name}</h1>
+          </div>
+          <div className="relative" ref={clientDropdownRef}>
+            <button 
+              onClick={() => setIsClientDateDropdownOpen(!isClientDateDropdownOpen)}
+              className="flex items-center gap-2 border rounded-lg px-4 py-2" 
+              style={{ backgroundColor: '#2D757938' }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span className="text-sm text-teal-700">{clientSelectedMonth}</span>
+              {isClientDateDropdownOpen ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              )}
+            </button>
+            {isClientDateDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
+                {!showClientCustomCalendar ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        setClientSelectedMonth('All Time');
+                        setClientDateFilter({ start: '', end: '' });
+                        setIsClientDateDropdownOpen(false);
+                      }}
+                      className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                    >
+                      All Time
+                    </button>
+                    <button
+                      onClick={() => setShowClientCustomCalendar(true)}
+                      className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                    >
+                      Custom Dates
+                    </button>
+                    {['Dec 2025', 'Nov 2025', 'Oct 2025', 'Sep 2025', 'Aug 2025', 'Jul 2025', 'Jun 2025', 'May 2025', 'Apr 2025', 'Mar 2025', 'Feb 2025', 'Jan 2025'].map((month) => (
+                      <button
+                        key={month}
+                        onClick={() => handleClientMonthSelect(month)}
+                        className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
+                      >
+                        {month}
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <div className="p-4">
+                    <div className="mb-3">
+                      <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={clientStartDate}
+                        onChange={(e) => setClientStartDate(e.target.value)}
+                        className="w-full px-3 py-2 border rounded text-sm"
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={clientEndDate}
+                        onChange={(e) => setClientEndDate(e.target.value)}
+                        className="w-full px-3 py-2 border rounded text-sm"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowClientCustomCalendar(false)}
+                        className="flex-1 px-3 py-2 border rounded text-sm hover:bg-gray-100"
+                      >
+                        Back
+                      </button>
+                      <button
+                        onClick={handleClientCustomDateApply}
+                        className="flex-1 px-3 py-2 bg-teal-700 text-white rounded text-sm hover:bg-teal-800"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -385,8 +507,34 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               ))}
             </div>
             
+            {/* Search Bar */}
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  type="text"
+                  placeholder="Search appointments by session type..."
+                  value={clientAppointmentSearchTerm}
+                  onChange={(e) => setClientAppointmentSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+            </div>
+            
             <h3 className="text-lg font-semibold mb-3">
-              Appointment History ({clientAppointments.filter(apt => {
+              Appointments ({clientAppointments.filter(apt => {
+                // Search filter
+                if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                  return false;
+                }
+                // Date filter
+                if (clientDateFilter.start && clientDateFilter.end) {
+                  const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                  const startDate = new Date(clientDateFilter.start);
+                  const endDate = new Date(clientDateFilter.end + 'T23:59:59');
+                  if (aptDate < startDate || aptDate > endDate) return false;
+                }
+                // Tab filter
                 if (clientAppointmentTab === 'all') return true;
                 if (clientAppointmentTab === 'upcoming') {
                   const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
@@ -407,6 +555,18 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 </thead>
                 <tbody>
                   {clientAppointments.filter(apt => {
+                    // Search filter
+                    if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                      return false;
+                    }
+                    // Date filter
+                    if (clientDateFilter.start && clientDateFilter.end) {
+                      const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                      const startDate = new Date(clientDateFilter.start);
+                      const endDate = new Date(clientDateFilter.end + 'T23:59:59');
+                      if (aptDate < startDate || aptDate > endDate) return false;
+                    }
+                    // Tab filter
                     if (clientAppointmentTab === 'all') return true;
                     if (clientAppointmentTab === 'upcoming') {
                       const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
@@ -419,6 +579,18 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                     </tr>
                   ) : (
                     clientAppointments.filter(apt => {
+                      // Search filter
+                      if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                        return false;
+                      }
+                      // Date filter
+                      if (clientDateFilter.start && clientDateFilter.end) {
+                        const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                        const startDate = new Date(clientDateFilter.start);
+                        const endDate = new Date(clientDateFilter.end + 'T23:59:59');
+                        if (aptDate < startDate || aptDate > endDate) return false;
+                      }
+                      // Tab filter
                       if (clientAppointmentTab === 'all') return true;
                       if (clientAppointmentTab === 'upcoming') {
                         const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
@@ -498,15 +670,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             </div>
           </div>
         )}
-        {toast && (
-          <div className="fixed bottom-4 right-4 bg-white border rounded-lg shadow-lg p-4 flex items-center gap-3 z-50">
-            <div className={`w-2 h-2 rounded-full ${
-              toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-            }`}></div>
-            <span className="text-sm">{toast.message}</span>
-            <button onClick={() => setToast(null)} className="ml-2 text-gray-400 hover:text-gray-600">✕</button>
-          </div>
-        )}
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         {showReminderModal && selectedAppointmentForReminder && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -601,63 +765,65 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             <div>
               <h3 className="text-lg font-semibold mb-3">Assigned Clients ({clients.length})</h3>
               <div className="bg-white border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Client Name</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Email</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Phone</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clients.length === 0 ? (
+                <div className="max-h-[480px] overflow-y-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b sticky top-0">
                       <tr>
-                        <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No clients found</td>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Email</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Phone</th>
                       </tr>
-                    ) : (
-                      clients.map((client, index) => {
-                        const phoneNumbers = client.invitee_phone.split(', ');
-                        const hasMultiplePhones = phoneNumbers.length > 1;
-                        
-                        return (
-                          <React.Fragment key={index}>
-                            <tr className="border-b hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm">
-                                <div className="flex items-center gap-2">
-                                  {hasMultiplePhones && (
+                    </thead>
+                    <tbody>
+                      {clients.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No clients found</td>
+                        </tr>
+                      ) : (
+                        clients.map((client, index) => {
+                          const phoneNumbers = client.invitee_phone.split(', ');
+                          const hasMultiplePhones = phoneNumbers.length > 1;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <tr className="border-b hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm">
+                                  <div className="flex items-center gap-2">
+                                    {hasMultiplePhones && (
+                                      <button
+                                        onClick={() => toggleClientRow(index)}
+                                        className="text-gray-500 hover:text-gray-700"
+                                      >
+                                        {expandedClientRows.has(index) ? '▼' : '▶'}
+                                      </button>
+                                    )}
                                     <button
-                                      onClick={() => toggleClientRow(index)}
-                                      className="text-gray-500 hover:text-gray-700"
+                                      onClick={() => openClientDetails(client)}
+                                      className="text-teal-700 hover:underline font-medium text-left"
                                     >
-                                      {expandedClientRows.has(index) ? '▼' : '▶'}
+                                      {client.invitee_name}
                                     </button>
-                                  )}
-                                  <button
-                                    onClick={() => openClientDetails(client)}
-                                    className="text-teal-700 hover:underline font-medium text-left"
-                                  >
-                                    {client.invitee_name}
-                                  </button>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
-                              <td className="px-4 py-3 text-sm text-gray-600">{phoneNumbers[0]}</td>
-                            </tr>
-                            {expandedClientRows.has(index) && hasMultiplePhones && (
-                              phoneNumbers.slice(1).map((phone, pIndex) => (
-                                <tr key={`${index}-${pIndex}`} className="bg-gray-50 border-b">
-                                  <td className="px-4 py-3 text-sm pl-12 text-gray-600">{client.invitee_name}</td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">{phone}</td>
-                                </tr>
-                              ))
-                            )}
-                          </React.Fragment>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600">{phoneNumbers[0]}</td>
+                              </tr>
+                              {expandedClientRows.has(index) && hasMultiplePhones && (
+                                phoneNumbers.slice(1).map((phone, pIndex) => (
+                                  <tr key={`${index}-${pIndex}`} className="bg-gray-50 border-b">
+                                    <td className="px-4 py-3 text-sm pl-12 text-gray-600">{client.invitee_name}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{phone}</td>
+                                  </tr>
+                                ))
+                              )}
+                            </React.Fragment>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
@@ -665,30 +831,32 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             <div>
               <h3 className="text-lg font-semibold mb-3">Recent Appointments ({appointments.length})</h3>
               <div className="bg-white border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Client Name</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Session Type</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Date & Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {appointments.length === 0 ? (
+                <div className="max-h-[480px] overflow-y-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b sticky top-0">
                       <tr>
-                        <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Session Type</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Date & Time</th>
                       </tr>
-                    ) : (
-                      appointments.map((apt, index) => (
-                        <tr key={index} className="border-b hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm">{apt.invitee_name}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_resource_name}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
+                    </thead>
+                    <tbody>
+                      {appointments.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        appointments.map((apt, index) => (
+                          <tr key={index} className="border-b hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm">{apt.invitee_name}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_resource_name.replace(/ with .+$/, '')}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>

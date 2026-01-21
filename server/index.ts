@@ -6,8 +6,7 @@ import { convertToIST } from '../lib/timezone';
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
   const now = new Date();
-  const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-  return istDate.toLocaleString('en-US', {
+  return now.toLocaleString('en-US', {
     weekday: 'short',
     year: 'numeric',
     month: 'short',
@@ -959,7 +958,15 @@ app.get('/api/client-appointments', async (req, res) => {
       }
     }
 
-    // Query with or without therapist filter
+    // First, find the client's email using the provided phone number
+    const clientEmailResult = await pool.query(
+      'SELECT DISTINCT invitee_email FROM bookings WHERE invitee_phone = $1 AND invitee_email IS NOT NULL LIMIT 1',
+      [client_phone]
+    );
+
+    const clientEmail = clientEmailResult.rows.length > 0 ? clientEmailResult.rows[0].invitee_email : null;
+
+    // Query with or without therapist filter, matching by email (primary) or phone
     const query = therapistFirstName
       ? `SELECT 
           b.booking_id,
@@ -970,8 +977,8 @@ app.get('/api/client-appointments', async (req, res) => {
           CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-        WHERE b.invitee_phone = $1
-          AND b.booking_host_name ILIKE $2
+        WHERE (${clientEmail ? 'b.invitee_email = $1 OR' : ''} b.invitee_phone = $${clientEmail ? '2' : '1'})
+          AND b.booking_host_name ILIKE $${clientEmail ? '3' : '2'}
         ORDER BY b.booking_start_at DESC`
       : `SELECT 
           b.booking_id,
@@ -982,10 +989,13 @@ app.get('/api/client-appointments', async (req, res) => {
           CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-        WHERE b.invitee_phone = $1
+        WHERE ${clientEmail ? 'b.invitee_email = $1 OR' : ''} b.invitee_phone = $${clientEmail ? '2' : '1'}
         ORDER BY b.booking_start_at DESC`;
 
-    const params = therapistFirstName ? [client_phone, `%${therapistFirstName}%`] : [client_phone];
+    const params = clientEmail
+      ? (therapistFirstName ? [clientEmail, client_phone, `%${therapistFirstName}%`] : [clientEmail, client_phone])
+      : (therapistFirstName ? [client_phone, `%${therapistFirstName}%`] : [client_phone]);
+    
     const appointmentsResult = await pool.query(query, params);
 
     const appointments = appointmentsResult.rows.map(row => ({
@@ -993,7 +1003,8 @@ app.get('/api/client-appointments', async (req, res) => {
       session_timings: row.session_timings || 'N/A',
       mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
       has_session_notes: row.has_session_notes,
-      booking_status: row.booking_status
+      booking_status: row.booking_status,
+      booking_date: row.booking_date
     }));
 
     res.json({ appointments });

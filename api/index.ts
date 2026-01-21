@@ -5,8 +5,7 @@ import { notifyAllAdmins, notifyTherapist } from '../lib/notifications.js';
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
   const now = new Date();
-  const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-  return istDate.toLocaleString('en-US', {
+  return now.toLocaleString('en-US', {
     weekday: 'short',
     year: 'numeric',
     month: 'short',

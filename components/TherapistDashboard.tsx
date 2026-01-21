@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, User } from 'lucide-react';
 import { Logo } from './Logo';
 import { Notifications } from './Notifications';
 import { Toast } from './Toast';
@@ -31,6 +31,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     { title: 'Sessions', value: '0', lastMonth: '0' },
     { title: 'No-shows', value: '0', lastMonth: '0' },
     { title: 'Cancelled', value: '0', lastMonth: '0' },
+    { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true },
   ]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -76,6 +77,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [additionalNotes, setAdditionalNotes] = useState<any[]>([]);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [timelineData, setTimelineData] = useState<any[]>([]);
+  const [clientAppointmentSearchTerm, setClientAppointmentSearchTerm] = useState('');
 
   const resetAllStates = () => {
     setSelectedClient(null);
@@ -276,6 +278,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           { title: 'Sessions', value: (data.stats.sessions || 0).toString(), lastMonth: '0' },
           { title: 'No-shows', value: (data.stats.noShows || 0).toString(), lastMonth: '0' },
           { title: 'Cancelled', value: (data.stats.cancelled || 0).toString(), lastMonth: '0' },
+          { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true },
         ]);
         
         setBookings(data.upcomingBookings || []);
@@ -285,12 +288,42 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           const notificationsData = await notificationsRes.json();
           setNotifications(notificationsData.slice(0, 2));
         }
+
+        // Fetch all appointments to get pending notes
+        const appointmentsRes = await fetch(`/api/therapist-appointments?therapist_id=${user.id}`);
+        if (appointmentsRes.ok) {
+          const appointmentsData = await appointmentsRes.json();
+          setAppointments(appointmentsData.appointments || []);
+          
+          // Count pending notes
+          const pendingNotesCount = appointmentsData.appointments.filter((apt: any) => {
+            if (apt.booking_status === 'cancelled' || apt.booking_status === 'no_show') return false;
+            if (apt.has_session_notes) return false;
+            if (apt.session_timings) {
+              const timeMatch = apt.session_timings.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
+              if (timeMatch) {
+                const [, dateStr, , endTimeStr] = timeMatch;
+                const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+                return endDateTime < new Date();
+              }
+            }
+            return false;
+          }).length;
+          
+          setStats([
+            { title: 'Sessions', value: (data.stats.sessions || 0).toString(), lastMonth: '0' },
+            { title: 'No-shows', value: (data.stats.noShows || 0).toString(), lastMonth: '0' },
+            { title: 'Cancelled', value: (data.stats.cancelled || 0).toString(), lastMonth: '0' },
+            { title: 'Pending Session Notes', value: pendingNotesCount.toString(), lastMonth: '0', clickable: true },
+          ]);
+        }
       } else {
         // Fallback to empty data
         setStats([
           { title: 'Sessions', value: '0', lastMonth: '0' },
           { title: 'No-shows', value: '0', lastMonth: '0' },
           { title: 'Cancelled', value: '0', lastMonth: '0' },
+          { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true },
         ]);
         setBookings([]);
       }
@@ -301,6 +334,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         { title: 'Sessions', value: '0', lastMonth: '0' },
         { title: 'No-shows', value: '0', lastMonth: '0' },
         { title: 'Cancelled', value: '0', lastMonth: '0' },
+        { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true },
       ]);
       setBookings([]);
     } finally {
@@ -582,6 +616,49 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     setSelectedAppointmentIndex(null);
   };
 
+  const handleSOSClickFromClient = (apt: any) => {
+    if (!apt.session_timings) {
+      setToast({ message: 'Unable to validate session timing', type: 'error' });
+      setSelectedAppointmentIndex(null);
+      return;
+    }
+    
+    // Handle both IST and GMT timezone formats
+    const timeMatch = apt.session_timings.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
+    if (timeMatch) {
+      const [, dateStr, startTimeStr, endTimeStr] = timeMatch;
+      const startDateTime = new Date(`${dateStr} ${startTimeStr}`);
+      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+      const now = new Date();
+      
+      if (now < startDateTime) {
+        setToast({ message: 'SOS ticket can only be raised after the session starts', type: 'error' });
+        setSelectedAppointmentIndex(null);
+        return;
+      }
+      
+      const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
+      
+      if (hoursSinceEnd > 24) {
+        setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
+        setSelectedAppointmentIndex(null);
+        return;
+      }
+    }
+    
+    const booking = {
+      ...apt,
+      client_name: selectedClient?.client_name,
+      session_name: 'Individual Therapy Session',
+      contact_info: selectedClient?.client_phone,
+      session_timings: apt.session_timings
+    };
+    
+    setSelectedSOSBooking(booking);
+    setShowSOSModal(true);
+    setSelectedAppointmentIndex(null);
+  };
+
   const handleSOSConfirm = async () => {
     if (sosConfirmText === 'Confirm') {
       console.log('=== SOS TICKET DATA ===');
@@ -852,6 +929,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 paginatedClients.map((client, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => {
                       setSelectedClient(client);
+                      setActiveAppointmentTab('upcoming');
                       fetchClientDetails(client);
                     }}>
                       <td className="px-6 py-4 text-sm">{client.client_name}</td>
@@ -895,8 +973,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     if (apt.booking_status === 'no_show') return 'no_show';
     if (apt.has_session_notes) return 'completed';
     
+    // Parse session_timings to check if session ended - handle both IST and GMT formats
     if (apt.session_timings) {
-      const timeMatch = apt.session_timings.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+      const timeMatch = apt.session_timings.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
       if (timeMatch) {
         const [, dateStr, , endTimeStr] = timeMatch;
         const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
@@ -1108,7 +1187,23 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             if (!matchesSearch) return false;
             if (activeAppointmentTab === 'all') return true;
             return getAppointmentStatus(appointment) === activeAppointmentTab;
-          }).length} of {appointments.length} appointment{appointments.length !== 1 ? 's' : ''}</span>
+          }).length} of {appointments.filter(appointment => {
+            const matchesSearch = appointmentSearchTerm === '' || 
+              appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+              appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+              'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase());
+            if (!matchesSearch) return false;
+            if (activeAppointmentTab === 'all') return true;
+            return getAppointmentStatus(appointment) === activeAppointmentTab;
+          }).length} appointment{appointments.filter(appointment => {
+            const matchesSearch = appointmentSearchTerm === '' || 
+              appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+              appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+              'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase());
+            if (!matchesSearch) return false;
+            if (activeAppointmentTab === 'all') return true;
+            return getAppointmentStatus(appointment) === activeAppointmentTab;
+          }).length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
             <button className="p-2 border rounded hover:bg-gray-50">←</button>
             <button className="p-2 border rounded hover:bg-gray-50">→</button>
@@ -1408,19 +1503,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <button onClick={() => setSelectedClient(null)} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6">
               <span className="text-2xl">←</span>
             </button>
+            
             <div className="flex justify-between items-start mb-6">
-              <div>
-                <h1 className="text-3xl font-bold mb-2">{selectedClient.client_name}</h1>
-                <div className="flex gap-6 text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <span>📞</span>
-                    <span>{selectedClient.client_phone}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span>✉️</span>
-                    <span>{selectedClient.client_email}</span>
-                  </div>
-                </div>
+              <div className="flex items-center gap-3">
+                <User size={24} className="text-teal-700" />
+                <h1 className="text-3xl font-bold">{selectedClient.client_name}</h1>
               </div>
               <div className="relative" ref={clientDropdownRef}>
                 <button 
@@ -1506,60 +1593,213 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4 mb-8">
-              <div className="bg-white rounded-lg p-6 border">
-                <div className="text-sm text-gray-600 mb-2">Sessions</div>
-                <div className="text-3xl font-bold text-teal-700">{clientStats.sessions}</div>
-              </div>
-              <div className="bg-white rounded-lg p-6 border">
-                <div className="text-sm text-gray-600 mb-2">No-Show</div>
-                <div className="text-3xl font-bold text-teal-700">{clientStats.noShows}</div>
-              </div>
-              <div className="bg-white rounded-lg p-6 border">
-                <div className="text-sm text-gray-600 mb-2">Cancelled</div>
-                <div className="text-3xl font-bold text-teal-700">{clientStats.cancelled}</div>
+
+            {/* Client Info Cards */}
+            <div className="mb-6 space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
+                  <p className="text-sm text-gray-600 mb-1">Email</p>
+                  <p className="text-lg font-semibold text-teal-700">{selectedClient.client_email || 'N/A'}</p>
+                </div>
+                <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
+                  <p className="text-sm text-gray-600 mb-1">Phone</p>
+                  <p className="text-lg font-semibold text-teal-700">{selectedClient.client_phone || 'N/A'}</p>
+                </div>
+                <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
+                  <p className="text-sm text-gray-600 mb-1">Total Sessions</p>
+                  <p className="text-3xl font-bold text-teal-700">{clientAppointments.length}</p>
+                </div>
               </div>
             </div>
-            <div className="bg-white rounded-lg border">
-              <div className="p-6 border-b">
-                <h2 className="text-xl font-bold">Appointments List</h2>
+
+            {/* Tabs */}
+            <div className="flex gap-6 mb-4">
+              {[
+                { id: 'upcoming', label: 'Upcoming' },
+                { id: 'all', label: 'All Appointments' },
+                { id: 'completed', label: 'Completed' },
+                { id: 'pending_notes', label: 'Pending Notes' },
+                { id: 'cancelled', label: 'Cancelled' },
+                { id: 'no_show', label: 'No Show' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveAppointmentTab(tab.id)}
+                  className={`pb-2 font-medium ${
+                    activeAppointmentTab === tab.id
+                      ? 'text-teal-700 border-b-2 border-teal-700'
+                      : 'text-gray-400'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Search Bar */}
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  type="text"
+                  placeholder="Search appointments by session type..."
+                  value={clientAppointmentSearchTerm}
+                  onChange={(e) => setClientAppointmentSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
               </div>
-              {clientDetailLoading ? (
-                <div className="p-8 text-center"><Loader /></div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+            </div>
+
+            {clientDetailLoading ? (
+              <div className="p-8 text-center"><Loader /></div>
+            ) : (
+              <div>
+                <h3 className="text-lg font-semibold mb-3">
+                  Appointments ({clientAppointments.filter(apt => {
+                    if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                      return false;
+                    }
+                    if (activeAppointmentTab === 'all') return true;
+                    if (activeAppointmentTab === 'upcoming') {
+                      const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
+                      return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                    }
+                    return getAppointmentStatus(apt) === activeAppointmentTab;
+                  }).length})
+                </h3>
+                <div className="bg-white border rounded-lg overflow-hidden">
+                  <table className="w-full" ref={appointmentActionsRef}>
                     <thead className="bg-gray-50 border-b">
                       <tr>
-                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
-                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Mode</th>
-                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-600"></th>
+                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Session Type</th>
+                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Date & Time</th>
+                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Therapist</th>
+                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {clientAppointments.length === 0 ? (
-                        <tr><td colSpan={3} className="text-center text-gray-400 py-8">No appointments found</td></tr>
+                      {clientAppointments.filter(apt => {
+                        if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                          return false;
+                        }
+                        if (activeAppointmentTab === 'all') return true;
+                        if (activeAppointmentTab === 'upcoming') {
+                          const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
+                          return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                        }
+                        return getAppointmentStatus(apt) === activeAppointmentTab;
+                      }).length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
+                        </tr>
                       ) : (
-                        clientAppointments.map((apt, i) => (
-                          <tr key={i} className="border-b hover:bg-gray-50">
-                            <td className="px-6 py-4 text-sm">{apt.session_timings}</td>
-                            <td className="px-6 py-4 text-sm">{apt.mode || 'Google Meet'}</td>
-                            <td className="px-6 py-4 text-sm text-right">
-                              {apt.has_session_notes && (
-                                <button onClick={() => {
-                                  setSelectedSessionNote(apt);
-                                  handleViewSessionNotes(apt);
-                                }} className="text-teal-700 hover:underline">View Session Notes</button>
-                              )}
-                            </td>
-                          </tr>
+                        clientAppointments.filter(apt => {
+                          if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                            return false;
+                          }
+                          if (activeAppointmentTab === 'all') return true;
+                          if (activeAppointmentTab === 'upcoming') {
+                            const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
+                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                          }
+                          return getAppointmentStatus(apt) === activeAppointmentTab;
+                        }).map((apt, index) => (
+                          <React.Fragment key={index}>
+                            <tr 
+                              className={`border-b cursor-pointer transition-colors ${
+                                selectedAppointmentIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                              }`}
+                              onClick={() => setSelectedAppointmentIndex(selectedAppointmentIndex === index ? null : index)}
+                            >
+                              <td className="px-4 py-3 text-sm">Individual Therapy Session</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{apt.session_timings}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{user.full_name || user.username}</td>
+                              <td className="px-4 py-3 text-sm">
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                                  getAppointmentStatus(apt) === 'completed' ? 'bg-green-100 text-green-700' :
+                                  getAppointmentStatus(apt) === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                  getAppointmentStatus(apt) === 'no_show' ? 'bg-orange-100 text-orange-700' :
+                                  getAppointmentStatus(apt) === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {getAppointmentStatus(apt) === 'pending_notes' ? 'Pending Notes' :
+                                   getAppointmentStatus(apt) === 'no_show' ? 'No Show' :
+                                   getAppointmentStatus(apt) === 'scheduled' ? 'Scheduled' :
+                                   getAppointmentStatus(apt).charAt(0).toUpperCase() + getAppointmentStatus(apt).slice(1)}
+                                </span>
+                              </td>
+                            </tr>
+                            {selectedAppointmentIndex === index && (
+                              <tr className="bg-gray-100">
+                                <td colSpan={4} className="px-4 py-4">
+                                  <div className="flex gap-3 justify-center">
+                                    <button
+                                      onClick={() => copyAppointmentDetails(apt)}
+                                      className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                                    >
+                                      <Copy size={16} />
+                                      Copy to Clipboard
+                                    </button>
+                                    <button
+                                      onClick={() => handleReminderClick(apt)}
+                                      disabled={isMeetingEnded(apt) || apt.booking_status === 'cancelled'}
+                                      className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                        isMeetingEnded(apt) || apt.booking_status === 'cancelled'
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                          : 'border border-gray-400 text-gray-700 hover:bg-white'
+                                      }`}
+                                    >
+                                      <Send size={16} />
+                                      Send Manual Reminder to Client
+                                    </button>
+                                    <button
+                                      onClick={() => handleSOSClickFromClient(apt)}
+                                      disabled={apt.booking_status === 'cancelled'}
+                                      className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                        apt.booking_status === 'cancelled'
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                          : 'border border-red-600 text-red-600 hover:bg-white'
+                                      }`}
+                                    >
+                                      <span className="font-bold">SOS</span>
+                                      Raise Ticket
+                                    </button>
+                                    <button
+                                      onClick={() => handleViewSessionNotes(apt)}
+                                      disabled={!apt.has_session_notes || apt.booking_status === 'cancelled'}
+                                      className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                        !apt.has_session_notes || apt.booking_status === 'cancelled'
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                          : 'border border-blue-600 text-blue-600 hover:bg-white'
+                                      }`}
+                                    >
+                                      <FileText size={16} />
+                                      View Session Notes
+                                    </button>
+                                    <button
+                                      onClick={() => handleFillSessionNotes(apt)}
+                                      disabled={apt.has_session_notes || apt.booking_status === 'cancelled' || !isMeetingStarted(apt)}
+                                      className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                        apt.has_session_notes || apt.booking_status === 'cancelled' || !isMeetingStarted(apt)
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                          : 'border border-teal-600 text-teal-600 hover:bg-white'
+                                      }`}
+                                    >
+                                      <FileText size={16} />
+                                      Fill Session Notes
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         ))
                       )}
                     </tbody>
                   </table>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         ) : activeView === 'clients' ? (
           renderMyClients()
@@ -1667,9 +1907,20 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-4 gap-4 mb-8">
               {stats.map((stat, index) => (
-                <div key={index} className="bg-white rounded-lg p-6 border">
+                <div 
+                  key={index} 
+                  className={`bg-white rounded-lg p-6 border ${
+                    stat.clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+                  }`}
+                  onClick={() => {
+                    if (stat.clickable) {
+                      setActiveView('appointments');
+                      setActiveAppointmentTab('pending_notes');
+                    }
+                  }}
+                >
                   <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
                   <div className="text-3xl font-bold">{stat.value}</div>
                 </div>
@@ -1759,6 +2010,145 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   <button className="p-2 border rounded hover:bg-gray-50">←</button>
                   <button className="p-2 border rounded hover:bg-gray-50">→</button>
                 </div>
+              </div>
+            </div>
+
+            {/* Pending Session Notes */}
+            <div className="bg-white rounded-lg border mt-8">
+              <div className="p-6 border-b flex justify-between items-center">
+                <h2 className="text-xl font-bold">Pending Session Notes</h2>
+                {appointments.filter(apt => getAppointmentStatus(apt) === 'pending_notes').length > 3 && (
+                  <button
+                    onClick={() => {
+                      setActiveView('appointments');
+                      setActiveAppointmentTab('pending_notes');
+                    }}
+                    className="text-sm text-teal-700 hover:text-teal-800 font-medium"
+                  >
+                    View More →
+                  </button>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full" ref={appointmentActionsRef}>
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapy Type</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {appointments.filter(apt => getAppointmentStatus(apt) === 'pending_notes').length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400">
+                          No pending session notes
+                        </td>
+                      </tr>
+                    ) : (
+                      appointments
+                        .filter(apt => getAppointmentStatus(apt) === 'pending_notes')
+                        .slice(0, 3)
+                        .map((appointment, index) => (
+                          <React.Fragment key={index}>
+                            <tr 
+                              className={`border-b cursor-pointer transition-colors ${
+                                selectedAppointmentIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                              }`}
+                              onClick={() => setSelectedAppointmentIndex(selectedAppointmentIndex === index ? null : index)}
+                            >
+                              <td className="px-6 py-4">
+                                <span 
+                                  className="text-teal-700 hover:underline cursor-pointer"
+                                  onClick={() => handleViewClientFromAppointment(appointment)}
+                                >
+                                  {appointment.client_name}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">{appointment.session_name}</td>
+                              <td className="px-6 py-4 text-sm">{appointment.session_timings}</td>
+                              <td className="px-6 py-4">
+                                {appointment.mode?.includes('_') 
+                                  ? appointment.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                                  : appointment.mode || 'Google Meet'
+                                }
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-yellow-100 text-yellow-700">
+                                  Pending Notes
+                                </span>
+                              </td>
+                            </tr>
+                            {selectedAppointmentIndex === index && (
+                              <tr className="bg-gray-100">
+                                <td colSpan={5} className="px-6 py-4">
+                                  <div className="flex gap-3 justify-center">
+                                    <button
+                                      onClick={() => copyAppointmentDetails(appointment)}
+                                      className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                                    >
+                                      <Copy size={16} />
+                                      Copy to Clipboard
+                                    </button>
+                                    <button
+                                      onClick={() => handleReminderClick(appointment)}
+                                      disabled={isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'}
+                                      className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                        isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                          : 'border border-gray-400 text-gray-700 hover:bg-white'
+                                      }`}
+                                    >
+                                      <Send size={16} />
+                                      Send Manual Reminder to Client
+                                    </button>
+                                    <button
+                                      onClick={() => handleSOSClick(appointment)}
+                                      disabled={appointment.booking_status === 'cancelled'}
+                                      className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                        appointment.booking_status === 'cancelled'
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                          : 'border border-red-600 text-red-600 hover:bg-white'
+                                      }`}
+                                    >
+                                      <span className="font-bold">SOS</span>
+                                      Raise Ticket
+                                    </button>
+                                    <button
+                                      onClick={() => handleViewSessionNotes(appointment)}
+                                      disabled={!appointment.has_session_notes || appointment.booking_status === 'cancelled'}
+                                      className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                        !appointment.has_session_notes || appointment.booking_status === 'cancelled'
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                          : 'border border-blue-600 text-blue-600 hover:bg-white'
+                                      }`}
+                                    >
+                                      <FileText size={16} />
+                                      View Session Notes
+                                    </button>
+                                    <button
+                                      onClick={() => handleFillSessionNotes(appointment)}
+                                      disabled={appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)}
+                                      className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                        appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                          : 'border border-teal-600 text-teal-600 hover:bg-white'
+                                      }`}
+                                    >
+                                      <FileText size={16} />
+                                      Fill Session Notes
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
