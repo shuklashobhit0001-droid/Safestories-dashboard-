@@ -1700,7 +1700,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                           if (activeAppointmentTab === 'all') return true;
                           if (activeAppointmentTab === 'upcoming') {
                             const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
-                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled' && !apt.has_session_notes;
                           }
                           return getAppointmentStatus(apt) === activeAppointmentTab;
                         }).map((apt, index) => (
