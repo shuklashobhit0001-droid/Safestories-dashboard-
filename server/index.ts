@@ -61,36 +61,15 @@ app.post('/api/login', async (req, res) => {
 // Get live sessions count
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
-    const bookings = await pool.query(`
-      SELECT booking_id, booking_invitee_time, booking_status
+    const result = await pool.query(`
+      SELECT COUNT(*) as live_count
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-      AND booking_invitee_time IS NOT NULL
+        AND booking_start_at <= NOW()
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
     `);
 
-    const now = new Date();
-    let liveCount = 0;
-
-    for (const booking of bookings.rows) {
-      try {
-        // Parse booking_invitee_time: "Wednesday, Jan 21, 2026 at 5:00 PM - 5:50 PM (GMT+05:30)"
-        const timeMatch = booking.booking_invitee_time.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M)/i);
-        if (!timeMatch) continue;
-        
-        const dateStr = timeMatch[1];
-        const timeStr = timeMatch[2];
-        const startTime = new Date(`${dateStr} ${timeStr} GMT+0530`);
-        const endTime = new Date(startTime.getTime() + 50 * 60 * 1000);
-        
-        if (now >= startTime && now <= endTime) {
-          liveCount++;
-        }
-      } catch (error) {
-        console.error('Error parsing booking time:', error);
-      }
-    }
-
-    res.json({ liveCount });
+    res.json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
   } catch (error) {
     console.error('Error fetching live sessions count:', error);
     res.status(500).json({ error: 'Failed to fetch live sessions count' });
@@ -465,53 +444,6 @@ app.get('/api/therapists-by-therapy', async (req, res) => {
       return res.status(400).json({ error: 'Therapy name is required' });
     }
 
-    const result = await pool.query(
-      `SELECT DISTINCT therapist_id, therapist_name 
-       FROM therapist_resources 
-       WHERE therapy_name = $1 
-       ORDER BY therapist_name`,
-      [therapy_name]
-    );
-
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching therapists by therapy:', error);
-    res.status(500).json({ error: 'Failed to fetch therapists' });
-  }
-});
-
-// Get therapies
-app.get('/api/therapies', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT DISTINCT specialization
-      FROM therapists
-      WHERE specialization IS NOT NULL
-    `);
-
-    const therapySet = new Set<string>();
-    result.rows.forEach(row => {
-      const specializations = row.specialization.split(',').map((s: string) => s.trim());
-      specializations.forEach((spec: string) => therapySet.add(spec));
-    });
-
-    const therapies = Array.from(therapySet).sort().map(therapy => ({ therapy_name: therapy }));
-    res.json(therapies);
-  } catch (error) {
-    console.error('Error fetching therapies:', error);
-    res.status(500).json({ error: 'Failed to fetch therapies' });
-  }
-});
-
-// Get therapists by therapy
-app.get('/api/therapists-by-therapy', async (req, res) => {
-  try {
-    const { therapy_name } = req.query;
-    
-    if (!therapy_name) {
-      return res.status(400).json({ error: 'Therapy name is required' });
-    }
-
     const result = await pool.query(`
       SELECT therapist_id, name as therapist_name
       FROM therapists
@@ -548,33 +480,19 @@ app.post('/api/booking-requests', async (req, res) => {
 // Get therapists live status
 app.get('/api/therapists-live-status', async (req, res) => {
   try {
-    const bookings = await pool.query(`
-      SELECT booking_host_name, booking_invitee_time, booking_status
+    const result = await pool.query(`
+      SELECT DISTINCT booking_host_name
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-      AND booking_invitee_time IS NOT NULL
+        AND booking_start_at <= NOW()
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
     `);
 
-    const now = new Date();
     const liveStatus: { [key: string]: boolean } = {};
-
-    for (const booking of bookings.rows) {
-      try {
-        const timeMatch = booking.booking_invitee_time.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M)/i);
-        if (!timeMatch) continue;
-        
-        const dateStr = timeMatch[1];
-        const timeStr = timeMatch[2];
-        const startTime = new Date(`${dateStr} ${timeStr} GMT+0530`);
-        const endTime = new Date(startTime.getTime() + 50 * 60 * 1000);
-        
-        if (now >= startTime && now <= endTime) {
-          liveStatus[booking.booking_host_name] = true;
-        }
-      } catch (error) {
-        console.error('Error parsing booking time:', error);
-      }
-    }
+    result.rows.forEach(row => {
+      const firstName = row.booking_host_name.split(' ')[0];
+      liveStatus[firstName] = true;
+    });
 
     res.json(liveStatus);
   } catch (error) {
