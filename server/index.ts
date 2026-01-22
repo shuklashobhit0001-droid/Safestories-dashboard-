@@ -503,6 +503,29 @@ app.get('/api/therapies', async (req, res) => {
   }
 });
 
+// Get therapists by therapy
+app.get('/api/therapists-by-therapy', async (req, res) => {
+  try {
+    const { therapy_name } = req.query;
+    
+    if (!therapy_name) {
+      return res.status(400).json({ error: 'Therapy name is required' });
+    }
+
+    const result = await pool.query(`
+      SELECT therapist_id, name as therapist_name
+      FROM therapists
+      WHERE specialization ILIKE $1
+      ORDER BY name ASC
+    `, [`%${therapy_name}%`]);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching therapists by therapy:', error);
+    res.status(500).json({ error: 'Failed to fetch therapists' });
+  }
+});
+
 // Save booking request
 app.post('/api/booking-requests', async (req, res) => {
   try {
