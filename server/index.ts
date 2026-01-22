@@ -1460,23 +1460,24 @@ app.get('/api/refunds', async (req, res) => {
         r.client_name,
         r.session_name,
         r.session_timings,
-        r.refund_status,
+        b.refund_status,
         COALESCE(b.invitee_phone, '') as invitee_phone,
         COALESCE(b.invitee_email, '') as invitee_email,
         COALESCE(b.refund_amount, 0) as refund_amount
       FROM refund_cancellation_table r
       LEFT JOIN bookings b ON r.session_id = b.booking_id
       WHERE b.booking_status IN ('cancelled', 'canceled')
-        AND r.refund_status IS NOT NULL
+        AND b.refund_status IS NOT NULL
+        AND LOWER(b.refund_status) IN ('initiated', 'failed')
     `;
     
     const params: any[] = [];
     
     if (status && status !== 'all') {
       if (status.toLowerCase() === 'pending') {
-        query += " AND (LOWER(r.refund_status) = 'pending' OR LOWER(r.refund_status) = 'initiated' OR r.refund_status IS NULL)";
+        query += " AND LOWER(b.refund_status) = 'initiated'";
       } else {
-        query += ' AND LOWER(r.refund_status) = LOWER($1)';
+        query += ' AND LOWER(b.refund_status) = LOWER($1)';
         params.push(status);
       }
     }
