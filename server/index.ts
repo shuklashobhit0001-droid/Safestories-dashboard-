@@ -253,7 +253,7 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_invitee_time
           FROM bookings
           WHERE booking_status NOT IN ($1, $2, $3, $4)
-            AND booking_start_at >= NOW()
+            AND booking_start_at + INTERVAL '50 minutes' >= NOW()
           ORDER BY booking_start_at ASC
           LIMIT 10`,
           ['cancelled', 'canceled', 'no_show', 'no show']
@@ -453,6 +453,30 @@ app.get('/api/appointments', async (req, res) => {
   } catch (error) {
     console.error('Error fetching appointments:', error);
     res.status(500).json({ error: 'Failed to fetch appointments' });
+  }
+});
+
+// Get therapists by therapy
+app.get('/api/therapists-by-therapy', async (req, res) => {
+  try {
+    const { therapy_name } = req.query;
+    
+    if (!therapy_name) {
+      return res.status(400).json({ error: 'Therapy name is required' });
+    }
+
+    const result = await pool.query(
+      `SELECT DISTINCT therapist_id, therapist_name 
+       FROM therapist_resources 
+       WHERE therapy_name = $1 
+       ORDER BY therapist_name`,
+      [therapy_name]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching therapists by therapy:', error);
+    res.status(500).json({ error: 'Failed to fetch therapists' });
   }
 });
 
@@ -825,7 +849,7 @@ app.get('/api/therapist-stats', async (req, res) => {
         booking_start_at as booking_date
       FROM bookings
       WHERE booking_host_name ILIKE $1
-        AND booking_start_at >= NOW()
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
         AND booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show')
       ORDER BY booking_start_at ASC
       LIMIT 10
@@ -1501,7 +1525,8 @@ app.get('/api/refunds', async (req, res) => {
         COALESCE(b.refund_amount, 0) as refund_amount
       FROM refund_cancellation_table r
       LEFT JOIN bookings b ON r.session_id = b.booking_id
-      WHERE 1=1
+      WHERE b.booking_status IN ('cancelled', 'canceled')
+        AND r.refund_status IS NOT NULL
     `;
     
     const params: any[] = [];

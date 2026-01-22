@@ -79,10 +79,13 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       const therapistsData = await therapistsRes.json();
       const liveStatusData = await liveSessionsRes.json();
       
-      const therapistsWithStatus = therapistsData.map((t: any) => ({
-        ...t,
-        isLive: liveStatusData[t.name] || false
-      }));
+      const therapistsWithStatus = therapistsData.map((t: any) => {
+        const firstName = t.name.split(' ')[0];
+        return {
+          ...t,
+          isLive: liveStatusData[firstName] || liveStatusData[t.name] || false
+        };
+      });
       
       setTherapists(therapistsWithStatus);
     } catch (error) {
