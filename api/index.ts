@@ -19,6 +19,14 @@ const getCurrentISTTimestamp = () => {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Extract route from URL path
   const urlPath = req.url?.split('?')[0] || '';
+  
+  // Handle notifications/:id/read pattern
+  const notificationReadMatch = urlPath.match(/\/api\/notifications\/(\d+)\/read/);
+  if (notificationReadMatch) {
+    const notificationId = notificationReadMatch[1];
+    return await handleNotificationReadById(req, res, notificationId);
+  }
+  
   const route = urlPath.replace('/api/', '').replace('/api/index', '') || req.query.route as string;
   
   if (!route || route === 'index') {
@@ -1096,6 +1104,13 @@ async function handleNotificationRead(req: VercelRequest, res: VercelResponse) {
   if (!notification_id) return res.status(400).json({ error: 'Notification ID required' });
   
   await pool.query('UPDATE notifications SET is_read = true WHERE notification_id = $1', [notification_id]);
+  return res.json({ success: true });
+}
+
+async function handleNotificationReadById(req: VercelRequest, res: VercelResponse, notificationId: string) {
+  if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' });
+  
+  await pool.query('UPDATE notifications SET is_read = true WHERE notification_id = $1', [notificationId]);
   return res.json({ success: true });
 }
 
