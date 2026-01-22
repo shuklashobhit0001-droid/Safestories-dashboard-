@@ -31,6 +31,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleLogin(req, res);
       case 'therapists':
         return await handleTherapists(req, res);
+      case 'therapists-live-status':
+        return await handleTherapistsLiveStatus(req, res);
+      case 'therapists-by-therapy':
+        return await handleTherapistsByTherapy(req, res);
       case 'clients':
         return await handleClients(req, res);
       case 'appointments':
@@ -136,6 +140,51 @@ async function handleTherapists(req: VercelRequest, res: VercelResponse) {
     ORDER BY t.name ASC
   `);
   res.json(result.rows);
+}
+
+async function handleTherapistsLiveStatus(req: VercelRequest, res: VercelResponse) {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT booking_host_name
+      FROM bookings
+      WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+        AND booking_start_at <= NOW()
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
+    `);
+
+    const liveStatus: { [key: string]: boolean } = {};
+    result.rows.forEach(row => {
+      const firstName = row.booking_host_name.split(' ')[0];
+      liveStatus[firstName] = true;
+    });
+
+    res.json(liveStatus);
+  } catch (error) {
+    console.error('Error fetching therapists live status:', error);
+    res.status(500).json({ error: 'Failed to fetch therapists live status' });
+  }
+}
+
+async function handleTherapistsByTherapy(req: VercelRequest, res: VercelResponse) {
+  try {
+    const { therapy_name } = req.query;
+    
+    if (!therapy_name) {
+      return res.status(400).json({ error: 'Therapy name is required' });
+    }
+
+    const result = await pool.query(`
+      SELECT therapist_id, name as therapist_name
+      FROM therapists
+      WHERE specialization ILIKE $1
+      ORDER BY name ASC
+    `, [`%${therapy_name}%`]);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching therapists by therapy:', error);
+    res.status(500).json({ error: 'Failed to fetch therapists' });
+  }
 }
 
 async function handleClients(req: VercelRequest, res: VercelResponse) {
@@ -756,7 +805,8 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
         SELECT invitee_name as client_name, invitee_email as client_email, invitee_phone as client_phone,
           booking_resource_name as therapy_type, booking_mode as mode,
           booking_host_name as therapist_name, booking_invitee_time, booking_joining_link, booking_checkin_url
-        FROM bookings WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show') AND booking_start_at >= NOW()
+        FROM bookings WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show') 
+          AND booking_start_at + INTERVAL '50 minutes' >= NOW()
         ORDER BY booking_start_at ASC LIMIT 10
       `);
   const convertToIST = (timeStr: string) => {
