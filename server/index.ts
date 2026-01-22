@@ -412,7 +412,7 @@ app.get('/api/appointments', async (req, res) => {
       
       return {
         booking_id: row.booking_id,
-        booking_start_at: row.booking_invitee_time || 'N/A',
+        booking_start_at: convertToIST(row.booking_invitee_time) || 'N/A',
         booking_resource_name: row.booking_resource_name,
         invitee_name: row.invitee_name,
         invitee_phone: row.invitee_phone,

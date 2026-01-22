@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import pool from '../lib/db.js';
 import { notifyAllAdmins, notifyTherapist } from '../lib/notifications.js';
+import { convertToIST } from '../lib/timezone.js';
 
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
@@ -344,33 +345,6 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
         }
       }
       
-      const convertToIST = (timeStr: string) => {
-        if (!timeStr) return timeStr;
-        const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-        if (!match) return timeStr;
-        const [, date, startTime, endTime, offset] = match;
-        const parseTime = (time: string) => {
-          const [h, rest] = time.split(':');
-          const [m, period] = rest.split(' ');
-          let hour = parseInt(h);
-          if (period === 'PM' && hour !== 12) hour += 12;
-          if (period === 'AM' && hour === 12) hour = 0;
-          const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
-          const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-          const istOffset = 330;
-          const diff = istOffset - offsetTotal;
-          let totalMins = hour * 60 + parseInt(m) + diff;
-          const newHour = Math.floor(totalMins / 60) % 24;
-          const newMin = totalMins % 60;
-          const period12 = newHour >= 12 ? 'PM' : 'AM';
-          const hour12 = newHour % 12 || 12;
-          return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-        };
-        const istStart = parseTime(startTime);
-        const istEnd = parseTime(endTime);
-        return `${date} at ${istStart} - ${istEnd} IST`;
-      };
-      
       return {
         booking_id: row.booking_id,
         booking_start_at: convertToIST(row.booking_invitee_time),
@@ -517,33 +491,6 @@ async function handleTherapistAppointments(req: VercelRequest, res: VercelRespon
     WHERE b.booking_host_name ILIKE $1 ORDER BY b.booking_start_at DESC
   `, [`%${therapistFirstName}%`]);
   
-  const convertToIST = (timeStr: string) => {
-    if (!timeStr) return timeStr;
-    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-    if (!match) return timeStr;
-    const [, date, startTime, endTime, offset] = match;
-    const parseTime = (time: string) => {
-      const [h, rest] = time.split(':');
-      const [m, period] = rest.split(' ');
-      let hour = parseInt(h);
-      if (period === 'PM' && hour !== 12) hour += 12;
-      if (period === 'AM' && hour === 12) hour = 0;
-      const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
-      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-      const istOffset = 330;
-      const diff = istOffset - offsetTotal;
-      let totalMins = hour * 60 + parseInt(m) + diff;
-      const newHour = Math.floor(totalMins / 60) % 24;
-      const newMin = totalMins % 60;
-      const period12 = newHour >= 12 ? 'PM' : 'AM';
-      const hour12 = newHour % 12 || 12;
-      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-    };
-    const istStart = parseTime(startTime);
-    const istEnd = parseTime(endTime);
-    return `${date} at ${istStart} - ${istEnd} IST`;
-  };
-  
   const appointments = appointmentsResult.rows.map(apt => ({
     ...apt,
     session_timings: convertToIST(apt.session_timings),
@@ -679,33 +626,6 @@ async function handleTherapistDetails(req: VercelRequest, res: VercelResponse) {
     ORDER BY booking_start_at DESC LIMIT 10
   `, [name]);
   
-  const convertToIST = (timeStr: string) => {
-    if (!timeStr) return timeStr;
-    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-    if (!match) return timeStr;
-    const [, date, startTime, endTime, offset] = match;
-    const parseTime = (time: string) => {
-      const [h, rest] = time.split(':');
-      const [m, period] = rest.split(' ');
-      let hour = parseInt(h);
-      if (period === 'PM' && hour !== 12) hour += 12;
-      if (period === 'AM' && hour === 12) hour = 0;
-      const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
-      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-      const istOffset = 330;
-      const diff = istOffset - offsetTotal;
-      let totalMins = hour * 60 + parseInt(m) + diff;
-      const newHour = Math.floor(totalMins / 60) % 24;
-      const newMin = totalMins % 60;
-      const period12 = newHour >= 12 ? 'PM' : 'AM';
-      const hour12 = newHour % 12 || 12;
-      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-    };
-    const istStart = parseTime(startTime);
-    const istEnd = parseTime(endTime);
-    return `${date} at ${istStart} - ${istEnd} IST`;
-  };
-  
   const appointments = appointmentsResult.rows.map(apt => ({
     ...apt,
     booking_invitee_time: convertToIST(apt.booking_invitee_time)
@@ -756,33 +676,6 @@ async function handleTherapistStats(req: VercelRequest, res: VercelResponse) {
     ORDER BY booking_start_at ASC LIMIT 10
   `, [`%${therapistFirstName}%`]);
   
-  const convertToIST = (timeStr: string) => {
-    if (!timeStr) return timeStr;
-    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-    if (!match) return timeStr;
-    const [, date, startTime, endTime, offset] = match;
-    const parseTime = (time: string) => {
-      const [h, rest] = time.split(':');
-      const [m, period] = rest.split(' ');
-      let hour = parseInt(h);
-      if (period === 'PM' && hour !== 12) hour += 12;
-      if (period === 'AM' && hour === 12) hour = 0;
-      const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
-      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-      const istOffset = 330;
-      const diff = istOffset - offsetTotal;
-      let totalMins = hour * 60 + parseInt(m) + diff;
-      const newHour = Math.floor(totalMins / 60) % 24;
-      const newMin = totalMins % 60;
-      const period12 = newHour >= 12 ? 'PM' : 'AM';
-      const hour12 = newHour % 12 || 12;
-      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-    };
-    const istStart = parseTime(startTime);
-    const istEnd = parseTime(endTime);
-    return `${date} at ${istStart} - ${istEnd} IST`;
-  };
-  
   res.json({
     therapist: { name: therapist.name, specialization: therapist.specialization },
     stats: {
@@ -820,31 +713,6 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
           AND booking_start_at + INTERVAL '50 minutes' >= NOW()
         ORDER BY booking_start_at ASC LIMIT 10
       `);
-  const convertToIST = (timeStr: string) => {
-    const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-    if (!match) return timeStr;
-    const [, date, startTime, endTime, offset] = match;
-    const parseTime = (time: string, dateStr: string, tz: string) => {
-      const [h, rest] = time.split(':');
-      const [m, period] = rest.split(' ');
-      let hour = parseInt(h);
-      if (period === 'PM' && hour !== 12) hour += 12;
-      if (period === 'AM' && hour === 12) hour = 0;
-      const [offsetHours, offsetMins] = tz.replace('GMT', '').split(':').map(n => parseInt(n));
-      const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-      const istOffset = 330;
-      const diff = istOffset - offsetTotal;
-      let totalMins = hour * 60 + parseInt(m) + diff;
-      const newHour = Math.floor(totalMins / 60) % 24;
-      const newMin = totalMins % 60;
-      const period12 = newHour >= 12 ? 'PM' : 'AM';
-      const hour12 = newHour % 12 || 12;
-      return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-    };
-    const istStart = parseTime(startTime, date, `GMT${offset}`);
-    const istEnd = parseTime(endTime, date, `GMT${offset}`);
-    return `${date} at ${istStart} - ${istEnd} IST`;
-  };
   const bookings = result.rows.map(row => ({
     ...row, booking_start_at: convertToIST(row.booking_invitee_time),
     mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
@@ -1401,33 +1269,6 @@ async function handleClientAppointments(req: VercelRequest, res: VercelResponse)
 
     const params = therapistFirstName ? [client_phone, `%${therapistFirstName}%`] : [client_phone];
     const appointmentsResult = await pool.query(query, params);
-
-    const convertToIST = (timeStr: string) => {
-      if (!timeStr) return timeStr;
-      const match = timeStr.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) \(GMT([+-]\d+:\d+)\)/);
-      if (!match) return timeStr;
-      const [, date, startTime, endTime, offset] = match;
-      const parseTime = (time: string) => {
-        const [h, rest] = time.split(':');
-        const [m, period] = rest.split(' ');
-        let hour = parseInt(h);
-        if (period === 'PM' && hour !== 12) hour += 12;
-        if (period === 'AM' && hour === 12) hour = 0;
-        const [offsetHours, offsetMins] = offset.replace('GMT', '').split(':').map(n => parseInt(n));
-        const offsetTotal = offsetHours * 60 + (offsetHours < 0 ? -offsetMins : offsetMins);
-        const istOffset = 330;
-        const diff = istOffset - offsetTotal;
-        let totalMins = hour * 60 + parseInt(m) + diff;
-        const newHour = Math.floor(totalMins / 60) % 24;
-        const newMin = totalMins % 60;
-        const period12 = newHour >= 12 ? 'PM' : 'AM';
-        const hour12 = newHour % 12 || 12;
-        return `${hour12}:${newMin.toString().padStart(2, '0')} ${period12}`;
-      };
-      const istStart = parseTime(startTime);
-      const istEnd = parseTime(endTime);
-      return `${date} at ${istStart} - ${istEnd} IST`;
-    };
 
     const appointments = appointmentsResult.rows.map(row => ({
       booking_id: row.booking_id,
