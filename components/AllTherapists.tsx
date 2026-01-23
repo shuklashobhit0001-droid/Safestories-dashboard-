@@ -47,6 +47,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const clientDropdownRef = React.useRef<HTMLDivElement>(null);
   const [clientAppointmentSearchTerm, setClientAppointmentSearchTerm] = useState('');
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
+  const [appointmentsPage, setAppointmentsPage] = useState(1);
+  const appointmentsPerPage = 10;
 
   useEffect(() => {
     fetchTherapists();
@@ -129,14 +131,20 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       (data.clients || []).forEach((client: Client) => {
         let key = null;
         
+        // Check if email already exists
         if (client.invitee_email && emailToKey.has(client.invitee_email)) {
           key = emailToKey.get(client.invitee_email);
-        } else if (client.invitee_phone && phoneToKey.has(client.invitee_phone)) {
+        }
+        // Check if phone already exists
+        else if (client.invitee_phone && phoneToKey.has(client.invitee_phone)) {
           key = phoneToKey.get(client.invitee_phone);
-        } else {
+        }
+        // New client
+        else {
           key = `client-${clientMap.size}`;
         }
         
+        // Map both email and phone to this key
         if (client.invitee_email) emailToKey.set(client.invitee_email, key);
         if (client.invitee_phone) phoneToKey.set(client.invitee_phone, key);
         
@@ -145,17 +153,22 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             invitee_name: client.invitee_name,
             invitee_email: client.invitee_email,
             invitee_phone: client.invitee_phone,
-            phoneNumbers: []
+            phoneNumbers: client.invitee_phone ? [client.invitee_phone] : []
           });
-        }
-        
-        const groupedClient = clientMap.get(key);
-        if (!groupedClient.invitee_email && client.invitee_email) {
-          groupedClient.invitee_email = client.invitee_email;
-        }
-        
-        if (client.invitee_phone && !groupedClient.phoneNumbers.some((p: string) => p === client.invitee_phone)) {
-          groupedClient.phoneNumbers.push(client.invitee_phone);
+        } else {
+          const groupedClient = clientMap.get(key);
+          
+          // Update email if missing
+          if (!groupedClient.invitee_email && client.invitee_email) {
+            groupedClient.invitee_email = client.invitee_email;
+            emailToKey.set(client.invitee_email, key);
+          }
+          
+          // Add phone if not already in list
+          if (client.invitee_phone && !groupedClient.phoneNumbers.includes(client.invitee_phone)) {
+            groupedClient.phoneNumbers.push(client.invitee_phone);
+            phoneToKey.set(client.invitee_phone, key);
+          }
         }
       });
       
@@ -180,6 +193,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     setAppointments([]);
     setClientAppointments([]);
     setExpandedClientRows(new Set());
+    setAppointmentsPage(1);
   };
 
   const toggleClientRow = (index: number) => {
@@ -214,7 +228,11 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     try {
       const params = new URLSearchParams();
       if (normalizedClient.invitee_email) params.append('email', normalizedClient.invitee_email);
-      if (normalizedClient.invitee_phone) params.append('phone', normalizedClient.invitee_phone);
+      if (normalizedClient.invitee_phone) {
+        // Handle multiple phone numbers
+        const phones = normalizedClient.invitee_phone.split(', ');
+        phones.forEach(phone => params.append('phone', phone.trim()));
+      }
       
       console.log('Fetching with params:', params.toString());
       const response = await fetch(`/api/client-details?${params.toString()}`);
@@ -489,7 +507,15 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             </div>
             <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Total Sessions</p>
-              <p className="text-3xl font-bold text-teal-700">{clientAppointments.length}</p>
+              <p className="text-3xl font-bold text-teal-700">{clientAppointments.filter(apt => {
+                if (clientDateFilter.start && clientDateFilter.end) {
+                  const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                  const startDate = new Date(clientDateFilter.start);
+                  const endDate = new Date(clientDateFilter.end + 'T23:59:59');
+                  if (aptDate < startDate || aptDate > endDate) return false;
+                }
+                return true;
+              }).length}</p>
             </div>
           </div>
         </div>
@@ -829,11 +855,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
 
             {/* Recent Appointments */}
             <div>
-              <h3 className="text-lg font-semibold mb-3">Recent Appointments ({appointments.filter(apt => 
-                appointmentSearchTerm === '' || 
-                apt.invitee_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                apt.booking_resource_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-              ).length})</h3>
+              <h3 className="text-lg font-semibold mb-3">Recent Appointments</h3>
               <div className="mb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -841,7 +863,10 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                     type="text"
                     placeholder="Search by client name or session type..."
                     value={appointmentSearchTerm}
-                    onChange={(e) => setAppointmentSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                      setAppointmentSearchTerm(e.target.value);
+                      setAppointmentsPage(1);
+                    }}
                     className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
@@ -857,29 +882,80 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                       </tr>
                     </thead>
                     <tbody>
-                      {appointments.filter(apt => 
-                        appointmentSearchTerm === '' || 
-                        apt.invitee_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                        apt.booking_resource_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-                      ).length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
-                        </tr>
-                      ) : (
-                        appointments.filter(apt => 
+                      {(() => {
+                        const filteredAppointments = appointments.filter(apt => 
                           appointmentSearchTerm === '' || 
                           apt.invitee_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
                           apt.booking_resource_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
-                        ).map((apt, index) => (
+                        );
+                        const totalPages = Math.ceil(filteredAppointments.length / appointmentsPerPage);
+                        const startIndex = (appointmentsPage - 1) * appointmentsPerPage;
+                        const paginatedAppointments = filteredAppointments.slice(startIndex, startIndex + appointmentsPerPage);
+                        
+                        if (filteredAppointments.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
+                            </tr>
+                          );
+                        }
+                        
+                        return paginatedAppointments.map((apt, index) => (
                           <tr key={index} className="border-b hover:bg-gray-50">
                             <td className="px-4 py-3 text-sm">{apt.invitee_name}</td>
                             <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_resource_name.replace(/ with .+$/, '')}</td>
                             <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
                           </tr>
-                        ))
-                      )}
+                        ));
+                      })()}
                     </tbody>
                   </table>
+                </div>
+                <div className="px-6 py-4 border-t flex justify-between items-center">
+                  <span className="text-sm text-gray-600">
+                    {(() => {
+                      const filteredCount = appointments.filter(apt => 
+                        appointmentSearchTerm === '' || 
+                        apt.invitee_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                        apt.booking_resource_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
+                      ).length;
+                      const startIndex = (appointmentsPage - 1) * appointmentsPerPage;
+                      const endIndex = Math.min(startIndex + appointmentsPerPage, filteredCount);
+                      return `Showing ${filteredCount > 0 ? startIndex + 1 : 0}-${endIndex} of ${filteredCount} result${filteredCount !== 1 ? 's' : ''}`;
+                    })()}
+                  </span>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setAppointmentsPage(p => Math.max(1, p - 1))}
+                      disabled={appointmentsPage === 1}
+                      className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      ←
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const filteredCount = appointments.filter(apt => 
+                          appointmentSearchTerm === '' || 
+                          apt.invitee_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                          apt.booking_resource_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
+                        ).length;
+                        const totalPages = Math.ceil(filteredCount / appointmentsPerPage);
+                        setAppointmentsPage(p => Math.min(totalPages, p + 1));
+                      }}
+                      disabled={(() => {
+                        const filteredCount = appointments.filter(apt => 
+                          appointmentSearchTerm === '' || 
+                          apt.invitee_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                          apt.booking_resource_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase())
+                        ).length;
+                        const totalPages = Math.ceil(filteredCount / appointmentsPerPage);
+                        return appointmentsPage === totalPages;
+                      })()}
+                      className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      →
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

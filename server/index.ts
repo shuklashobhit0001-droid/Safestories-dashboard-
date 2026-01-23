@@ -624,7 +624,6 @@ app.get('/api/therapist-details', async (req, res) => {
       FROM bookings
       WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
       ORDER BY booking_start_at DESC
-      LIMIT 10
     `, [name]);
 
     const appointments = appointmentsResult.rows.map(apt => ({
@@ -645,12 +644,64 @@ app.get('/api/therapist-details', async (req, res) => {
 // Get client details
 app.get('/api/client-details', async (req, res) => {
   try {
-    const { email, phone } = req.query;
+    const phones = req.query.phone;
+    const email = req.query.email;
 
-    if (!email && !phone) {
+    console.log('=== CLIENT DETAILS API CALLED ===');
+    console.log('Email:', email);
+    console.log('Phones:', phones);
+    console.log('Phones type:', typeof phones, Array.isArray(phones));
+
+    if (!email && !phones) {
       return res.status(400).json({ error: 'Client email or phone is required' });
     }
 
+    // Get all emails and phones for this client
+    let allEmails: string[] = [];
+    let allPhones: string[] = [];
+
+    if (email) {
+      allEmails.push(email as string);
+      // Get all phones for this email
+      const phonesResult = await pool.query(
+        'SELECT DISTINCT invitee_phone FROM bookings WHERE invitee_email = $1 AND invitee_phone IS NOT NULL',
+        [email]
+      );
+      allPhones = phonesResult.rows.map(r => r.invitee_phone);
+    }
+
+    if (phones) {
+      const phoneArray = Array.isArray(phones) ? phones : [phones];
+      allPhones.push(...phoneArray.filter(p => !allPhones.includes(p as string)));
+      
+      // Get email for these phones if not already provided
+      if (!email) {
+        for (const phone of phoneArray) {
+          const emailResult = await pool.query(
+            'SELECT DISTINCT invitee_email FROM bookings WHERE invitee_phone = $1 AND invitee_email IS NOT NULL LIMIT 1',
+            [phone]
+          );
+          if (emailResult.rows.length > 0 && !allEmails.includes(emailResult.rows[0].invitee_email)) {
+            allEmails.push(emailResult.rows[0].invitee_email);
+          }
+        }
+        
+        // Get all phones for found emails
+        for (const foundEmail of allEmails) {
+          const phonesResult = await pool.query(
+            'SELECT DISTINCT invitee_phone FROM bookings WHERE invitee_email = $1 AND invitee_phone IS NOT NULL',
+            [foundEmail]
+          );
+          phonesResult.rows.forEach(r => {
+            if (!allPhones.includes(r.invitee_phone)) {
+              allPhones.push(r.invitee_phone);
+            }
+          });
+        }
+      }
+    }
+
+    // Build query to get all appointments for all emails and phones
     let query = `
       SELECT 
         b.invitee_name,
@@ -666,14 +717,22 @@ app.get('/api/client-details', async (req, res) => {
     `;
     const params: any[] = [];
     
-    if (email) {
-      params.push(email);
-      query += ` AND b.invitee_email = $${params.length}`;
-    }
-    
-    if (phone) {
-      params.push(phone);
-      query += ` AND b.invitee_phone = $${params.length}`;
+    if (allEmails.length > 0) {
+      const emailPlaceholders = allEmails.map((_, i) => `$${params.length + i + 1}`).join(', ');
+      query += ` AND (b.invitee_email IN (${emailPlaceholders})`;
+      params.push(...allEmails);
+      
+      if (allPhones.length > 0) {
+        const phonePlaceholders = allPhones.map((_, i) => `$${params.length + i + 1}`).join(', ');
+        query += ` OR b.invitee_phone IN (${phonePlaceholders}))`;
+        params.push(...allPhones);
+      } else {
+        query += ')';
+      }
+    } else if (allPhones.length > 0) {
+      const phonePlaceholders = allPhones.map((_, i) => `$${params.length + i + 1}`).join(', ');
+      query += ` AND b.invitee_phone IN (${phonePlaceholders})`;
+      params.push(...allPhones);
     }
     
     query += ' ORDER BY b.booking_start_at DESC';
@@ -927,14 +986,33 @@ app.get('/api/therapist-clients', async (req, res) => {
 
     // Group by email (primary) or phone (fallback)
     const clientMap = new Map();
+    const emailToKey = new Map();
+    const phoneToKey = new Map();
     
     clientsResult.rows.forEach(row => {
       const email = row.client_email ? row.client_email.toLowerCase().trim() : null;
       const phone = row.client_phone ? row.client_phone.replace(/[\s\-\(\)\+]/g, '') : null;
       
-      // Use email as key if available, otherwise use phone
-      const key = email || phone;
+      let key = null;
+      
+      // Check if email already exists
+      if (email && emailToKey.has(email)) {
+        key = emailToKey.get(email);
+      }
+      // Check if phone already exists
+      else if (phone && phoneToKey.has(phone)) {
+        key = phoneToKey.get(phone);
+      }
+      // New client
+      else {
+        key = email || phone;
+      }
+      
       if (!key) return; // Skip if both are missing
+      
+      // Map both email and phone to this key
+      if (email) emailToKey.set(email, key);
+      if (phone) phoneToKey.set(phone, key);
       
       if (!clientMap.has(key)) {
         clientMap.set(key, {
@@ -958,6 +1036,8 @@ app.get('/api/therapist-clients', async (req, res) => {
       // Fill in missing email if found
       if (row.client_email && !client.client_email) {
         client.client_email = row.client_email;
+        // Update emailToKey mapping
+        emailToKey.set(email!, key);
       }
     });
 
@@ -1000,7 +1080,7 @@ app.get('/api/client-appointments', async (req, res) => {
       }
     }
 
-    // First, find the client's email using the provided phone number
+    // First, find all emails and phones for this client
     const clientEmailResult = await pool.query(
       'SELECT DISTINCT invitee_email FROM bookings WHERE invitee_phone = $1 AND invitee_email IS NOT NULL LIMIT 1',
       [client_phone]
@@ -1008,7 +1088,19 @@ app.get('/api/client-appointments', async (req, res) => {
 
     const clientEmail = clientEmailResult.rows.length > 0 ? clientEmailResult.rows[0].invitee_email : null;
 
-    // Query with or without therapist filter, matching by email (primary) or phone
+    // Get all phone numbers associated with this email
+    let allPhones = [client_phone];
+    if (clientEmail) {
+      const phonesResult = await pool.query(
+        'SELECT DISTINCT invitee_phone FROM bookings WHERE invitee_email = $1 AND invitee_phone IS NOT NULL',
+        [clientEmail]
+      );
+      allPhones = phonesResult.rows.map(r => r.invitee_phone);
+    }
+
+    // Query with or without therapist filter, matching by email (primary) or any phone
+    const phoneConditions = allPhones.map((_, i) => `b.invitee_phone = $${clientEmail ? i + 2 : i + 1}`).join(' OR ');
+    
     const query = therapistFirstName
       ? `SELECT 
           b.booking_id,
@@ -1019,8 +1111,8 @@ app.get('/api/client-appointments', async (req, res) => {
           CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-        WHERE (${clientEmail ? 'b.invitee_email = $1 OR' : ''} b.invitee_phone = $${clientEmail ? '2' : '1'})
-          AND b.booking_host_name ILIKE $${clientEmail ? '3' : '2'}
+        WHERE (${clientEmail ? 'b.invitee_email = $1 OR' : ''} ${phoneConditions})
+          AND b.booking_host_name ILIKE $${clientEmail ? allPhones.length + 2 : allPhones.length + 1}
         ORDER BY b.booking_start_at DESC`
       : `SELECT 
           b.booking_id,
@@ -1031,12 +1123,12 @@ app.get('/api/client-appointments', async (req, res) => {
           CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-        WHERE ${clientEmail ? 'b.invitee_email = $1 OR' : ''} b.invitee_phone = $${clientEmail ? '2' : '1'}
+        WHERE ${clientEmail ? 'b.invitee_email = $1 OR' : ''} ${phoneConditions}
         ORDER BY b.booking_start_at DESC`;
 
     const params = clientEmail
-      ? (therapistFirstName ? [clientEmail, client_phone, `%${therapistFirstName}%`] : [clientEmail, client_phone])
-      : (therapistFirstName ? [client_phone, `%${therapistFirstName}%`] : [client_phone]);
+      ? (therapistFirstName ? [clientEmail, ...allPhones, `%${therapistFirstName}%`] : [clientEmail, ...allPhones])
+      : (therapistFirstName ? [...allPhones, `%${therapistFirstName}%`] : allPhones);
     
     const appointmentsResult = await pool.query(query, params);
 

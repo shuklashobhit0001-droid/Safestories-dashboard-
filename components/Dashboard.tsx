@@ -308,17 +308,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
-            style={{ backgroundColor: activeView === 'audit' ? '#2D75795C' : 'transparent' }}
-            onClick={() => {
-              resetAllStates();
-              setActiveView('audit');
-            }}
-          >
-            <FileText size={20} className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'} />
-            <span className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'}>Audit Logs</span>
-          </div>
-          <div 
-            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'notifications' ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
@@ -329,6 +318,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <span className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'}>Notifications</span>
           </div>
         </nav>
+
+        <div className="px-4 mb-4 pt-4 border-t">
+          <div 
+            className="rounded-lg px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+            style={{ backgroundColor: activeView === 'audit' ? '#2D75795C' : 'transparent' }}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('audit');
+            }}
+          >
+            <FileText size={20} className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={activeView === 'audit' ? 'text-teal-700' : 'text-gray-700'}>Audit Logs</span>
+          </div>
+        </div>
 
         <div className="p-4 border-t">
           <div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: '#2D757930' }}>
@@ -498,7 +501,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
               <div className="flex gap-3">
                 <button 
                   onClick={() => setActiveView('createBooking')}
-                  className="bg-white border-2 border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
+                  disabled
+                  className="bg-white border-2 border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus size={18} />
                   Create New Booking
