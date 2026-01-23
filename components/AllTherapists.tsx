@@ -998,7 +998,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Specialization</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Total sessions lifetime</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Sessions this month</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Status</th>
               </tr>
             </thead>
             <tbody>
