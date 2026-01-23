@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from '../lib/db';
-import { notifyAllAdmins, notifyTherapist } from '../lib/notifications';
-import { convertToIST } from '../lib/timezone';
+import pool from '../lib/db.js';
+import { notifyAllAdmins, notifyTherapist } from '../lib/notifications.js';
+import { convertToIST } from '../lib/timezone.js';
 
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
@@ -137,13 +137,18 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
 
 async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) {
   try {
+    // Get current IST time
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+    const istNow = new Date(now.getTime() + istOffset);
+    
     const result = await pool.query(`
       SELECT COUNT(*) as live_count
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at <= NOW()
-        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
-    `);
+        AND booking_start_at <= $1
+        AND booking_start_at + INTERVAL '50 minutes' >= $1
+    `, [istNow]);
 
     res.json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
   } catch (error) {
