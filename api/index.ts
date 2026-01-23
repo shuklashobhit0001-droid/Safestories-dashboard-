@@ -142,7 +142,7 @@ async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) 
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
         AND booking_start_at <= NOW()
-        AND booking_end_at >= NOW()
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
     `);
 
     res.json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
@@ -177,7 +177,7 @@ async function handleTherapistsLiveStatus(req: VercelRequest, res: VercelRespons
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
         AND booking_start_at <= NOW()
-        AND booking_end_at >= NOW()
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
     `);
 
     const liveStatus: { [key: string]: boolean } = {};

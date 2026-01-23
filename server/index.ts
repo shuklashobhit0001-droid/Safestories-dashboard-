@@ -485,7 +485,7 @@ app.get('/api/therapists-live-status', async (req, res) => {
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
         AND booking_start_at <= NOW()
-        AND booking_end_at >= NOW()
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
     `);
 
     const liveStatus: { [key: string]: boolean } = {};
