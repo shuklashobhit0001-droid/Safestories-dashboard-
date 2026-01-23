@@ -483,9 +483,9 @@ app.get('/api/therapists-live-status', async (req, res) => {
     const result = await pool.query(`
       SELECT DISTINCT booking_host_name
       FROM bookings
-      WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+      WHERE booking_status = 'active'
         AND booking_start_at <= NOW()
-        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
+        AND booking_end_at >= NOW()
     `);
 
     const liveStatus: { [key: string]: boolean } = {};
