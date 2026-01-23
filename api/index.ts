@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import pool from '../lib/db.js';
-import { notifyAllAdmins, notifyTherapist } from '../lib/notifications.js';
-import { convertToIST } from '../lib/timezone.js';
+import pool from './lib/db.js';
+import { notifyAllAdmins, notifyTherapist } from './lib/notifications.js';
+import { convertToIST } from './lib/timezone.js';
 
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
