@@ -483,7 +483,7 @@ app.get('/api/therapists-live-status', async (req, res) => {
     const result = await pool.query(`
       SELECT DISTINCT booking_host_name
       FROM bookings
-      WHERE booking_status = 'active'
+      WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
         AND booking_start_at <= NOW()
         AND booking_end_at >= NOW()
     `);
