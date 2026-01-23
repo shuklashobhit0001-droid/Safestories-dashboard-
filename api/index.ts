@@ -137,9 +137,6 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
 
 async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) {
   try {
-    console.log('[live-sessions-count] Starting query...');
-    console.log('[live-sessions-count] NOW():', new Date().toISOString());
-    
     const result = await pool.query(`
       SELECT COUNT(*) as live_count
       FROM bookings
@@ -148,11 +145,15 @@ async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) 
         AND booking_start_at + INTERVAL '50 minutes' >= NOW()
     `);
 
-    console.log('[live-sessions-count] Result:', result.rows[0]);
-    res.json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
-  } catch (error) {
-    console.error('[live-sessions-count] Error:', error);
-    res.status(500).json({ error: 'Failed to fetch live sessions count', details: error.message });
+    const count = parseInt(result.rows[0].live_count) || 0;
+    return res.status(200).json({ liveCount: count });
+  } catch (error: any) {
+    console.error('[live-sessions-count] ERROR:', error);
+    return res.status(500).json({ 
+      error: 'Failed to fetch live sessions count', 
+      message: error.message,
+      stack: error.stack 
+    });
   }
 }
 
