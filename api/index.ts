@@ -141,8 +141,8 @@ async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) 
       SELECT COUNT(*) as live_count
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at <= (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')
-        AND booking_start_at + INTERVAL '50 minutes' >= (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')
+        AND booking_start_at <= CURRENT_TIMESTAMP
+        AND booking_start_at + INTERVAL '50 minutes' >= CURRENT_TIMESTAMP
     `);
 
     res.json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
