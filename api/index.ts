@@ -623,7 +623,7 @@ async function handleTherapistDetails(req: VercelRequest, res: VercelResponse) {
   const appointmentsResult = await pool.query(`
     SELECT invitee_name, booking_resource_name, booking_start_at, booking_invitee_time
     FROM bookings WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
-    ORDER BY booking_start_at DESC LIMIT 10
+    ORDER BY booking_start_at DESC
   `, [name]);
   
   const appointments = appointmentsResult.rows.map(apt => ({
