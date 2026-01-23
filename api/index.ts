@@ -38,6 +38,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     switch (route) {
       case 'login':
         return await handleLogin(req, res);
+      case 'live-sessions-count':
+        return await handleLiveSessionsCount(req, res);
       case 'therapists':
         return await handleTherapists(req, res);
       case 'therapists-live-status':
@@ -130,6 +132,23 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
     res.json({ success: true, user });
   } else {
     res.status(401).json({ success: false, message: 'Invalid credentials' });
+  }
+}
+
+async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) {
+  try {
+    const result = await pool.query(`
+      SELECT COUNT(*) as live_count
+      FROM bookings
+      WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+        AND booking_start_at <= NOW()
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
+    `);
+
+    res.json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
+  } catch (error) {
+    console.error('Error fetching live sessions count:', error);
+    res.status(500).json({ error: 'Failed to fetch live sessions count' });
   }
 }
 
