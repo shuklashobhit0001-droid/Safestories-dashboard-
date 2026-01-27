@@ -63,14 +63,34 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT COUNT(*) as live_count
+      SELECT booking_invitee_time, booking_start_at
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
         AND booking_start_at <= NOW()
-        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
+        AND booking_start_at >= NOW() - INTERVAL '2 hours'
     `);
 
-    res.json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
+    let liveCount = 0;
+    const now = new Date();
+
+    result.rows.forEach(row => {
+      const timeMatch = row.booking_invitee_time.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
+      
+      if (timeMatch) {
+        const startTime = new Date(row.booking_start_at);
+        const dateStr = row.booking_invitee_time.match(/(\w+,\s+\w+\s+\d+,\s+\d+)/)?.[1];
+        const endTimeStr = timeMatch[2];
+        
+        if (dateStr) {
+          const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+          if (now >= startTime && now <= endDateTime) {
+            liveCount++;
+          }
+        }
+      }
+    });
+
+    res.json({ liveCount });
   } catch (error) {
     console.error('Error fetching live sessions count:', error);
     res.status(500).json({ error: 'Failed to fetch live sessions count' });
@@ -398,7 +418,8 @@ app.get('/api/appointments', async (req, res) => {
         b.booking_checkin_url,
         b.therapist_id,
         b.booking_status,
-        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes,
+        (b.booking_start_at < NOW()) as is_past
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
       WHERE b.booking_start_at >= NOW() - INTERVAL '7 days'
@@ -407,13 +428,11 @@ app.get('/api/appointments', async (req, res) => {
 
     const appointments = result.rows.map(row => {
       let status = row.booking_status;
-      const now = new Date();
-      const sessionDate = new Date(row.booking_start_at);
       
       if (row.booking_status !== 'cancelled' && row.booking_status !== 'canceled' && row.booking_status !== 'no_show' && row.booking_status !== 'no show') {
         if (row.has_session_notes) {
           status = 'completed';
-        } else if (sessionDate < now) {
+        } else if (row.is_past) {
           status = 'pending_notes';
         }
       }
