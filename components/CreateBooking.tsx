@@ -26,8 +26,58 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [countryCode, setCountryCode] = useState('+91');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [selectedTimezone, setSelectedTimezone] = useState('');
+  const [timezoneSearch, setTimezoneSearch] = useState('');
+  const [isTimezoneDropdownOpen, setIsTimezoneDropdownOpen] = useState(false);
+  const timezoneRef = useRef<HTMLDivElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const dateContainerRef = useRef<HTMLDivElement>(null);
+  const [clients, setClients] = useState<any[]>([]);
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [filteredClients, setFilteredClients] = useState<any[]>([]);
+
+  const timezones = [
+    { name: 'Asia/Kolkata', offset: 'GMT+5:30' },
+    { name: 'America/New_York', offset: 'GMT-5:00' },
+    { name: 'America/Chicago', offset: 'GMT-6:00' },
+    { name: 'America/Denver', offset: 'GMT-7:00' },
+    { name: 'America/Los_Angeles', offset: 'GMT-8:00' },
+    { name: 'America/Anchorage', offset: 'GMT-9:00' },
+    { name: 'Pacific/Honolulu', offset: 'GMT-10:00' },
+    { name: 'Europe/London', offset: 'GMT+0:00' },
+    { name: 'Europe/Paris', offset: 'GMT+1:00' },
+    { name: 'Europe/Berlin', offset: 'GMT+1:00' },
+    { name: 'Europe/Rome', offset: 'GMT+1:00' },
+    { name: 'Europe/Madrid', offset: 'GMT+1:00' },
+    { name: 'Europe/Amsterdam', offset: 'GMT+1:00' },
+    { name: 'Europe/Brussels', offset: 'GMT+1:00' },
+    { name: 'Europe/Vienna', offset: 'GMT+1:00' },
+    { name: 'Europe/Stockholm', offset: 'GMT+1:00' },
+    { name: 'Europe/Oslo', offset: 'GMT+1:00' },
+    { name: 'Europe/Copenhagen', offset: 'GMT+1:00' },
+    { name: 'Europe/Helsinki', offset: 'GMT+2:00' },
+    { name: 'Europe/Warsaw', offset: 'GMT+1:00' },
+    { name: 'Europe/Prague', offset: 'GMT+1:00' },
+    { name: 'Europe/Budapest', offset: 'GMT+1:00' },
+    { name: 'Europe/Athens', offset: 'GMT+2:00' },
+    { name: 'Europe/Istanbul', offset: 'GMT+3:00' },
+    { name: 'Europe/Moscow', offset: 'GMT+3:00' },
+    { name: 'Asia/Dubai', offset: 'GMT+4:00' },
+    { name: 'Asia/Karachi', offset: 'GMT+5:00' },
+    { name: 'Asia/Dhaka', offset: 'GMT+6:00' },
+    { name: 'Asia/Bangkok', offset: 'GMT+7:00' },
+    { name: 'Asia/Singapore', offset: 'GMT+8:00' },
+    { name: 'Asia/Hong_Kong', offset: 'GMT+8:00' },
+    { name: 'Asia/Shanghai', offset: 'GMT+8:00' },
+    { name: 'Asia/Tokyo', offset: 'GMT+9:00' },
+    { name: 'Asia/Seoul', offset: 'GMT+9:00' },
+    { name: 'Australia/Sydney', offset: 'GMT+11:00' },
+    { name: 'Australia/Melbourne', offset: 'GMT+11:00' },
+    { name: 'Australia/Brisbane', offset: 'GMT+10:00' },
+    { name: 'Australia/Perth', offset: 'GMT+8:00' },
+    { name: 'Pacific/Auckland', offset: 'GMT+13:00' },
+    { name: 'Pacific/Fiji', offset: 'GMT+12:00' },
+  ];
 
   const countryCodes = [
     { code: '+1', country: 'USA/Canada' },
@@ -115,17 +165,37 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
 
   useEffect(() => {
     fetchTherapies();
+    fetchClients();
 
     const handleClickOutside = (event: MouseEvent) => {
       if (dateContainerRef.current && !dateContainerRef.current.contains(event.target as Node)) {
         dateInputRef.current?.blur();
         setIsPickerOpen(false);
       }
+      if (timezoneRef.current && !timezoneRef.current.contains(event.target as Node)) {
+        setIsTimezoneDropdownOpen(false);
+        setTimezoneSearch('');
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (clientName.length > 0) {
+      const filtered = clients.filter(client => 
+        client.invitee_name?.toLowerCase().includes(clientName.toLowerCase()) ||
+        client.invitee_phone?.includes(clientName) ||
+        client.invitee_email?.toLowerCase().includes(clientName.toLowerCase())
+      );
+      setFilteredClients(filtered);
+      setShowClientDropdown(filtered.length > 0);
+    } else {
+      setFilteredClients([]);
+      setShowClientDropdown(false);
+    }
+  }, [clientName, clients]);
 
   const fetchTherapies = async () => {
     try {
@@ -137,6 +207,36 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
     } catch (error) {
       console.error('Error fetching therapies:', error);
     }
+  };
+
+  const fetchClients = async () => {
+    try {
+      const response = await fetch('/api/clients');
+      if (response.ok) {
+        const data = await response.json();
+        setClients(data);
+      }
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    }
+  };
+
+  const handleClientSelect = (client: any) => {
+    setClientName(client.invitee_name);
+    const phone = client.invitee_phone || '';
+    if (phone.startsWith('+')) {
+      const code = countryCodes.find(c => phone.startsWith(c.code));
+      if (code) {
+        setCountryCode(code.code);
+        setClientWhatsApp(phone.substring(code.code.length));
+      } else {
+        setClientWhatsApp(phone);
+      }
+    } else {
+      setClientWhatsApp(phone);
+    }
+    setClientEmail(client.invitee_email || '');
+    setShowClientDropdown(false);
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -188,10 +288,11 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
 
   const isFormValid = () => {
     const hasDate = selectedDate.trim();
+    const hasTimezone = selectedTimezone.trim();
     if (isFreeConsultation) {
-      return hasDate;
+      return hasDate && hasTimezone;
     }
-    return hasDate && selectedTherapy && selectedTherapist;
+    return hasDate && hasTimezone && selectedTherapy && selectedTherapist;
   };
 
   const handleCheckSlots = async () => {
@@ -209,6 +310,7 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
       selectedTherapist: isFreeConsultation ? 'SafeStories' : selectedTherapist,
       selectedDate,
       isFreeConsultation,
+      timezone: selectedTimezone
     };
     
     console.log('Sending data:', payload);
@@ -234,19 +336,26 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
           // Parse mode string to extract available modes
           const modes: string[] = [];
           try {
-            // Decode HTML entities first
-            const decodedMode = modeString
-              .replace(/&quot;/g, '"')
-              .replace(/&#39;/g, "'")
-              .replace(/&amp;/g, '&')
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>');
-            
-            const parsedModes = JSON.parse(decodedMode);
-            parsedModes.forEach((mode: any) => {
-              if (mode.type === 'google_meet') modes.push('online');
-              if (mode.type === 'physical') modes.push('in-person');
-            });
+            // Check if modeString is a plain string (not JSON)
+            if (modeString && !modeString.startsWith('[') && !modeString.startsWith('{')) {
+              // Plain string - check for mode types directly
+              if (modeString.includes('google_meet')) modes.push('online');
+              if (modeString.includes('physical')) modes.push('in-person');
+            } else {
+              // Try to parse as JSON
+              const decodedMode = modeString
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'")
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>');
+              
+              const parsedModes = JSON.parse(decodedMode);
+              parsedModes.forEach((mode: any) => {
+                if (mode.type === 'google_meet') modes.push('online');
+                if (mode.type === 'physical') modes.push('in-person');
+              });
+            }
           } catch (e) {
             console.error('Error parsing modes:', e);
             // Fallback: check if string contains mode types
@@ -304,7 +413,8 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
       clientName,
       clientEmail,
       clientWhatsApp: `${countryCode}${clientWhatsApp}`,
-      sessionMode
+      sessionMode,
+      timezone: selectedTimezone
     };
     
     try {
@@ -439,7 +549,7 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
 
           {/* Client Details */}
           <div className="grid grid-cols-2 gap-6">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium mb-2">
                 Client Name<span className="text-red-500">*</span>
               </label>
@@ -447,9 +557,34 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
                 type="text"
                 placeholder="Enter client name"
                 value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
+                onChange={(e) => {
+                  setClientName(e.target.value);
+                  if (e.target.value === '') {
+                    setClientWhatsApp('');
+                    setClientEmail('');
+                    setCountryCode('+91');
+                  }
+                }}
+                onFocus={() => clientName.length > 0 && filteredClients.length > 0 && setShowClientDropdown(true)}
                 className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
               />
+              {showClientDropdown && filteredClients.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredClients.map((client, index) => (
+                    <div
+                      key={index}
+                      onClick={() => handleClientSelect(client)}
+                      className="px-4 py-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
+                    >
+                      <div className="font-semibold text-gray-900">{client.invitee_name}</div>
+                      <div className="text-sm text-gray-600">{client.invitee_phone}</div>
+                      {client.invitee_email && (
+                        <div className="text-xs text-gray-500">{client.invitee_email}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">
@@ -568,7 +703,53 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
 
           {/* Available Slots */}
           <div>
-            <label className="block text-sm font-medium mb-3">Available Slots</label>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium">Available Slots</label>
+              <div className="relative" ref={timezoneRef}>
+                <button
+                  onClick={() => setIsTimezoneDropdownOpen(!isTimezoneDropdownOpen)}
+                  className="px-3 py-1.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white text-sm flex items-center gap-2 min-w-[200px] justify-between"
+                >
+                  <span>{selectedTimezone ? `${selectedTimezone.replace(/_/g, ' ')} - ${timezones.find(tz => tz.name === selectedTimezone)?.offset}` : 'Select Timezone'}</span>
+                  <span className="text-gray-400 text-xs">▼</span>
+                </button>
+                {isTimezoneDropdownOpen && (
+                  <div className="absolute right-0 mt-1 w-64 bg-white border rounded-lg shadow-lg z-10">
+                    <input
+                      type="text"
+                      placeholder="Search timezone..."
+                      value={timezoneSearch}
+                      onChange={(e) => setTimezoneSearch(e.target.value)}
+                      className="w-full px-3 py-2 border-b focus:outline-none text-sm"
+                      autoFocus
+                    />
+                    <div className="max-h-[280px] overflow-y-auto">
+                      {timezones
+                        .filter(tz => 
+                          timezoneSearch === '' || 
+                          tz.name.toLowerCase().includes(timezoneSearch.toLowerCase()) ||
+                          tz.offset.includes(timezoneSearch)
+                        )
+                        .slice(0, 10)
+                        .map((tz) => (
+                          <button
+                            key={tz.name}
+                            onClick={() => {
+                              setSelectedTimezone(tz.name);
+                              setIsTimezoneDropdownOpen(false);
+                              setTimezoneSearch('');
+                            }}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex justify-between"
+                          >
+                            <span>{tz.name.replace(/_/g, ' ')}</span>
+                            <span className="text-gray-500">{tz.offset}</span>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="bg-white rounded-lg p-4 shadow-sm max-h-[400px] overflow-y-auto">
               {availableSlots.length > 0 ? (
                 <div className="space-y-3">

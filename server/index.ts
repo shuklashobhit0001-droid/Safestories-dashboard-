@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import pool from '../lib/db';
 import { convertToIST } from '../lib/timezone';
+import { startDashboardApiBookingSync } from './dashboardApiBookingSync';
 
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
@@ -99,12 +100,12 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
     const sessions = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
-          ['confirmed', 'rescheduled', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status NOT IN ($1, $2, $3, $4) AND booking_start_at BETWEEN $5 AND $6',
+          ['cancelled', 'canceled', 'no_show', 'no show', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2)',
-          ['confirmed', 'rescheduled']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_status NOT IN ($1, $2, $3, $4)',
+          ['cancelled', 'canceled', 'no_show', 'no show']
         );
 
     const freeConsultations = hasDateFilter
@@ -155,8 +156,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
         );
 
     const lastMonthSessions = await pool.query(
-      'SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',
-      ['confirmed', 'rescheduled', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_status NOT IN ($1, $2, $3, $4) AND booking_start_at BETWEEN $5 AND $6',
+      ['cancelled', 'canceled', 'no_show', 'no show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
     );
 
     const lastMonthFreeConsultations = await pool.query(
@@ -455,6 +456,23 @@ app.get('/api/therapists-by-therapy', async (req, res) => {
   } catch (error) {
     console.error('Error fetching therapists by therapy:', error);
     res.status(500).json({ error: 'Failed to fetch therapists' });
+  }
+});
+
+// Get all therapies
+app.get('/api/therapies', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT DISTINCT specialization FROM therapists WHERE specialization IS NOT NULL');
+    const therapySet = new Set<string>();
+    result.rows.forEach(row => {
+      const specializations = row.specialization.split(',').map((s: string) => s.trim());
+      specializations.forEach((spec: string) => therapySet.add(spec));
+    });
+    const therapies = Array.from(therapySet).sort().map(therapy => ({ therapy_name: therapy }));
+    res.json(therapies);
+  } catch (error) {
+    console.error('Error fetching therapies:', error);
+    res.status(500).json({ error: 'Failed to fetch therapies' });
   }
 });
 
@@ -1809,6 +1827,7 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
 const PORT = 3002;
 app.listen(PORT, () => {
   console.log(`\n✓ API server running on http://localhost:${PORT}`);
+  startDashboardApiBookingSync();
 }).on('error', (err: any) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`\n✗ Port ${PORT} is already in use. Please stop other processes or change the port.`);

@@ -28,6 +28,9 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
   const [loading, setLoading] = useState(false);
   const [isFreeConsultation, setIsFreeConsultation] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [clients, setClients] = useState<any[]>([]);
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [filteredClients, setFilteredClients] = useState<any[]>([]);
 
   const countryCodes = [
     { code: '+1', country: 'USA/Canada' },
@@ -240,8 +243,24 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
     if (isOpen) {
       fetchTherapies();
       fetchTherapists();
+      fetchClients();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (clientName.length > 0) {
+      const filtered = clients.filter(client => 
+        client.invitee_name?.toLowerCase().includes(clientName.toLowerCase()) ||
+        client.invitee_phone?.includes(clientName) ||
+        client.invitee_email?.toLowerCase().includes(clientName.toLowerCase())
+      );
+      setFilteredClients(filtered);
+      setShowClientDropdown(filtered.length > 0);
+    } else {
+      setFilteredClients([]);
+      setShowClientDropdown(false);
+    }
+  }, [clientName, clients]);
 
   // Filter therapists based on selected therapy
   const filteredTherapists = therapyType
@@ -268,6 +287,34 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
     } catch (error) {
       console.error('Error fetching therapists:', error);
     }
+  };
+
+  const fetchClients = async () => {
+    try {
+      const response = await fetch('/api/clients');
+      const data = await response.json();
+      setClients(data);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    }
+  };
+
+  const handleClientSelect = (client: any) => {
+    setClientName(client.invitee_name);
+    const phone = client.invitee_phone || '';
+    if (phone.startsWith('+')) {
+      const code = countryCodes.find(c => phone.startsWith(c.code));
+      if (code) {
+        setCountryCode(code.code);
+        setClientWhatsapp(phone.substring(code.code.length));
+      } else {
+        setClientWhatsapp(phone);
+      }
+    } else {
+      setClientWhatsapp(phone);
+    }
+    setClientEmail(client.invitee_email || '');
+    setShowClientDropdown(false);
   };
 
   if (!isOpen) return null;
@@ -328,7 +375,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             {/* Client Name */}
-            <div>
+            <div className="relative">
               <label className="block text-sm font-semibold mb-2">
                 Client Name<span className="text-red-500">*</span>
               </label>
@@ -336,10 +383,35 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
                 type="text"
                 placeholder="Enter client name"
                 value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
+                onChange={(e) => {
+                  setClientName(e.target.value);
+                  if (e.target.value === '') {
+                    setClientWhatsapp('');
+                    setClientEmail('');
+                    setCountryCode('+91');
+                  }
+                }}
+                onFocus={() => clientName.length > 0 && filteredClients.length > 0 && setShowClientDropdown(true)}
                 className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                 required
               />
+              {showClientDropdown && filteredClients.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredClients.map((client, index) => (
+                    <div
+                      key={index}
+                      onClick={() => handleClientSelect(client)}
+                      className="px-4 py-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
+                    >
+                      <div className="font-semibold text-gray-900">{client.invitee_name}</div>
+                      <div className="text-sm text-gray-600">{client.invitee_phone}</div>
+                      {client.invitee_email && (
+                        <div className="text-xs text-gray-500">{client.invitee_email}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Client WhatsApp No */}

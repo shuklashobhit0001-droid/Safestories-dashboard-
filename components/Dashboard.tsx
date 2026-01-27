@@ -7,6 +7,7 @@ import { Appointments } from './Appointments';
 import { RefundsCancellations } from './RefundsCancellations';
 import { SendBookingModal } from './SendBookingModal';
 import { CreateBooking } from './CreateBooking';
+import { CreatePage } from './CreatePage';
 import { AuditLogs } from './AuditLogs';
 import { Notifications } from './Notifications';
 import { Loader } from './Loader';
@@ -252,6 +253,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
         <nav className="flex-1 px-4">
           <div 
+            className="rounded-xl px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:opacity-90" 
+            style={{ backgroundColor: '#21615D' }}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('create');
+            }}
+          >
+            <Plus size={20} className="text-white" />
+            <span className="text-white">Create</span>
+          </div>
+          <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer" 
             style={{ backgroundColor: activeView === 'dashboard' ? '#2D75795C' : 'transparent' }}
             onClick={() => {
@@ -349,8 +361,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto relative">
-        {activeView === 'createBooking' ? (
-          <CreateBooking onBack={() => setActiveView('dashboard')} />
+        {activeView === 'create' ? (
+          <CreatePage 
+            onCreateBooking={() => setActiveView('createBooking')} 
+            onSendBookingLink={() => setIsModalOpen(true)}
+          />
+        ) : activeView === 'createBooking' ? (
+          <CreateBooking onBack={() => setActiveView('create')} />
         ) : activeView === 'clients' ? (
           <AllClients onClientClick={(client) => {
             setSelectedClientForView(client);
@@ -496,25 +513,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
           {/* Upcoming Bookings */}
           <div className="bg-white rounded-lg border">
-            <div className="p-6 border-b flex justify-between items-center">
+            <div className="p-6 border-b">
               <h2 className="text-xl font-bold">Upcoming Bookings</h2>
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setActiveView('createBooking')}
-                  disabled
-                  className="bg-white border-2 border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Plus size={18} />
-                  Create New Booking
-                </button>
-                <button 
-                  onClick={() => setIsModalOpen(true)}
-                  className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800"
-                >
-                  <MessageCircle size={18} />
-                  Send Booking Link
-                </button>
-              </div>
             </div>
             <div className="overflow-x-auto max-h-80 overflow-y-auto">
               <table className="w-full" ref={bookingActionsRef}>
