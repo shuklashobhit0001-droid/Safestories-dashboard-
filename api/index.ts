@@ -746,10 +746,10 @@ async function handleDashboardBookings(req: VercelRequest, res: VercelResponse) 
 async function handleDashboardStats(req: VercelRequest, res: VercelResponse) {
   const { start, end } = req.query;
   const dateFilter = start && end ? `AND invitee_created_at BETWEEN '${start}' AND '${end} 23:59:59'` : '';
-  const revenue = await pool.query(`SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status != 'cancelled' ${dateFilter}`);
-  const sessions = await pool.query(`SELECT COUNT(invitee_created_at) as total FROM bookings WHERE booking_status IN ('confirmed', 'rescheduled') ${dateFilter}`);
+  const revenue = await pool.query(`SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status NOT IN ('cancelled', 'canceled') ${dateFilter}`);
+  const sessions = await pool.query(`SELECT COUNT(invitee_created_at) as total FROM bookings WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show') ${dateFilter}`);
   const freeConsultations = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE (invitee_payment_amount = 0 OR invitee_payment_amount IS NULL) ${dateFilter}`);
-  const cancelled = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status = 'cancelled' ${dateFilter}`);
+  const cancelled = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ('cancelled', 'canceled') ${dateFilter}`);
   const refunds = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE refund_status IS NOT NULL ${dateFilter}`);
   const refundedAmount = await pool.query(`SELECT COALESCE(SUM(refund_amount), 0) as total FROM bookings WHERE refund_status IS NOT NULL ${dateFilter}`);
   const noShows = await pool.query(`SELECT COUNT(*) as total FROM bookings WHERE booking_status IN ('no_show', 'no show') ${dateFilter}`);
