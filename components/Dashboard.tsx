@@ -316,7 +316,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             }}
           >
             <CreditCard size={20} className={activeView === 'refunds' ? 'text-teal-700' : 'text-gray-700'} />
-            <span className={activeView === 'refunds' ? 'text-teal-700' : 'text-gray-700'}>Refunds & Cancellations</span>
+            <span className={activeView === 'refunds' ? 'text-teal-700' : 'text-gray-700'}>Payments</span>
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 

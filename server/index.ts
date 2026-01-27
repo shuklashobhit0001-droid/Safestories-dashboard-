@@ -63,11 +63,9 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT booking_invitee_time, booking_start_at
+      SELECT booking_invitee_time
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at >= NOW() - INTERVAL '12 hours'
-        AND booking_start_at <= NOW() + INTERVAL '12 hours'
     `);
 
     let liveCount = 0;
@@ -526,11 +524,9 @@ app.post('/api/booking-requests', async (req, res) => {
 app.get('/api/therapists-live-status', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT booking_host_name, booking_invitee_time, booking_start_at
+      SELECT DISTINCT booking_host_name, booking_invitee_time
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at >= NOW() - INTERVAL '12 hours'
-        AND booking_start_at <= NOW() + INTERVAL '12 hours'
     `);
 
     const liveStatus: { [key: string]: boolean } = {};
@@ -1674,6 +1670,67 @@ app.get('/api/refunds', async (req, res) => {
   } catch (error) {
     console.error('Error fetching refunds:', error);
     res.status(500).json({ error: 'Failed to fetch refunds' });
+  }
+});
+
+// Get payments
+app.get('/api/payments', async (req, res) => {
+  try {
+    const { status } = req.query;
+    
+    let query = 'SELECT * FROM dashboard_api_booking WHERE 1=1';
+    
+    if (status && status !== 'all_payments') {
+      if (status === 'completed') {
+        query += " AND payment_status = 'Completed'";
+      } else if (status === 'pending') {
+        query += " AND payment_status = 'Pending'";
+      } else if (status === 'expired') {
+        query += " AND payment_status = 'Failed'";
+      }
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    const result = await pool.query(query);
+    
+    const payments = result.rows.map(row => {
+      let formattedTimings = 'N/A';
+      if (row.start_at) {
+        const date = new Date(row.start_at);
+        const endDate = new Date(row.end_at || date.getTime() + (50 * 60 * 1000));
+        
+        const formatTime = (d: Date) => {
+          const hours = d.getHours();
+          const minutes = d.getMinutes();
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          const hour12 = hours % 12 || 12;
+          return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+        };
+        
+        const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+        const month = date.toLocaleDateString('en-US', { month: 'short' });
+        const day = date.getDate();
+        const year = date.getFullYear();
+        
+        formattedTimings = `${weekday}, ${month} ${day}, ${year} at ${formatTime(date)} - ${formatTime(endDate)} IST`;
+      }
+      
+      return {
+        client_name: row.invitee_name,
+        session_name: row.booking_resource_name,
+        session_timings: formattedTimings,
+        payment_status: row.payment_status,
+        invitee_phone: row.invitee_phone || '',
+        invitee_email: row.invitee_email || '',
+        payment_amount: row.payment_amount || 0
+      };
+    });
+    
+    res.json(payments);
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    res.status(500).json({ error: 'Failed to fetch payments' });
   }
 });
 
