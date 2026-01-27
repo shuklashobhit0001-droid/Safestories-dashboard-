@@ -146,6 +146,9 @@ async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) 
     `);
 
     let liveCount = 0;
+    const nowUTC = new Date();
+    console.log('[live-count] Current UTC:', nowUTC.toISOString());
+    console.log('[live-count] Total bookings:', result.rows.length);
 
     result.rows.forEach(row => {
       const timeMatch = row.booking_invitee_time.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
@@ -156,18 +159,19 @@ async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) 
         const endTimeStr = timeMatch[2];
         
         if (dateStr) {
-          // Parse as IST by converting to UTC
           const startIST = new Date(`${dateStr} ${startTimeStr} GMT+0530`);
           const endIST = new Date(`${dateStr} ${endTimeStr} GMT+0530`);
-          const nowUTC = new Date();
+          const isLive = nowUTC >= startIST && nowUTC <= endIST;
           
-          if (nowUTC >= startIST && nowUTC <= endIST) {
+          if (isLive) {
+            console.log('[live-count] LIVE:', row.booking_invitee_time);
             liveCount++;
           }
         }
       }
     });
 
+    console.log('[live-count] Final count:', liveCount);
     return res.status(200).json({ liveCount });
   } catch (error: any) {
     console.error('[live-sessions-count] ERROR:', error.message);
