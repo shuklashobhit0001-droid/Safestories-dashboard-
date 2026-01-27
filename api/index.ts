@@ -139,6 +139,7 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
 
 async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) {
   try {
+    // Force new deployment - v2
     const result = await pool.query(`
       SELECT booking_invitee_time
       FROM bookings
