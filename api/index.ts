@@ -386,25 +386,13 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
         b.booking_checkin_url,
         b.therapist_id,
         b.booking_status,
-        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes,
-        (b.booking_start_at < NOW()) as is_past
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-      WHERE b.booking_start_at >= NOW() - INTERVAL '7 days'
       ORDER BY b.booking_start_at DESC
     `);
 
     const appointments = result.rows.map(row => {
-      let status = row.booking_status;
-      
-      if (row.booking_status !== 'cancelled' && row.booking_status !== 'canceled' && row.booking_status !== 'no_show' && row.booking_status !== 'no show') {
-        if (row.has_session_notes) {
-          status = 'completed';
-        } else if (row.is_past) {
-          status = 'pending_notes';
-        }
-      }
-      
       return {
         booking_id: row.booking_id,
         booking_start_at: convertToIST(row.booking_invitee_time),
@@ -418,7 +406,7 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
         booking_checkin_url: row.booking_checkin_url,
         therapist_id: row.therapist_id,
         has_session_notes: row.has_session_notes,
-        booking_status: status,
+        booking_status: row.booking_status,
         booking_start_at_raw: row.booking_start_at
       };
     });

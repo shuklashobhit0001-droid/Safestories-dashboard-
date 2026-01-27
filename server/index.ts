@@ -422,7 +422,6 @@ app.get('/api/appointments', async (req, res) => {
         (b.booking_start_at < NOW()) as is_past
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
-      WHERE b.booking_start_at >= NOW() - INTERVAL '7 days'
       ORDER BY b.booking_start_at DESC
     `);
 
