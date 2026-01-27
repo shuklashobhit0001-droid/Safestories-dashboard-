@@ -401,6 +401,7 @@ app.get('/api/appointments', async (req, res) => {
         CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+      WHERE b.booking_start_at >= NOW() - INTERVAL '7 days'
       ORDER BY b.booking_start_at DESC
     `);
 
