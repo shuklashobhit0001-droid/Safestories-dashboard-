@@ -1,0 +1,1041 @@
+{
+  "name": "Event Scheduled dayschedule",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "139293c5-d34f-4d12-991d-5f272fdd0450",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        16,
+        0
+      ],
+      "id": "00c1104e-f55e-4e81-ba5f-6475ff7eb127",
+      "name": "Webhook",
+      "webhookId": "139293c5-d34f-4d12-991d-5f272fdd0450"
+    },
+    {
+      "parameters": {
+        "options": {
+          "includeInputFields": false
+        }
+      },
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "f430b008-1ed4-4661-9f5f-7104577f86a9",
+      "name": "Date & Time"
+    },
+    {
+      "parameters": {
+        "url": "=https://cutt.ly/api/api.php?key=22def175b8d5c5278c8beaa13e35a076c2f52&short={{ $('Webhook').item.json.body.booking.checkin_url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        240,
+        -208
+      ],
+      "id": "0539a95d-6ed6-4758-81ee-be6e365763a5",
+      "name": "Cuttly Shorten url"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://backend.aisensy.com/campaign/t1/api/v2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"apiKey\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4ZGE1MjM4Njg5NTEwMGQ1MmYwMTBiNCIsIm5hbWUiOiJTYWZldHkgYW5kIFlvdSBXZWxsYmVpbmcgQ2VudHJlIExMUCIsImFwcE5hbWUiOiJBaVNlbnN5IiwiY2xpZW50SWQiOiI2OGRhNTIzODY4OTUxMDBkNTJmMDEwYWYiLCJhY3RpdmVQbGFuIjoiRlJFRV9GT1JFVkVSIiwiaWF0IjoxNzU5MTM4MzYwfQ.PvyEtnljNQ9nTOaxciZvsGSm7kXi6F0NpHtMk3DYaAU\",\n  \"campaignName\": \"booking_confirmation_host_campaign\",\n  \"destination\": \"\",\n  \"userName\": \"{{ $('Webhook').item.json.body.invitee.name }}\",\n  \"source\": \"DaySchedule\",\n  \"templateParams\": [\n    \"{{ $('Webhook').item.json.body.invitee.name }}\",\n    \"{{ $('Webhook').item.json.body.booking.resource.name }}\",\n    \"{{ $('Webhook').item.json.body.booking.invitee_time }}\",\n    \"{{ $json.url.shortLink }}\"\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        848,
+        352
+      ],
+      "id": "72bc6f35-f0d3-4926-977a-8faa27fe68a5",
+      "name": "Send confirmation to client Aisensy1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://backend.aisensy.com/campaign/t1/api/v2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"apiKey\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4ZGE1MjM4Njg5NTEwMGQ1MmYwMTBiNCIsIm5hbWUiOiJTYWZldHkgYW5kIFlvdSBXZWxsYmVpbmcgQ2VudHJlIExMUCIsImFwcE5hbWUiOiJBaVNlbnN5IiwiY2xpZW50SWQiOiI2OGRhNTIzODY4OTUxMDBkNTJmMDEwYWYiLCJhY3RpdmVQbGFuIjoiRlJFRV9GT1JFVkVSIiwiaWF0IjoxNzU5MTM4MzYwfQ.PvyEtnljNQ9nTOaxciZvsGSm7kXi6F0NpHtMk3DYaAU\",\n  \"campaignName\": \"session_confirmed_host_message_pabbly\",\n  \"destination\": \"+917410713350\",\n  \"userName\": \"Safestories\",\n  \"source\": \"DaySchedule\",\n  \"templateParams\": [\n    \"{{ $('Webhook').item.json.body.invitee.name }}\",\n    \"{{ $('Webhook').item.json.body.invitee.phone }}\",\n    \"{{ $('Webhook').item.json.body.invitee.email }}\",\n    \"{{ $('Webhook').item.json.body.booking.resource.name }}\",\n    \"{{ $('Webhook').item.json.body.booking.host_time }}\",\n    \"{{ $('Webhook').item.json.body.booking.location.name }}\",\n    \"{{ $('Webhook').item.json.body.booking.host.name }}\",\n    \"{{ $('Webhook').item.json.body.booking.host.email }}\"\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1408,
+        -112
+      ],
+      "id": "be805882-c03b-4b3b-bde5-e90740421cb1",
+      "name": "Aisensy: Send confirmation to Admin"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://backend.aisensy.com/campaign/t1/api/v2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"apiKey\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4ZGE1MjM4Njg5NTEwMGQ1MmYwMTBiNCIsIm5hbWUiOiJTYWZldHkgYW5kIFlvdSBXZWxsYmVpbmcgQ2VudHJlIExMUCIsImFwcE5hbWUiOiJBaVNlbnN5IiwiY2xpZW50SWQiOiI2OGRhNTIzODY4OTUxMDBkNTJmMDEwYWYiLCJhY3RpdmVQbGFuIjoiRlJFRV9GT1JFVkVSIiwiaWF0IjoxNzU5MTM4MzYwfQ.PvyEtnljNQ9nTOaxciZvsGSm7kXi6F0NpHtMk3DYaAU\",\n  \"campaignName\": \"session_confirmed_message_api_campaign\",\n  \"destination\": \"{{ $('Webhook').item.json.body.invitee.phone }}\",\n  \"userName\": \"{{ $('Webhook').item.json.body.invitee.name }}\",\n  \"source\": \"DaySchedule\",\n  \"templateParams\": [\n    \"{{ $('Webhook').item.json.body.invitee.name }}\",\n    \"{{ $('Webhook').item.json.body.booking.resource.name }}\",\n    \"{{ $('Webhook').item.json.body.booking.invitee_time }}\",\n    \"{{ $json.url.shortLink }}\"\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1408,
+        96
+      ],
+      "id": "b5ca6f62-91e5-4585-9e90-598735b5395b",
+      "name": "Aisensy: Send confirmation to client"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1bfeda7b-1343-45be-af8d-39cd8c992087",
+              "name": "Subject",
+              "value": "New Session Confirmed",
+              "type": "string"
+            },
+            {
+              "id": "b5ac946d-592a-458b-8d60-2bbbc0835f2d",
+              "name": "Body",
+              "value": "=<blockquote><strong data-path-to-node=\"5\" data-index-in-node=\"0\">Hello Team,<br /></strong>A new session has been confirmed. Please find the complete details below:<br /><br /><strong data-path-to-node=\"7\" data-index-in-node=\"0\">Client Details:</strong><strong data-path-to-node=\"8,0,0\" data-index-in-node=\"0\"><br />Client Name:</strong> {{$('Webhook').item.json.body.invitee.name}}<br /><strong data-path-to-node=\"8,1,0\" data-index-in-node=\"0\">Phone No.:</strong> {{$('Webhook').item.json.body.invitee.phone}}<br /><strong data-path-to-node=\"8,2,0\" data-index-in-node=\"0\">Email Address:</strong> {{$('Webhook').item.json.body.invitee.email}}<br /><strong data-path-to-node=\"9\" data-index-in-node=\"0\"><br />Session Details:<br /></strong><strong data-path-to-node=\"10,0,0\" data-index-in-node=\"0\">Session Name:</strong> {{$('Webhook').item.json.body.booking.resource.name}}<br /><strong data-path-to-node=\"10,1,0\" data-index-in-node=\"0\">Session Timing:</strong> {{$('Webhook').item.json.body.booking.host_time}}<br /><strong data-path-to-node=\"10,2,0\" data-index-in-node=\"0\">Session Mode:</strong> {{$('Webhook').item.json.body.booking.location.name}}<br /><br /><strong data-path-to-node=\"11\" data-index-in-node=\"0\">Therapist Details:<br /></strong><strong data-path-to-node=\"12,0,0\" data-index-in-node=\"0\">Therapist Name:</strong> {{$('Webhook').item.json.body.booking.host.name}}<br /><strong data-path-to-node=\"12,1,0\" data-index-in-node=\"0\">Therapist Email:</strong> {{$('Webhook').item.json.body.booking.host.email}}<hr data-path-to-node=\"13\" /><em data-path-to-node=\"14\" data-index-in-node=\"0\">This is a system-generated message. Please do not reply to this email.<br /><br /><br /></em></blockquote>",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1184,
+        -320
+      ],
+      "id": "973bd530-e955-4ccd-9c95-04e71b93afbf",
+      "name": "Email"
+    },
+    {
+      "parameters": {
+        "sendTo": "admin@safestories.in",
+        "subject": "={{ $json.Subject }}",
+        "message": "={{ $json.Body }}",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "SafeStories Services"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1408,
+        -320
+      ],
+      "id": "06a396c1-5653-4711-84af-d69fab201476",
+      "name": "Send session booked email to Admin",
+      "webhookId": "c12f1304-b8ca-43aa-bb67-a25f732295e1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "bRU2eDGD13AYVxqF",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://cutt.ly/api/api.php?key=40dcf0b84817f7d3e6810dfb22ba306ac4a93&short={{ $json[\"Checkin url\"] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "b56a0b93-0595-49a6-8b22-35fdb6ad2c20",
+      "name": "Cuttly Rohnit@fluid.live"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ce9bd5e6-951d-496c-b0f9-3ae3206f85bb",
+              "name": "Checkin url",
+              "value": "={{ $('Webhook').item.json.body.booking.checkin_url.urlEncode() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        464,
+        0
+      ],
+      "id": "a8c5ae40-974f-47fb-8c07-55eabc453ce1",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "bookings",
+          "mode": "list",
+          "cachedResultName": "bookings"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "invitee_payment_amount": "={{ $('Webhook').item.json.body.invitee.payment.amount }}",
+            "booking_duration": "={{ $('Webhook').item.json.body.booking.duration }}",
+            "invitee_id": "={{ $('Webhook').item.json.body.invitee.invitee_id }}",
+            "invitee_name": "={{ $('Webhook').item.json.body.invitee.name }}",
+            "invitee_phone": "={{ $('Webhook').item.json.body.invitee.phone }}",
+            "invitee_email": "={{ $('Webhook').item.json.body.invitee.email }}",
+            "invitee_token": "={{ $('Webhook').item.json.body.invitee.token }}",
+            "invitee_country": "={{ $('Webhook').item.json.body.invitee.tracking.country }}",
+            "invitee_city": "={{ $('Webhook').item.json.body.invitee.tracking.city }}",
+            "invitee_timezone": "={{ $('Webhook').item.json.body.invitee.time_zone }}",
+            "invitee_status": "={{ $('Webhook').item.json.body.invitee.status }}",
+            "invitee_payment_reference_id": "={{ $('Webhook').item.json.body.invitee.payment.reference_id }}",
+            "invitee_payment_gateway": "={{ $('Webhook').item.json.body.invitee.payment.gateway }}",
+            "invitee_payment_currency": "={{ $('Webhook').item.json.body.invitee.payment.currency }}",
+            "booking_subject": "={{ $('Webhook').item.json.body.booking.subject }}",
+            "booking_status": "={{ $('Webhook').item.json.body.booking.status }}",
+            "booking_resource_id": "={{ $('Webhook').item.json.body.booking.resource_id }}",
+            "booking_resource_type": "={{ $('Webhook').item.json.body.booking.resource.event_type }}",
+            "booking_resource_name": "={{ $('Webhook').item.json.body.booking.resource.name }}",
+            "booking_checkin_url": "={{ $('Webhook').item.json.body.booking.checkin_url }}",
+            "booking_mode": "={{ $('Webhook').item.json.body.booking.location.name }}",
+            "booking_joining_link": "={{ $('Webhook').item.json.body.booking.location.join_url }}",
+            "booking_invitee_time": "={{ $('Webhook').item.json.body.booking.invitee_time }}",
+            "booking_host_user_id": "={{ $('Webhook').item.json.body.booking.host.user_id }}",
+            "booking_host_name": "={{ $('Webhook').item.json.body.booking.host.name }}",
+            "booking_host_phone": "={{ $('Webhook').item.json.body.booking.host.phone }}",
+            "booking_host_email": "={{ $('Webhook').item.json.body.booking.host.email }}",
+            "booking_start_at": "={{ $('Webhook').item.json.body.booking.start_at }}",
+            "booking_end_at": "={{ $('Webhook').item.json.body.booking.end_at }}",
+            "booking_id": "={{ $('Webhook').item.json.body.booking.booking_id }}",
+            "booking_account_id": "={{ $('Webhook').item.json.body.booking.account_id }}",
+            "emergency_contact_name": "={{ $('Webhook').item.json.body.invitee.questions[0].value}}",
+            "emergency_contact_relation": "={{ $('Webhook').item.json.body.invitee.questions[1].value }}",
+            "emergency_contact_number": "={{ $('Webhook').item.json.body.invitee.questions[2].value }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "invitee_id",
+              "displayName": "invitee_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_name",
+              "displayName": "invitee_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_phone",
+              "displayName": "invitee_phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_email",
+              "displayName": "invitee_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_question",
+              "displayName": "invitee_question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invitee_token",
+              "displayName": "invitee_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_country",
+              "displayName": "invitee_country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_city",
+              "displayName": "invitee_city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_timezone",
+              "displayName": "invitee_timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_created_at",
+              "displayName": "invitee_created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invitee_cancelled_at",
+              "displayName": "invitee_cancelled_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invitee_cancelled_reason",
+              "displayName": "invitee_cancelled_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invitee_status",
+              "displayName": "invitee_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_payment_reference_id",
+              "displayName": "invitee_payment_reference_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_payment_gateway",
+              "displayName": "invitee_payment_gateway",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_payment_name",
+              "displayName": "invitee_payment_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "invitee_payment_currency",
+              "displayName": "invitee_payment_currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invitee_payment_amount",
+              "displayName": "invitee_payment_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_user_id",
+              "displayName": "booking_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "booking_updated_at",
+              "displayName": "booking_updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "booking_subject",
+              "displayName": "booking_subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_status",
+              "displayName": "booking_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_resource_id",
+              "displayName": "booking_resource_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_resource_type",
+              "displayName": "booking_resource_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_resource_name",
+              "displayName": "booking_resource_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_checkin_url",
+              "displayName": "booking_checkin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_mode",
+              "displayName": "booking_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_joining_link",
+              "displayName": "booking_joining_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_invitee_time",
+              "displayName": "booking_invitee_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_host_user_id",
+              "displayName": "booking_host_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_host_name",
+              "displayName": "booking_host_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_host_phone",
+              "displayName": "booking_host_phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_host_email",
+              "displayName": "booking_host_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_start_at",
+              "displayName": "booking_start_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_end_at",
+              "displayName": "booking_end_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_duration",
+              "displayName": "booking_duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_cancelled_by",
+              "displayName": "booking_cancelled_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "booking_cancel_reason",
+              "displayName": "booking_cancel_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "booking_id",
+              "displayName": "booking_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_account_id",
+              "displayName": "booking_account_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "refund_amount",
+              "displayName": "refund_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "refund_status",
+              "displayName": "refund_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "refund_failed_time",
+              "displayName": "refund_failed_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "rescheduled_at",
+              "displayName": "rescheduled_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "rescheduled_start_at",
+              "displayName": "rescheduled_start_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "rescheduled_end_at",
+              "displayName": "rescheduled_end_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "recheduled_from",
+              "displayName": "recheduled_from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "emergency_contact_name",
+              "displayName": "emergency_contact_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "emergency_contact_relation",
+              "displayName": "emergency_contact_relation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "emergency_contact_number",
+              "displayName": "emergency_contact_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "therapist_id",
+              "displayName": "therapist_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "refund_id",
+              "displayName": "refund_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1888,
+        -80
+      ],
+      "id": "13ba0178-0e31-4c22-af0b-ed91d6c60ab2",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "dd4Wr9V1rT8KIEmv",
+          "name": "Postgres account : KVM4 vps FL"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Cuttly Shorten url": [
+      {
+        "json": {
+          "url": {
+            "status": 7,
+            "fullLink": "https://dayschedule.com/checkin/?domain=anjalipillai",
+            "date": "2026-01-20",
+            "shortLink": "https://cutt.ly/ltl37nbE",
+            "title": "dayschedule.com"
+          }
+        }
+      }
+    ],
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.srv1169280.hstgr.cloud",
+            "user-agent": "dayschedule.com",
+            "content-length": "3649",
+            "accept-encoding": "gzip, br",
+            "cdn-loop": "cloudflare; subreqs=1",
+            "cf-connecting-ip": "2a06:98c0:3600::103",
+            "cf-ray": "9c3e1b6450a27e62-LAX",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "dayschedule.workers.dev",
+            "content-type": "application/json",
+            "x-forwarded-for": "172.18.0.1",
+            "x-forwarded-host": "n8n.srv1169280.hstgr.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "6b67c601e490",
+            "x-real-ip": "172.18.0.1"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "booking": {
+              "booking_id": 676154,
+              "account_id": 56430,
+              "user_id": 58768,
+              "resource_id": 47188,
+              "subject": "Meera and Ishika: Individual Therapy Session with Ishika Mahajan",
+              "start_at": "2026-02-04T10:30:00Z",
+              "end_at": "2026-02-04T11:20:00Z",
+              "duration": 50,
+              "time_zone": "Asia/Calcutta",
+              "status": "confirmed",
+              "color": "blue",
+              "location": {
+                "type": "google_meet",
+                "name": "Google Meet",
+                "remarks": "Web conference using Google meet",
+                "join_url": "https://meet.google.com/ijd-adpx-kvc"
+              },
+              "booking_url": "https://ishika.dayschedule.com/session-with-ishika",
+              "internal_note": null,
+              "description": "<h4>Topic: Individual Therapy Session with Ishika Mahajan</h4><h5>Time: Feb, 04 2026 4:00 pm (GMT +05:30)</h5><hr/><p><strong>Name:</strong><br/>Meera</p><p><strong>Email:</strong><br/>meerakale321@gmail.com</p><p><strong>Phone:</strong><br/>+91 9579865707</p><p><strong>Please review the Terms & Conditions before completing your booking.:</strong><br/>I confirm that I have read and agree to the Terms & Conditions.</p><hr/><p><a booking_id=\"676154\" href=\"https://ishika.dayschedule.com/bookings/792061_UWQVPHMJC5\">See details on DaySchedule &rarr;</a></p>",
+              "attendees": [],
+              "cancel_reason": null,
+              "canceled_by": null,
+              "recurrence": null,
+              "reschedules": [],
+              "links": [
+                {
+                  "type": "google",
+                  "id": "5fda0f2vldgimklp08lpcre0ts",
+                  "url": "https://www.google.com/calendar/event?eid=NWZkYTBmMnZsZGdpbWtscDA4bHBjcmUwdHMgaXNoaWthQHNhZmVzdG9yaWVzLmlu",
+                  "connection_id": 17225
+                }
+              ],
+              "created_at": "2026-01-26T06:53:50Z",
+              "updated_at": "2026-01-26T06:55:42Z",
+              "uuid": "58768_1770201000",
+              "host": {
+                "user_id": 58768,
+                "name": "Ishika",
+                "email": "ishika@safestories.in",
+                "phone": "+91 9815841080",
+                "avatar": null
+              },
+              "resource": {
+                "resource_id": 47188,
+                "type": "event",
+                "event_type": "one_on_one",
+                "name": "Individual Therapy Session with Ishika Mahajan",
+                "slug": "/session-with-ishika"
+              },
+              "checkin_url": "https://dayschedule.com/checkin/?domain=ishika&invitee_id=792061_UWQVPHMJC5",
+              "reschedule_url": "https://dayschedule.com/checkin/?domain=ishika&invitee_id=792061_UWQVPHMJC5&action=reschedule",
+              "cancel_url": "https://dayschedule.com/checkin/?domain=ishika&invitee_id=792061_UWQVPHMJC5&action=cancel",
+              "host_time": "Wednesday, Feb 4, 2026 at 4:00 PM - 4:50 PM (GMT+05:30)",
+              "invitee_time": "Wednesday, Feb 4, 2026 at 4:00 PM - 4:50 PM (GMT+05:30)"
+            },
+            "invitee": {
+              "invitee_id": 792061,
+              "name": "Meera",
+              "email": "meerakale321@gmail.com",
+              "phone": "+91 9579865707",
+              "guests": [],
+              "status": "confirmed",
+              "canceled_at": null,
+              "reason": null,
+              "time_zone": "Asia/Calcutta",
+              "token": "UWQVPHMJC5",
+              "questions": [
+                {
+                  "label": "Emergency Contact Name",
+                  "name": "emergency_",
+                  "type": "text"
+                },
+                {
+                  "label": "Emergency Contact Relation ",
+                  "name": "emergency__1",
+                  "type": "text"
+                },
+                {
+                  "label": "Emergency Contact Number",
+                  "name": "emergency__2",
+                  "type": "tel"
+                },
+                {
+                  "label": "Please share anything that will help prepare for our meeting",
+                  "name": "description",
+                  "type": "textarea"
+                },
+                {
+                  "label": "Please review the Terms & Conditions before completing your booking.",
+                  "name": "please_rev",
+                  "type": "checkbox",
+                  "value": "I confirm that I have read and agree to the Terms & Conditions."
+                }
+              ],
+              "payment": {
+                "amount": 1700,
+                "currency": "INR",
+                "gateway": "razorpay",
+                "data": "{\"account\":\"acc_HQjt2td6xzT8Nh\"}",
+                "reference_id": "order_S8PoEFI6h1FGCO"
+              },
+              "services": [],
+              "check_in": false,
+              "custom_fields": [],
+              "tracking": {
+                "ip": "49.36.47.168",
+                "browser": "Android Browser",
+                "os": "Android",
+                "device": "mobile",
+                "city": "Nagpur",
+                "country": "IN",
+                "referer": "https://ishika.dayschedule.com/"
+              },
+              "utm": {},
+              "uuid": null,
+              "source_url": "https://ishika.dayschedule.com/session-with-ishika?fbclid=IwAR5Gnddg4Lsn4MK8HeEBEk9Oj2Weqln6fp3tZnqLlFWT7MYMwqydQNi8KAbdeQ_wapm_MzwmwBy9QFOWtltZY6xKWA_waaem_4swC2Cu68oV3Q5NFTr7adw",
+              "created_at": "2026-01-26T06:53:50Z",
+              "updated_at": "2026-01-26T06:55:33Z"
+            }
+          },
+          "webhookUrl": "https://n8n.srv1169280.hstgr.cloud/webhook/139293c5-d34f-4d12-991d-5f272fdd0450",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Date & Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Date & Time": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cuttly Shorten url": {
+      "main": [
+        []
+      ]
+    },
+    "Aisensy: Send confirmation to client": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email": {
+      "main": [
+        [
+          {
+            "node": "Send session booked email to Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cuttly Rohnit@fluid.live": {
+      "main": [
+        [
+          {
+            "node": "Aisensy: Send confirmation to client",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Aisensy: Send confirmation to Admin",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Cuttly Rohnit@fluid.live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        []
+      ]
+    },
+    "Send session booked email to Admin": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aisensy: Send confirmation to Admin": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d0a7b9a4-bb20-47c7-ae3c-cd4fd72063b1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "50d3feffb58bd115fee90c095d03bca0e8650a8dceb52e1559177a836e694ee6"
+  },
+  "id": "VaQSvX1BHnHlhVYm",
+  "tags": []
+}

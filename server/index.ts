@@ -88,6 +88,12 @@ app.get('/api/dashboard/stats', async (req, res) => {
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
     
+    // Debug: Get all booking statuses
+    const statusDebug = await pool.query(
+      'SELECT booking_status, COUNT(*) as count FROM bookings GROUP BY booking_status ORDER BY count DESC'
+    );
+    console.log('Booking statuses:', statusDebug.rows);
+    
     const revenue = hasDateFilter
       ? await pool.query(
           'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status NOT IN ($1, $2) AND booking_start_at BETWEEN $3 AND $4',

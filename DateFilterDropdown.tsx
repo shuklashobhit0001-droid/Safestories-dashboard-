@@ -11,9 +11,11 @@ export const DateFilterDropdown: React.FC<DateFilterDropdownProps> = ({ onDateRa
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const monthOptions = ['Dec 2025', 'Nov 2025', 'Oct 2025', 'Sep 2025', 'Aug 2025', 'Jul 2025', 'Jun 2025', 'May 2025', 'Apr 2025', 'Mar 2025', 'Feb 2025', 'Jan 2025'];
+  const filteredMonths = monthOptions.filter(month => month.toLowerCase().includes(searchQuery.toLowerCase()));
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -30,6 +32,7 @@ export const DateFilterDropdown: React.FC<DateFilterDropdownProps> = ({ onDateRa
     setSelectedMonth(month);
     setIsDropdownOpen(false);
     setShowCustomCalendar(false);
+    setSearchQuery('');
     
     const [monthName, year] = month.split(' ');
     const monthMap: { [key: string]: number } = {
@@ -55,7 +58,10 @@ export const DateFilterDropdown: React.FC<DateFilterDropdownProps> = ({ onDateRa
   return (
     <div className="relative" ref={dropdownRef}>
       <button 
-        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+        onClick={() => {
+          setIsDropdownOpen(!isDropdownOpen);
+          if (!isDropdownOpen) setSearchQuery('');
+        }}
         className="flex items-center gap-2 border rounded-lg px-4 py-2"
         style={{ backgroundColor: '#2D757938' }}
       >
@@ -76,6 +82,7 @@ export const DateFilterDropdown: React.FC<DateFilterDropdownProps> = ({ onDateRa
                   setSelectedMonth('All Time');
                   onDateRangeChange('', '');
                   setIsDropdownOpen(false);
+                  setSearchQuery('');
                 }}
                 className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
               >
@@ -87,15 +94,26 @@ export const DateFilterDropdown: React.FC<DateFilterDropdownProps> = ({ onDateRa
               >
                 Custom Dates
               </button>
-              {monthOptions.map((month) => (
-                <button
-                  key={month}
-                  onClick={() => handleMonthSelect(month)}
-                  className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
-                >
-                  {month}
-                </button>
-              ))}
+              <div className="px-3 py-2 border-b">
+                <input
+                  type="text"
+                  placeholder="Search months..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                />
+              </div>
+              <div className="max-h-[240px] overflow-y-auto">
+                {filteredMonths.map((month) => (
+                  <button
+                    key={month}
+                    onClick={() => handleMonthSelect(month)}
+                    className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
+                  >
+                    {month}
+                  </button>
+                ))}
+              </div>
             </>
           ) : (
             <div className="p-4">

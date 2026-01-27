@@ -9,6 +9,10 @@ const pool = new Pool({
   database: process.env.PGDATABASE || 'safestories_db',
   user: process.env.PGUSER || 'fluidadmin',
   password: process.env.PGPASSWORD || 'admin123',
+  max: 1, // Limit connections for serverless
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
 pool.on('connect', (client) => {

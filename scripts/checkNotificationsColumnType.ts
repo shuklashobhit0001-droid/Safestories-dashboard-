@@ -1,18 +1,17 @@
 import pool from '../lib/db.js';
 
-async function checkBookingsColumns() {
+async function checkNotificationsSchema() {
   try {
     const result = await pool.query(`
       SELECT column_name, data_type, character_maximum_length
       FROM information_schema.columns
-      WHERE table_name = 'bookings'
+      WHERE table_name = 'notifications'
       ORDER BY ordinal_position;
     `);
     
-    console.log('=== bookings table columns ===\n');
+    console.log('=== notifications table schema ===\n');
     result.rows.forEach(row => {
-      const length = row.character_maximum_length ? `(${row.character_maximum_length})` : '';
-      console.log(`${row.column_name}: ${row.data_type}${length}`);
+      console.log(`${row.column_name}: ${row.data_type}${row.character_maximum_length ? `(${row.character_maximum_length})` : ''}`);
     });
 
   } catch (error) {
@@ -22,4 +21,4 @@ async function checkBookingsColumns() {
   }
 }
 
-checkBookingsColumns();
+checkNotificationsSchema();
