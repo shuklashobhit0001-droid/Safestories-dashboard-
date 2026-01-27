@@ -188,22 +188,14 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
   };
 
   const getAppointmentStatus = (apt: Appointment) => {
-    // Use the status calculated by the backend (which uses database NOW() in IST)
+    // Trust the status calculated by the API (which uses database NOW() in IST)
+    // Only override for special cases
     if (apt.booking_status === 'cancelled' || apt.booking_status === 'canceled') return 'cancelled';
     if (apt.booking_status === 'no_show' || apt.booking_status === 'no show') return 'no_show';
-    if (apt.has_session_notes) return 'completed';
+    if (apt.booking_status === 'completed') return 'completed';
+    if (apt.booking_status === 'pending_notes') return 'pending_notes';
     
-    // For non-cancelled bookings, check if past using booking_start_at_raw
-    if (apt.booking_start_at_raw) {
-      const sessionDate = new Date(apt.booking_start_at_raw);
-      const now = new Date();
-      
-      // Convert both to UTC timestamps for accurate comparison
-      if (sessionDate.getTime() < now.getTime() && !apt.has_session_notes) {
-        return 'pending_notes';
-      }
-    }
-    
+    // Default to scheduled for confirmed bookings
     return 'scheduled';
   };
 
