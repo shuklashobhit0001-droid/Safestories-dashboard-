@@ -54,6 +54,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleTherapies(req, res);
       case 'refunds':
         return await handleRefunds(req, res);
+      case 'payments':
+        return await handlePayments(req, res);
       case 'booking-requests':
         return await handleBookingRequests(req, res);
       case 'therapist-appointments':
@@ -138,14 +140,37 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
 async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) {
   try {
     const result = await pool.query(`
-      SELECT COUNT(*) as live_count
+      SELECT booking_invitee_time, booking_start_at
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at <= NOW()
-        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
+        AND booking_start_at >= NOW() - INTERVAL '12 hours'
+        AND booking_start_at <= NOW() + INTERVAL '12 hours'
     `);
 
-    return res.status(200).json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
+    let liveCount = 0;
+
+    result.rows.forEach(row => {
+      const timeMatch = row.booking_invitee_time.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
+      
+      if (timeMatch) {
+        const dateStr = row.booking_invitee_time.match(/(\w+,\s+\w+\s+\d+,\s+\d+)/)?.[1];
+        const startTimeStr = timeMatch[1];
+        const endTimeStr = timeMatch[2];
+        
+        if (dateStr) {
+          // Parse as IST by converting to UTC
+          const startIST = new Date(`${dateStr} ${startTimeStr} GMT+0530`);
+          const endIST = new Date(`${dateStr} ${endTimeStr} GMT+0530`);
+          const nowUTC = new Date();
+          
+          if (nowUTC >= startIST && nowUTC <= endIST) {
+            liveCount++;
+          }
+        }
+      }
+    });
+
+    return res.status(200).json({ liveCount });
   } catch (error: any) {
     console.error('[live-sessions-count] ERROR:', error.message);
     return res.status(500).json({ 
@@ -179,21 +204,28 @@ async function handleTherapistsLiveStatus(req: VercelRequest, res: VercelRespons
       SELECT DISTINCT booking_host_name, booking_invitee_time, booking_start_at
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at <= NOW()
-        AND booking_start_at >= NOW() - INTERVAL '2 hours'
+        AND booking_start_at >= NOW() - INTERVAL '12 hours'
+        AND booking_start_at <= NOW() + INTERVAL '12 hours'
     `);
 
     const liveStatus: { [key: string]: boolean } = {};
-    const now = new Date();
 
     result.rows.forEach(row => {
       const timeMatch = row.booking_invitee_time.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
       
       if (timeMatch) {
-        const startTime = new Date(row.booking_start_at);
         const dateStr = row.booking_invitee_time.match(/(\w+,\s+\w+\s+\d+,\s+\d+)/)?.[1];
+        const startTimeStr = timeMatch[1];
         const endTimeStr = timeMatch[2];
         
+        if (dateStr) {
+          const startIST = new Date(`${dateStr} ${startTimeStr} GMT+0530`);
+          const endIST = new Date(`${dateStr} ${endTimeStr} GMT+0530`);
+          const nowUTC = new Date();
+          
+          if (nowUTC >= startIST && nowUTC <= endIST) {
+            const firstName = row.booking_host_name.split(' ')[0];
+            liveStatus[firstName] = true;
         if (dateStr) {
           const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
           if (now >= startTime && now <= endDateTime) {
@@ -474,6 +506,63 @@ async function handleRefunds(req: VercelRequest, res: VercelResponse) {
   });
   
   res.status(200).json(refunds);
+}
+
+async function handlePayments(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' });
+  
+  const { status } = req.query;
+  
+  let query = 'SELECT * FROM dashboard_api_booking WHERE 1=1';
+  
+  if (status && status !== 'all_payments') {
+    if (status === 'completed') {
+      query += " AND payment_status = 'Completed'";
+    } else if (status === 'pending') {
+      query += " AND payment_status = 'Pending'";
+    } else if (status === 'expired') {
+      query += " AND payment_status = 'Failed'";
+    }
+  }
+  
+  query += ' ORDER BY created_at DESC';
+  
+  const result = await pool.query(query);
+  
+  const payments = result.rows.map(row => {
+    let formattedTimings = 'N/A';
+    if (row.start_at) {
+      const date = new Date(row.start_at);
+      const endDate = new Date(row.end_at || date.getTime() + (50 * 60 * 1000));
+      
+      const formatTime = (d: Date) => {
+        const hours = d.getHours();
+        const minutes = d.getMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const hour12 = hours % 12 || 12;
+        return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+      };
+      
+      const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+      const month = date.toLocaleDateString('en-US', { month: 'short' });
+      const day = date.getDate();
+      const year = date.getFullYear();
+      
+      formattedTimings = `${weekday}, ${month} ${day}, ${year} at ${formatTime(date)} - ${formatTime(endDate)} IST`;
+    }
+    
+    return {
+      client_name: row.invitee_name,
+      session_name: row.booking_resource_name,
+      session_timings: formattedTimings,
+      payment_status: row.payment_status,
+      invitee_phone: row.invitee_phone || '',
+      invitee_email: row.invitee_email || '',
+      payment_amount: row.payment_amount || 0
+    };
+  });
+  
+  res.status(200).json(payments);
 }
 
 async function handleBookingRequests(req: VercelRequest, res: VercelResponse) {

@@ -63,14 +63,36 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT COUNT(*) as live_count
+      SELECT booking_invitee_time, booking_start_at
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at <= NOW()
-        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
+        AND booking_start_at >= NOW() - INTERVAL '12 hours'
+        AND booking_start_at <= NOW() + INTERVAL '12 hours'
     `);
 
-    res.json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
+    let liveCount = 0;
+
+    result.rows.forEach(row => {
+      const timeMatch = row.booking_invitee_time.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
+      
+      if (timeMatch) {
+        const dateStr = row.booking_invitee_time.match(/(\w+,\s+\w+\s+\d+,\s+\d+)/)?.[1];
+        const startTimeStr = timeMatch[1];
+        const endTimeStr = timeMatch[2];
+        
+        if (dateStr) {
+          const startIST = new Date(`${dateStr} ${startTimeStr} GMT+0530`);
+          const endIST = new Date(`${dateStr} ${endTimeStr} GMT+0530`);
+          const nowUTC = new Date();
+          
+          if (nowUTC >= startIST && nowUTC <= endIST) {
+            liveCount++;
+          }
+        }
+      }
+    });
+
+    res.json({ liveCount });
   } catch (error) {
     console.error('Error fetching live sessions count:', error);
     res.status(500).json({ error: 'Failed to fetch live sessions count' });
@@ -504,17 +526,34 @@ app.post('/api/booking-requests', async (req, res) => {
 app.get('/api/therapists-live-status', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT booking_host_name
+      SELECT DISTINCT booking_host_name, booking_invitee_time, booking_start_at
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at <= NOW()
-        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
+        AND booking_start_at >= NOW() - INTERVAL '12 hours'
+        AND booking_start_at <= NOW() + INTERVAL '12 hours'
     `);
 
     const liveStatus: { [key: string]: boolean } = {};
+
     result.rows.forEach(row => {
-      const firstName = row.booking_host_name.split(' ')[0];
-      liveStatus[firstName] = true;
+      const timeMatch = row.booking_invitee_time.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
+      
+      if (timeMatch) {
+        const dateStr = row.booking_invitee_time.match(/(\w+,\s+\w+\s+\d+,\s+\d+)/)?.[1];
+        const startTimeStr = timeMatch[1];
+        const endTimeStr = timeMatch[2];
+        
+        if (dateStr) {
+          const startIST = new Date(`${dateStr} ${startTimeStr} GMT+0530`);
+          const endIST = new Date(`${dateStr} ${endTimeStr} GMT+0530`);
+          const nowUTC = new Date();
+          
+          if (nowUTC >= startIST && nowUTC <= endIST) {
+            const firstName = row.booking_host_name.split(' ')[0];
+            liveStatus[firstName] = true;
+          }
+        }
+      }
     });
 
     res.json(liveStatus);
