@@ -998,7 +998,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Specialization</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Total sessions lifetime</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Sessions this month</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Status</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Live Status</th>
               </tr>
             </thead>
             <tbody>
@@ -1034,7 +1034,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${therapist.isLive ? 'bg-green-500' : 'bg-red-500'}`}></div>
                         <span className={`text-sm font-medium ${therapist.isLive ? 'text-green-700' : 'text-red-700'}`}>
-                          {therapist.isLive ? 'Live' : 'Idle'}
+                          {therapist.isLive ? 'In session' : 'Free'}
                         </span>
                       </div>
                     </td>
