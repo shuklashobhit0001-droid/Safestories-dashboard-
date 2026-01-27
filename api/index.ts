@@ -140,11 +140,9 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
 async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) {
   try {
     const result = await pool.query(`
-      SELECT booking_invitee_time, booking_start_at
+      SELECT booking_invitee_time
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at >= NOW() - INTERVAL '12 hours'
-        AND booking_start_at <= NOW() + INTERVAL '12 hours'
     `);
 
     let liveCount = 0;
@@ -201,11 +199,9 @@ async function handleTherapists(req: VercelRequest, res: VercelResponse) {
 async function handleTherapistsLiveStatus(req: VercelRequest, res: VercelResponse) {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT booking_host_name, booking_invitee_time, booking_start_at
+      SELECT DISTINCT booking_host_name, booking_invitee_time
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
-        AND booking_start_at >= NOW() - INTERVAL '12 hours'
-        AND booking_start_at <= NOW() + INTERVAL '12 hours'
     `);
 
     const liveStatus: { [key: string]: boolean } = {};
@@ -224,11 +220,6 @@ async function handleTherapistsLiveStatus(req: VercelRequest, res: VercelRespons
           const nowUTC = new Date();
           
           if (nowUTC >= startIST && nowUTC <= endIST) {
-            const firstName = row.booking_host_name.split(' ')[0];
-            liveStatus[firstName] = true;
-        if (dateStr) {
-          const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-          if (now >= startTime && now <= endDateTime) {
             const firstName = row.booking_host_name.split(' ')[0];
             liveStatus[firstName] = true;
           }
