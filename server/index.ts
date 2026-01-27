@@ -63,34 +63,14 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT booking_invitee_time, booking_start_at
+      SELECT COUNT(*) as live_count
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
         AND booking_start_at <= NOW()
-        AND booking_start_at >= NOW() - INTERVAL '2 hours'
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
     `);
 
-    let liveCount = 0;
-    const now = new Date();
-
-    result.rows.forEach(row => {
-      const timeMatch = row.booking_invitee_time.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
-      
-      if (timeMatch) {
-        const startTime = new Date(row.booking_start_at);
-        const dateStr = row.booking_invitee_time.match(/(\w+,\s+\w+\s+\d+,\s+\d+)/)?.[1];
-        const endTimeStr = timeMatch[2];
-        
-        if (dateStr) {
-          const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-          if (now >= startTime && now <= endDateTime) {
-            liveCount++;
-          }
-        }
-      }
-    });
-
-    res.json({ liveCount });
+    res.json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
   } catch (error) {
     console.error('Error fetching live sessions count:', error);
     res.status(500).json({ error: 'Failed to fetch live sessions count' });

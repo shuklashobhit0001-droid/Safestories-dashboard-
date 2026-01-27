@@ -137,38 +137,15 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
 
 async function handleLiveSessionsCount(req: VercelRequest, res: VercelResponse) {
   try {
-    // Get bookings and parse invitee_time in application layer
     const result = await pool.query(`
-      SELECT booking_invitee_time, booking_start_at
+      SELECT COUNT(*) as live_count
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
         AND booking_start_at <= NOW()
-        AND booking_start_at >= NOW() - INTERVAL '2 hours'
+        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
     `);
 
-    let liveCount = 0;
-    const now = new Date();
-
-    result.rows.forEach(row => {
-      // Parse end time from booking_invitee_time
-      // Format: "Monday, Jan 12, 2026 at 10:00 AM - 10:50 AM (GMT+05:30)"
-      const timeMatch = row.booking_invitee_time.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
-      
-      if (timeMatch) {
-        const startTime = new Date(row.booking_start_at);
-        const dateStr = row.booking_invitee_time.match(/(\w+,\s+\w+\s+\d+,\s+\d+)/)?.[1];
-        const endTimeStr = timeMatch[2];
-        
-        if (dateStr) {
-          const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-          if (now >= startTime && now <= endDateTime) {
-            liveCount++;
-          }
-        }
-      }
-    });
-
-    return res.status(200).json({ liveCount });
+    return res.status(200).json({ liveCount: parseInt(result.rows[0].live_count) || 0 });
   } catch (error: any) {
     console.error('[live-sessions-count] ERROR:', error.message);
     return res.status(500).json({ 
