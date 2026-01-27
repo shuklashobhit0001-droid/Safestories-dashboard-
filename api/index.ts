@@ -386,21 +386,21 @@ async function handleAppointments(req: VercelRequest, res: VercelResponse) {
         b.booking_checkin_url,
         b.therapist_id,
         b.booking_status,
-        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes,
+        (b.booking_start_at < NOW()) as is_past
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
+      WHERE b.booking_start_at >= NOW() - INTERVAL '7 days'
       ORDER BY b.booking_start_at DESC
     `);
 
     const appointments = result.rows.map(row => {
       let status = row.booking_status;
-      const now = new Date();
-      const sessionDate = new Date(row.booking_start_at);
       
       if (row.booking_status !== 'cancelled' && row.booking_status !== 'canceled' && row.booking_status !== 'no_show' && row.booking_status !== 'no show') {
         if (row.has_session_notes) {
           status = 'completed';
-        } else if (sessionDate < now) {
+        } else if (row.is_past) {
           status = 'pending_notes';
         }
       }
