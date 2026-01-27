@@ -6,9 +6,17 @@ import { Footer } from './components/Footer';
 import { Dashboard } from './components/Dashboard';
 import { TherapistDashboard } from './components/TherapistDashboard';
 import { ClientDashboard } from './components/ClientDashboard';
+import { MaintenancePage } from './components/MaintenancePage';
 import { Monitor } from 'lucide-react';
 
 const App: React.FC = () => {
+  // Show maintenance page only on Vercel (production)
+  const isVercel = import.meta.env.VITE_VERCEL === '1';
+  
+  if (isVercel) {
+    return <MaintenancePage />;
+  }
+
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return localStorage.getItem('isLoggedIn') === 'true';
   });
