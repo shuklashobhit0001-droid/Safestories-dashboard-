@@ -18,6 +18,7 @@ interface Client {
   booking_host_name: string;
   session_count: number;
   therapists: Therapist[];
+  latest_booking_date?: string;
 }
 
 export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCreateBooking?: () => void }> = ({ onClientClick, onCreateBooking }) => {
@@ -97,16 +98,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   };
 
   const handleTransferClick = (client: Client) => {
-    // Check if client has upcoming appointments
-    const hasUpcomingAppointment = client.therapists?.some(t => {
-      if (t.latest_booking_date) {
-        return new Date(t.latest_booking_date) > new Date();
-      }
-      return false;
-    });
-    
-    if (hasUpcomingAppointment) {
-      return; // Button is disabled, do nothing
+    if (isTransferDisabled(client)) {
+      return;
     }
     
     const actualTherapist = client.therapists && client.therapists.length > 0 
@@ -117,12 +110,10 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   };
 
   const isTransferDisabled = (client: Client) => {
-    return client.therapists?.some(t => {
-      if (t.latest_booking_date) {
-        return new Date(t.latest_booking_date) > new Date();
-      }
-      return false;
-    }) || false;
+    if (client.latest_booking_date) {
+      return new Date(client.latest_booking_date) > new Date();
+    }
+    return false;
   };
 
   const handleTransferSuccess = () => {

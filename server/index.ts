@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import bcrypt from 'bcrypt';
 import pool from '../lib/db';
 import { convertToIST } from '../lib/timezone';
 import { startDashboardApiBookingSync } from './dashboardApiBookingSync';
@@ -28,12 +29,17 @@ app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
 
     const result = await pool.query(
-      'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND password = $2',
-      [username, password]
+      'SELECT * FROM users WHERE LOWER(username) = LOWER($1)',
+      [username]
     );
 
     if (result.rows.length > 0) {
       const user = result.rows[0];
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      
+      if (!isValidPassword) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      }
       
       // Log therapist login
       if (user.role === 'therapist') {
@@ -287,6 +293,7 @@ app.get('/api/clients', async (req, res) => {
         invitee_phone,
         invitee_email,
         booking_host_name,
+        booking_status,
         1 as session_count,
         invitee_created_at as created_at,
         booking_start_at as latest_booking_date
@@ -299,6 +306,7 @@ app.get('/api/clients', async (req, res) => {
         client_whatsapp as invitee_phone,
         client_email as invitee_email,
         therapist_name as booking_host_name,
+        NULL as booking_status,
         0 as session_count,
         created_at,
         created_at as latest_booking_date
@@ -348,7 +356,7 @@ app.get('/api/clients', async (req, res) => {
           session_count: 0,
           booking_host_name: row.booking_host_name,
           created_at: row.created_at,
-          latest_booking_date: row.latest_booking_date,
+          latest_booking_date: null,
           therapists: []
         });
       }
@@ -356,9 +364,16 @@ app.get('/api/clients', async (req, res) => {
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
       
+      // Update latest_booking_date only from active bookings
+      const isActiveBooking = row.booking_status && !['cancelled', 'canceled', 'no_show', 'no show'].includes(row.booking_status);
+      if (isActiveBooking || !row.booking_status) {
+        if (!client.latest_booking_date || new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
+          client.latest_booking_date = row.latest_booking_date;
+        }
+      }
+      
       // Update to most recent phone number and therapist
-      if (new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
-        client.latest_booking_date = row.latest_booking_date;
+      if (new Date(row.latest_booking_date) > new Date(client.created_at)) {
         client.invitee_phone = row.invitee_phone;
         if (parseInt(row.session_count) > 0) {
           client.booking_host_name = row.booking_host_name;
@@ -1613,7 +1628,8 @@ app.get('/api/refunds', async (req, res) => {
         b.refund_status,
         COALESCE(b.invitee_phone, '') as invitee_phone,
         COALESCE(b.invitee_email, '') as invitee_email,
-        COALESCE(b.refund_amount, 0) as refund_amount
+        COALESCE(b.refund_amount, 0) as refund_amount,
+        COALESCE(b.invitee_payment_gateway, '') as payment_gateway
       FROM refund_cancellation_table r
       LEFT JOIN bookings b ON r.session_id = b.booking_id
       WHERE b.booking_status IN ('cancelled', 'canceled')

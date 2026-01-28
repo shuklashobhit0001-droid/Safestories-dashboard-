@@ -41,6 +41,7 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
     { id: 'scheduled', label: 'Upcoming' },
     { id: 'all', label: 'All Appointments' },
     { id: 'completed', label: 'Completed' },
+    { id: 'free_consultation', label: 'Free Consultation' },
     { id: 'pending_notes', label: 'Pending Notes' },
     { id: 'cancelled', label: 'Cancelled' },
     { id: 'no_show', label: 'No Show' },
@@ -215,6 +216,11 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
     
     if (!matchesSearch) return false;
     if (activeTab === 'all') return true;
+    
+    // Free Consultation tab: filter by therapist name = Safestories
+    if (activeTab === 'free_consultation') {
+      return apt.booking_host_name?.trim().toLowerCase() === 'safestories';
+    }
     
     return getAppointmentStatus(apt) === activeTab;
   });

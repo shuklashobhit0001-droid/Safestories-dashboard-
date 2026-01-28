@@ -452,7 +452,8 @@ async function handleRefunds(req: VercelRequest, res: VercelResponse) {
       b.refund_status,
       COALESCE(b.invitee_phone, '') as invitee_phone,
       COALESCE(b.invitee_email, '') as invitee_email,
-      COALESCE(b.refund_amount, 0) as refund_amount
+      COALESCE(b.refund_amount, 0) as refund_amount,
+      COALESCE(b.invitee_payment_gateway, '') as payment_gateway
     FROM refund_cancellation_table r
     LEFT JOIN bookings b ON r.session_id = b.booking_id
     WHERE b.booking_status IN ('cancelled', 'canceled')

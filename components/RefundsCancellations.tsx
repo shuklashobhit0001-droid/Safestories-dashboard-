@@ -9,6 +9,7 @@ interface Refund {
   invitee_phone: string;
   invitee_email: string;
   refund_amount: number;
+  payment_gateway: string;
 }
 
 interface Payment {
@@ -138,6 +139,7 @@ export const RefundsCancellations: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold mb-1">Payments</h1>
           <p className="text-gray-600">View all payments and Cancellations and refunds</p>
+          <p className="text-sm italic mt-1" style={{ color: '#21615D' }}>Razorpay gateway currently only displays "Initiated" or "Failed" statuses. A "Completed" status will not be shown</p>
         </div>
         <div className="flex gap-4">
           <div className="relative w-80">
@@ -187,6 +189,7 @@ export const RefundsCancellations: React.FC = () => {
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">{isPaymentTab ? 'Session Name' : 'Cancelled Session'}</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Date & Time</th>
                 {isPaymentTab && <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Amount</th>}
+                {!isPaymentTab && <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Payment Gateway</th>}
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">{isPaymentTab ? 'Payment Status' : 'Refund Status'}</th>
               </tr>
             </thead>
@@ -223,7 +226,7 @@ export const RefundsCancellations: React.FC = () => {
               ) : (
                 filteredRefunds.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="text-center text-gray-400 py-8">
+                    <td colSpan={5} className="text-center text-gray-400 py-8">
                       No refunds or cancellations found
                     </td>
                   </tr>
@@ -236,6 +239,11 @@ export const RefundsCancellations: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">{refund.session_name}</td>
                       <td className="px-6 py-4">{refund.session_timings}</td>
+                      <td className="px-6 py-4">
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                          {refund.payment_gateway || 'N/A'}
+                        </span>
+                      </td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           refund.refund_status === 'Completed' ? 'bg-green-100 text-green-700' :
