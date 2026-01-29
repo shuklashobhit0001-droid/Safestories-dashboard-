@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
-import pool from '../lib/db';
-import { convertToIST } from '../lib/timezone';
-import { startDashboardApiBookingSync } from './dashboardApiBookingSync';
+import pool from './lib/db';
+import { convertToIST } from './lib/timezone';
+import { startDashboardApiBookingSync } from './lib/dashboardApiBookingSync';
 
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
