@@ -1,4 +1,4 @@
-import pool from '../lib/db';
+import pool from './db.js';
 
 export async function startDashboardApiBookingSync() {
   console.log('🚀 Dashboard API Booking Sync Service Started');
