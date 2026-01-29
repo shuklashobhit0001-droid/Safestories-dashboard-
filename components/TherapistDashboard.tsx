@@ -25,7 +25,20 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [endDate, setEndDate] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
-  const monthOptions = ['Dec 2025', 'Nov 2025', 'Oct 2025', 'Sep 2025', 'Aug 2025', 'Jul 2025', 'Jun 2025', 'May 2025', 'Apr 2025', 'Mar 2025', 'Feb 2025', 'Jan 2025'];
+  const generateMonthOptions = () => {
+    const months = [];
+    const startDate = new Date(2025, 9, 1); // Oct 2025
+    const currentDate = new Date();
+    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1); // +1 month ahead
+    
+    for (let d = new Date(endDate); d >= startDate; d.setMonth(d.getMonth() - 1)) {
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      months.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
+    }
+    return months;
+  };
+  
+  const monthOptions = generateMonthOptions();
 
   const [stats, setStats] = useState([
     { title: 'Sessions', value: '0', lastMonth: '0' },

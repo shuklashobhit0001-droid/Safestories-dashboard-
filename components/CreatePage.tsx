@@ -11,9 +11,10 @@ export const CreatePage: React.FC<CreatePageProps> = ({ onCreateBooking, onSendB
   
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold mb-8">Create</h1>
+      <h1 className="text-3xl font-bold mb-1">Create</h1>
+      <p className="text-gray-600 mb-8">Create New Bookings, Send Booking Links to Clients, Add New Therapists and more...</p>
       
-      <div className="grid grid-cols-2 gap-6 max-w-4xl">
+      <div className="grid grid-cols-3 gap-6">
         {/* Create New Booking Card */}
         <div 
           onClick={!isProduction ? onCreateBooking : undefined}

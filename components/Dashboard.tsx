@@ -65,10 +65,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [loading, setLoading] = useState(true);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-  const monthOptions = [
-    'Dec 2026', 'Nov 2026', 'Oct 2026', 'Sep 2026', 'Aug 2026', 'Jul 2026', 'Jun 2026', 'May 2026', 'Apr 2026', 'Mar 2026', 'Feb 2026', 'Jan 2026',
-    'Dec 2025', 'Nov 2025', 'Oct 2025', 'Sep 2025', 'Aug 2025', 'Jul 2025', 'Jun 2025', 'May 2025', 'Apr 2025', 'Mar 2025', 'Feb 2025', 'Jan 2025'
-  ];
+  const generateMonthOptions = () => {
+    const months = [];
+    const startDate = new Date(2025, 9, 1); // Oct 2025
+    const currentDate = new Date();
+    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1); // +1 month ahead
+    
+    for (let d = new Date(endDate); d >= startDate; d.setMonth(d.getMonth() - 1)) {
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      months.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
+    }
+    return months;
+  };
+  
+  const monthOptions = generateMonthOptions();
 
   const [stats, setStats] = useState([
     { title: 'Revenue', value: '₹0', lastMonth: '₹0' },
@@ -152,8 +162,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
     };
     const monthNum = monthMap[monthName];
-    const start = new Date(parseInt(year), monthNum, 1).toISOString().split('T')[0];
-    const end = new Date(parseInt(year), monthNum + 1, 0).toISOString().split('T')[0];
+    const start = `${year}-${String(monthNum + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(parseInt(year), monthNum + 1, 0).getDate();
+    const end = `${year}-${String(monthNum + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     
     setDateRange({ start, end });
   };

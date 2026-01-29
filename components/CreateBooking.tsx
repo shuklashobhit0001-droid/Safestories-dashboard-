@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Lottie from 'lottie-react';
+import sessionBookedAnimation from '../session-booked.json';
+import paymentSentAnimation from '../payment-sent.json';
 
 interface CreateBookingProps {
   onBack: () => void;
@@ -26,7 +29,7 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [countryCode, setCountryCode] = useState('+91');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [selectedTimezone, setSelectedTimezone] = useState('');
+  const [selectedTimezone, setSelectedTimezone] = useState('Asia/Kolkata');
   const [timezoneSearch, setTimezoneSearch] = useState('');
   const [isTimezoneDropdownOpen, setIsTimezoneDropdownOpen] = useState(false);
   const timezoneRef = useRef<HTMLDivElement>(null);
@@ -295,14 +298,15 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
     return hasDate && hasTimezone && selectedTherapy && selectedTherapist;
   };
 
-  const handleCheckSlots = async () => {
-    console.log('Button clicked!');
-    
-    if (!isFormValid()) {
-      alert('Please fill all required fields');
-      return;
+  useEffect(() => {
+    if (selectedDate && selectedTimezone) {
+      if (isFreeConsultation || (selectedTherapy && selectedTherapist)) {
+        fetchAvailableSlots();
+      }
     }
+  }, [selectedTherapy, selectedTherapist, selectedDate, isFreeConsultation]);
 
+  const fetchAvailableSlots = async () => {
     setIsLoadingSlots(true);
     
     const payload = {
@@ -313,8 +317,6 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
       timezone: selectedTimezone
     };
     
-    console.log('Sending data:', payload);
-    
     try {
       const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/b5ab584c-1203-41c0-b296-3107e2e6035e', {
         method: 'POST',
@@ -324,7 +326,6 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Response:', data);
         
         if (data && data.length > 0 && data[0]['Available Slots']) {
           const availableSlots = data[0]['Available Slots'];
@@ -333,16 +334,12 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
           
           setSessionCharges(charges || 0);
           
-          // Parse mode string to extract available modes
           const modes: string[] = [];
           try {
-            // Check if modeString is a plain string (not JSON)
             if (modeString && !modeString.startsWith('[') && !modeString.startsWith('{')) {
-              // Plain string - check for mode types directly
               if (modeString.includes('google_meet')) modes.push('online');
               if (modeString.includes('physical')) modes.push('in-person');
             } else {
-              // Try to parse as JSON
               const decodedMode = modeString
                 .replace(/&quot;/g, '"')
                 .replace(/&#39;/g, "'")
@@ -357,15 +354,12 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
               });
             }
           } catch (e) {
-            console.error('Error parsing modes:', e);
-            // Fallback: check if string contains mode types
             if (modeString.includes('google_meet')) modes.push('online');
             if (modeString.includes('physical')) modes.push('in-person');
           }
           
           setAvailableModes(modes);
           
-          // Auto-select online if only google_meet is available
           if (modes.length === 1 && modes[0] === 'online') {
             setSessionMode('online');
           } else {
@@ -445,9 +439,21 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 max-w-md mx-4 shadow-xl">
-            <h2 className="text-xl font-bold mb-4 text-gray-800">Payment Link Sent</h2>
-            <p className="text-gray-600 mb-6">
-              The payment link has been sent to the client. Once the payment is confirmed by the client, their session will be booked automatically.
+            <div className="flex justify-center mb-4">
+              <Lottie 
+                animationData={grandTotal === 0 ? sessionBookedAnimation : paymentSentAnimation}
+                loop={true}
+                style={{ width: 200, height: 200 }}
+              />
+            </div>
+            <h2 className="text-xl font-bold mb-4 text-gray-800 text-center">
+              {grandTotal === 0 ? 'Session Booked' : 'Payment Link Sent'}
+            </h2>
+            <p className="text-gray-600 mb-6 text-center">
+              {grandTotal === 0 
+                ? 'The free consultation session has been booked successfully. The client will receive a confirmation email with the session details and joining link.'
+                : 'The payment link has been sent to the client. Once the payment is confirmed by the client, their session will be booked automatically.'
+              }
             </p>
             <button
               onClick={onBack}
@@ -538,15 +544,6 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* Check Slots Button */}
-          <button
-            onClick={handleCheckSlots}
-            disabled={!isFormValid() || isLoadingSlots}
-            className="w-full bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            {isLoadingSlots ? 'Loading...' : 'Check Slots →'}
-          </button>
-
           {/* Client Details */}
           <div className="grid grid-cols-2 gap-6">
             <div className="relative">
@@ -583,6 +580,13 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
                       )}
                     </div>
                   ))}
+                  <div
+                    onClick={() => setShowClientDropdown(false)}
+                    className="px-4 py-3 hover:bg-gray-100 cursor-pointer border-t font-medium text-center"
+                    style={{ backgroundColor: '#21615D', color: 'white' }}
+                  >
+                    + New client
+                  </div>
                 </div>
               )}
             </div>
@@ -665,7 +669,7 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
               disabled={!isPaymentLinkEnabled()}
               className="w-full bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              Send Payment Link
+              {grandTotal === 0 ? 'Book Session' : 'Send Payment Link'}
             </button>
           </div>
         </div>
@@ -705,53 +709,17 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
           <div>
             <div className="flex items-center justify-between mb-3">
               <label className="block text-sm font-medium">Available Slots</label>
-              <div className="relative" ref={timezoneRef}>
-                <button
-                  onClick={() => setIsTimezoneDropdownOpen(!isTimezoneDropdownOpen)}
-                  className="px-3 py-1.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white text-sm flex items-center gap-2 min-w-[200px] justify-between"
-                >
-                  <span>{selectedTimezone ? `${selectedTimezone.replace(/_/g, ' ')} - ${timezones.find(tz => tz.name === selectedTimezone)?.offset}` : 'Select Timezone'}</span>
-                  <span className="text-gray-400 text-xs">▼</span>
-                </button>
-                {isTimezoneDropdownOpen && (
-                  <div className="absolute right-0 mt-1 w-64 bg-white border rounded-lg shadow-lg z-10">
-                    <input
-                      type="text"
-                      placeholder="Search timezone..."
-                      value={timezoneSearch}
-                      onChange={(e) => setTimezoneSearch(e.target.value)}
-                      className="w-full px-3 py-2 border-b focus:outline-none text-sm"
-                      autoFocus
-                    />
-                    <div className="max-h-[280px] overflow-y-auto">
-                      {timezones
-                        .filter(tz => 
-                          timezoneSearch === '' || 
-                          tz.name.toLowerCase().includes(timezoneSearch.toLowerCase()) ||
-                          tz.offset.includes(timezoneSearch)
-                        )
-                        .slice(0, 10)
-                        .map((tz) => (
-                          <button
-                            key={tz.name}
-                            onClick={() => {
-                              setSelectedTimezone(tz.name);
-                              setIsTimezoneDropdownOpen(false);
-                              setTimezoneSearch('');
-                            }}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex justify-between"
-                          >
-                            <span>{tz.name.replace(/_/g, ' ')}</span>
-                            <span className="text-gray-500">{tz.offset}</span>
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                )}
+              <div className="px-3 py-1.5 border rounded-lg bg-gray-50 text-sm text-gray-700">
+                Asia/Kolkata - GMT+5:30
               </div>
             </div>
             <div className="bg-white rounded-lg p-4 shadow-sm max-h-[400px] overflow-y-auto">
-              {availableSlots.length > 0 ? (
+              {isLoadingSlots ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="w-12 h-12 border-4 border-teal-700 border-t-transparent rounded-full animate-spin mb-3"></div>
+                  <p className="text-gray-500 text-sm">Loading slots...</p>
+                </div>
+              ) : availableSlots.length > 0 ? (
                 <div className="space-y-3">
                   {availableSlots.map((slot) => (
                     <button

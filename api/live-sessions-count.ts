@@ -11,6 +11,8 @@ export default async function handler(req: Request, res: Response) {
       SELECT booking_invitee_time
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+        AND therapist_id IS NOT NULL
+        AND booking_resource_name NOT ILIKE '%free consultation%'
     `);
 
     let liveCount = 0;

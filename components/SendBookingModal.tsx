@@ -306,7 +306,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
       const code = countryCodes.find(c => phone.startsWith(c.code));
       if (code) {
         setCountryCode(code.code);
-        setClientWhatsapp(phone.substring(code.code.length));
+        setClientWhatsapp(phone.substring(code.code.length).trim());
       } else {
         setClientWhatsapp(phone);
       }
@@ -314,7 +314,27 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
       setClientWhatsapp(phone);
     }
     setClientEmail(client.invitee_email || '');
+    
+    // Autofill therapist - find full therapist name from booking_host_name
+    if (client.booking_host_name) {
+      const matchingTherapist = therapists.find(t => 
+        t.name.toLowerCase().includes(client.booking_host_name.toLowerCase())
+      );
+      if (matchingTherapist) {
+        setTherapistName(matchingTherapist.name);
+        // Autofill therapy from therapist's specialization
+        if (matchingTherapist.specialization) {
+          const specs = matchingTherapist.specialization.split(',').map((s: string) => s.trim());
+          if (specs.length > 0) {
+            setTherapyType(specs[0]);
+          }
+        }
+      }
+    }
+    
+    // Close dropdown immediately
     setShowClientDropdown(false);
+    setFilteredClients([]);
   };
 
   if (!isOpen) return null;
@@ -388,10 +408,11 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
                   if (e.target.value === '') {
                     setClientWhatsapp('');
                     setClientEmail('');
+                    setTherapyType('');
+                    setTherapistName('');
                     setCountryCode('+91');
                   }
                 }}
-                onFocus={() => clientName.length > 0 && filteredClients.length > 0 && setShowClientDropdown(true)}
                 className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                 required
               />
@@ -400,7 +421,10 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
                   {filteredClients.map((client, index) => (
                     <div
                       key={index}
-                      onClick={() => handleClientSelect(client)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleClientSelect(client);
+                      }}
                       className="px-4 py-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
                     >
                       <div className="font-semibold text-gray-900">{client.invitee_name}</div>
@@ -410,6 +434,17 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
                       )}
                     </div>
                   ))}
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setShowClientDropdown(false);
+                      setFilteredClients([]);
+                    }}
+                    className="px-4 py-3 hover:bg-gray-100 cursor-pointer border-t font-medium text-center"
+                    style={{ backgroundColor: '#21615D', color: 'white' }}
+                  >
+                    + New client
+                  </div>
                 </div>
               )}
             </div>

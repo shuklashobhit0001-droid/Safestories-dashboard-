@@ -66,6 +66,8 @@ app.get('/api/live-sessions-count', async (req, res) => {
       SELECT booking_invitee_time
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+        AND therapist_id IS NOT NULL
+        AND booking_resource_name NOT ILIKE '%free consultation%'
     `);
 
     let liveCount = 0;
@@ -103,6 +105,10 @@ app.get('/api/dashboard/stats', async (req, res) => {
     const { start, end } = req.query;
     const hasDateFilter = start && end;
     
+    // LOGGING: Request parameters
+    console.log('\n=== DASHBOARD STATS API CALLED ===');
+    console.log('Date Filter:', hasDateFilter ? `${start} to ${end}` : 'All Time');
+    
     // Calculate last month date range
     const now = new Date();
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -112,7 +118,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
     const statusDebug = await pool.query(
       'SELECT booking_status, COUNT(*) as count FROM bookings GROUP BY booking_status ORDER BY count DESC'
     );
-    console.log('Booking statuses:', statusDebug.rows);
+    console.log('Total Booking Statuses:', statusDebug.rows);
     
     const revenue = hasDateFilter
       ? await pool.query(
@@ -123,6 +129,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
           'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status NOT IN ($1, $2)',
           ['cancelled', 'canceled']
         );
+    
+    console.log('Revenue Query Result:', revenue.rows[0].total);
 
     const sessions = hasDateFilter
       ? await pool.query(
@@ -133,6 +141,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
           'SELECT COUNT(*) as total FROM bookings WHERE booking_status NOT IN ($1, $2, $3, $4)',
           ['cancelled', 'canceled', 'no_show', 'no show']
         );
+    
+    console.log('Sessions Query Result:', sessions.rows[0].total);
 
     const freeConsultations = hasDateFilter
       ? await pool.query(
@@ -206,7 +216,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
       ['no_show', 'no show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
     );
 
-    res.json({
+    const responseData = {
       revenue: revenue.rows[0].total,
       refundedAmount: refundedAmount.rows[0].total,
       sessions: sessions.rows[0].total,
@@ -219,7 +229,12 @@ app.get('/api/dashboard/stats', async (req, res) => {
       lastMonthRefunds: lastMonthRefunds.rows[0].total,
       noShows: noShows.rows[0].total,
       lastMonthNoShows: lastMonthNoShows.rows[0].total,
-    });
+    };
+    
+    console.log('Response Data:', responseData);
+    console.log('=== END DASHBOARD STATS API ===\n');
+    
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching stats:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
@@ -536,6 +551,8 @@ app.get('/api/therapists-live-status', async (req, res) => {
       SELECT DISTINCT booking_host_name, booking_invitee_time
       FROM bookings
       WHERE booking_status NOT IN ('cancelled', 'canceled', 'no_show')
+        AND therapist_id IS NOT NULL
+        AND booking_resource_name NOT ILIKE '%free consultation%'
     `);
 
     const liveStatus: { [key: string]: boolean } = {};
@@ -1688,7 +1705,7 @@ app.get('/api/payments', async (req, res) => {
   try {
     const { status } = req.query;
     
-    let query = 'SELECT * FROM dashboard_api_booking WHERE 1=1';
+    let query = 'SELECT * FROM dashboard_api_booking WHERE payment_amount IS NOT NULL AND payment_amount > 0';
     
     if (status && status !== 'all_payments') {
       if (status === 'completed') {

@@ -1,0 +1,2 @@
+If I assign you any task, do not make any changes to the database without my prior approval.
+If the task requires database changes, impacts existing data, or involves any modification beyond the specified task, you must inform me clearly and get my confirmation first before proceeding.
