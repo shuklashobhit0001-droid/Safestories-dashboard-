@@ -316,13 +316,18 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
     setClientEmail(client.invitee_email || '');
     
     // Autofill therapist - find full therapist name from booking_host_name
-    if (client.booking_host_name) {
-      const matchingTherapist = therapists.find(t => 
-        t.name.toLowerCase().includes(client.booking_host_name.toLowerCase())
-      );
+    if (client.booking_host_name && therapists.length > 0) {
+      const clientTherapistName = client.booking_host_name.toLowerCase().trim();
+      const matchingTherapist = therapists.find(t => {
+        const therapistName = t.name.toLowerCase().trim();
+        const therapistFirstName = t.name.split(' ')[0].toLowerCase().trim();
+        return therapistName.includes(clientTherapistName) || 
+               clientTherapistName.includes(therapistFirstName) ||
+               clientTherapistName.includes(therapistName);
+      });
+      
       if (matchingTherapist) {
         setTherapistName(matchingTherapist.name);
-        // Autofill therapy from therapist's specialization
         if (matchingTherapist.specialization) {
           const specs = matchingTherapist.specialization.split(',').map((s: string) => s.trim());
           if (specs.length > 0) {
@@ -332,7 +337,6 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
       }
     }
     
-    // Close dropdown immediately
     setShowClientDropdown(false);
     setFilteredClients([]);
   };

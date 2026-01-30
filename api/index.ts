@@ -282,7 +282,7 @@ app.get('/api/dashboard/bookings', async (req, res) => {
 
     const bookings = result.rows.map(row => ({
       ...row,
-      booking_start_at: row.booking_invitee_time || 'N/A',
+      booking_start_at: row.booking_invitee_time ? row.booking_invitee_time.replace(/\(GMT\+05:30\)/g, 'IST') : 'N/A',
       mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
     }));
 
