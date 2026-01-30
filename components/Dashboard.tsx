@@ -8,6 +8,7 @@ import { RefundsCancellations } from './RefundsCancellations';
 import { SendBookingModal } from './SendBookingModal';
 import { CreateBooking } from './CreateBooking';
 import { CreatePage } from './CreatePage';
+import { NewTherapist } from './NewTherapist';
 import { AuditLogs } from './AuditLogs';
 import { Notifications } from './Notifications';
 import { Loader } from './Loader';
@@ -376,9 +377,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <CreatePage 
             onCreateBooking={() => setActiveView('createBooking')} 
             onSendBookingLink={() => setIsModalOpen(true)}
+            onAddNewTherapist={() => setActiveView('newTherapist')}
           />
         ) : activeView === 'createBooking' ? (
           <CreateBooking onBack={() => setActiveView('create')} />
+        ) : activeView === 'newTherapist' ? (
+          <NewTherapist onBack={() => setActiveView('create')} />
         ) : activeView === 'clients' ? (
           <AllClients onClientClick={(client) => {
             setSelectedClientForView(client);

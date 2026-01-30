@@ -4,10 +4,11 @@ import { Plus, MessageCircle, UserPlus } from 'lucide-react';
 interface CreatePageProps {
   onCreateBooking: () => void;
   onSendBookingLink: () => void;
+  onAddNewTherapist: () => void;
 }
 
-export const CreatePage: React.FC<CreatePageProps> = ({ onCreateBooking, onSendBookingLink }) => {
-  const isProduction = process.env.NODE_ENV === 'production';
+export const CreatePage: React.FC<CreatePageProps> = ({ onCreateBooking, onSendBookingLink, onAddNewTherapist }) => {
+  // const isProduction = process.env.NODE_ENV === 'production';
   
   return (
     <div className="p-8">
@@ -17,10 +18,8 @@ export const CreatePage: React.FC<CreatePageProps> = ({ onCreateBooking, onSendB
       <div className="grid grid-cols-3 gap-6">
         {/* Create New Booking Card */}
         <div 
-          onClick={!isProduction ? onCreateBooking : undefined}
-          className={`bg-white rounded-lg border-2 p-6 transition-shadow ${
-            isProduction ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg'
-          }`}
+          onClick={onCreateBooking}
+          className="bg-white rounded-lg border-2 p-6 cursor-pointer hover:shadow-lg transition-shadow"
           style={{ borderColor: '#21615D' }}
         >
           <div className="flex items-center gap-3 mb-4">
@@ -60,9 +59,8 @@ export const CreatePage: React.FC<CreatePageProps> = ({ onCreateBooking, onSendB
 
         {/* Add New Therapist Card */}
         <div 
-          className={`bg-white rounded-lg border-2 p-6 transition-shadow ${
-            isProduction ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg'
-          }`}
+          onClick={onAddNewTherapist}
+          className="bg-white rounded-lg border-2 p-6 cursor-pointer hover:shadow-lg transition-shadow"
           style={{ borderColor: '#21615D' }}
         >
           <div className="flex items-center gap-3 mb-4">

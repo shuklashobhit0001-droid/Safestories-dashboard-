@@ -1,0 +1,212 @@
+import React, { useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import Lottie from 'lottie-react';
+import sessionBookedAnimation from '../session-booked.json';
+
+interface NewTherapistProps {
+  onBack: () => void;
+}
+
+export const NewTherapist: React.FC<NewTherapistProps> = ({ onBack }) => {
+  const [therapistName, setTherapistName] = useState('');
+  const [countryCode, setCountryCode] = useState('+91');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [specializations, setSpecializations] = useState<string[]>([]);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const countryCodes = [
+    { code: '+1', country: 'USA/Canada' },
+    { code: '+44', country: 'UK' },
+    { code: '+91', country: 'India' },
+    { code: '+61', country: 'Australia' },
+    { code: '+971', country: 'UAE' },
+  ];
+
+  const specializationOptions = [
+    'Individual Therapy',
+    'Adolescent Therapy',
+    'Couples Therapy'
+  ];
+
+  const handleSpecializationToggle = (spec: string) => {
+    setSpecializations(prev =>
+      prev.includes(spec)
+        ? prev.filter(s => s !== spec)
+        : [...prev, spec]
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/new-therapist-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          therapistName,
+          whatsappNumber: `${countryCode}${whatsappNumber}`,
+          email,
+          specializations: specializations.join(', ')
+        })
+      });
+
+      if (response.ok) {
+        setShowSuccessModal(true);
+      } else {
+        alert('Failed to submit therapist details');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-8 bg-gray-50 min-h-screen">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-6"
+      >
+        <ArrowLeft size={20} />
+        <span>Back</span>
+      </button>
+
+      <h1 className="text-3xl font-bold mb-1">New Therapist</h1>
+      <p className="text-gray-600 mb-8">Add a new therapist to the platform</p>
+
+      <div className="max-w-3xl">
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-4">
+            {/* Therapist Name */}
+            <div>
+              <label className="block text-sm font-semibold mb-1.5">
+                Therapist Name<span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={therapistName}
+                onChange={(e) => setTherapistName(e.target.value)}
+                placeholder="Enter therapist name"
+                className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                required
+              />
+            </div>
+
+            {/* Therapist WhatsApp Number */}
+            <div>
+              <label className="block text-sm font-semibold mb-1.5">
+                Therapist WhatsApp Number<span className="text-red-500">*</span>
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={countryCode}
+                  onChange={(e) => setCountryCode(e.target.value)}
+                  className="w-32 px-2 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white text-sm"
+                >
+                  {countryCodes.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.code} {item.country}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  value={whatsappNumber}
+                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                  placeholder="Enter WhatsApp number"
+                  className="flex-1 px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Therapist Email */}
+            <div>
+              <label className="block text-sm font-semibold mb-1.5">
+                Therapist Email<span className="text-red-500">*</span>
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter therapist email"
+                className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1 italic">
+                *Use the Gmail account associated with your Google Calendar.
+              </p>
+            </div>
+
+            {/* Specializations */}
+            <div>
+              <label className="block text-sm font-semibold mb-1.5">
+                Specializations<span className="text-red-500">*</span>
+              </label>
+              <div className="space-y-2">
+                {specializationOptions.map((spec) => (
+                  <label
+                    key={spec}
+                    className="flex items-center gap-3 p-2.5 border rounded-lg cursor-pointer hover:bg-gray-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={specializations.includes(spec)}
+                      onChange={() => handleSpecializationToggle(spec)}
+                      className="w-4 h-4 text-teal-700 border-gray-300 rounded focus:ring-teal-500"
+                    />
+                    <span className="text-sm">{spec}</span>
+                  </label>
+                ))}
+              </div>
+              {specializations.length === 0 && (
+                <p className="text-xs text-red-500 mt-1">
+                  Please select at least one specialization
+                </p>
+              )}
+            </div>
+
+            {/* Proceed Button */}
+            <button
+              type="submit"
+              disabled={loading || specializations.length === 0 || !therapistName.trim() || !whatsappNumber.trim() || !email.trim()}
+              className="w-full bg-teal-700 text-white py-2.5 rounded-lg hover:bg-teal-800 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed mt-2"
+            >
+              {loading ? 'Submitting...' : 'Proceed'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 w-full max-w-md text-center">
+            <div className="w-32 h-32 mx-auto mb-4">
+              <Lottie animationData={sessionBookedAnimation} loop={true} />
+            </div>
+            <h3 className="text-xl font-bold mb-4">New Therapist Details Captured</h3>
+            <p className="text-gray-600 mb-6">
+              Our tech team will take around 5-10 days to onboard the new therapist
+            </p>
+            <button
+              onClick={() => {
+                setShowSuccessModal(false);
+                onBack();
+              }}
+              className="w-full bg-teal-700 text-white py-3 rounded-lg hover:bg-teal-800 font-medium"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

@@ -544,6 +544,25 @@ app.post('/api/booking-requests', async (req, res) => {
   }
 });
 
+// Save new therapist request
+app.post('/api/new-therapist-requests', async (req, res) => {
+  try {
+    const { therapistName, whatsappNumber, email, specializations } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO new_therapist_requests (therapist_name, whatsapp_number, email, specializations, status)
+       VALUES ($1, $2, $3, $4, 'pending')
+       RETURNING *`,
+      [therapistName, whatsappNumber, email, specializations]
+    );
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error saving new therapist request:', error);
+    res.status(500).json({ success: false, error: 'Failed to save new therapist request' });
+  }
+});
+
 // Get therapists live status
 app.get('/api/therapists-live-status', async (req, res) => {
   try {
