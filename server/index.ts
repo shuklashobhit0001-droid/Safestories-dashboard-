@@ -26,14 +26,17 @@ app.use(express.json());
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
+    console.log('🔐 Login attempt:', { username, password });
 
     const result = await pool.query(
       'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND password = $2',
       [username, password]
     );
+    console.log('📊 Query result:', result.rows.length, 'users found');
 
     if (result.rows.length > 0) {
       const user = result.rows[0];
+      console.log('✅ Login successful:', user.username);
       
       // Log therapist login
       if (user.role === 'therapist') {
@@ -51,6 +54,7 @@ app.post('/api/login', async (req, res) => {
       
       res.json({ success: true, user });
     } else {
+      console.log('❌ Login failed: Invalid credentials');
       res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
   } catch (error) {
