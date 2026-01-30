@@ -13,6 +13,9 @@ export const NewTherapist: React.FC<NewTherapistProps> = ({ onBack }) => {
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [email, setEmail] = useState('');
   const [specializations, setSpecializations] = useState<string[]>([]);
+  const [specializationDetails, setSpecializationDetails] = useState<{
+    [key: string]: { price: string; description: string }
+  }>({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -31,11 +34,39 @@ export const NewTherapist: React.FC<NewTherapistProps> = ({ onBack }) => {
   ];
 
   const handleSpecializationToggle = (spec: string) => {
-    setSpecializations(prev =>
-      prev.includes(spec)
-        ? prev.filter(s => s !== spec)
-        : [...prev, spec]
-    );
+    setSpecializations(prev => {
+      if (prev.includes(spec)) {
+        // Remove specialization and its details
+        const newDetails = { ...specializationDetails };
+        delete newDetails[spec];
+        setSpecializationDetails(newDetails);
+        return prev.filter(s => s !== spec);
+      } else {
+        // Add specialization with empty details
+        setSpecializationDetails(prev => ({
+          ...prev,
+          [spec]: { price: '', description: '' }
+        }));
+        return [...prev, spec];
+      }
+    });
+  };
+
+  const handleDetailChange = (spec: string, field: 'price' | 'description', value: string) => {
+    setSpecializationDetails(prev => ({
+      ...prev,
+      [spec]: {
+        ...prev[spec],
+        [field]: value
+      }
+    }));
+  };
+
+  const areAllDetailsComplete = () => {
+    return specializations.every(spec => {
+      const details = specializationDetails[spec];
+      return details && details.price.trim() !== '';
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -50,7 +81,12 @@ export const NewTherapist: React.FC<NewTherapistProps> = ({ onBack }) => {
           therapistName,
           whatsappNumber: `${countryCode}${whatsappNumber}`,
           email,
-          specializations: specializations.join(', ')
+          specializations: specializations.join(', '),
+          specializationDetails: Object.entries(specializationDetails).map(([name, details]) => ({
+            name,
+            price: details.price,
+            description: details.description
+          }))
         })
       });
 
@@ -149,20 +185,50 @@ export const NewTherapist: React.FC<NewTherapistProps> = ({ onBack }) => {
               <label className="block text-sm font-semibold mb-1.5">
                 Specializations<span className="text-red-500">*</span>
               </label>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {specializationOptions.map((spec) => (
-                  <label
-                    key={spec}
-                    className="flex items-center gap-3 p-2.5 border rounded-lg cursor-pointer hover:bg-gray-50"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={specializations.includes(spec)}
-                      onChange={() => handleSpecializationToggle(spec)}
-                      className="w-4 h-4 text-teal-700 border-gray-300 rounded focus:ring-teal-500"
-                    />
-                    <span className="text-sm">{spec}</span>
-                  </label>
+                  <div key={spec}>
+                    <label className="flex items-center gap-3 p-2.5 border rounded-lg cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        checked={specializations.includes(spec)}
+                        onChange={() => handleSpecializationToggle(spec)}
+                        className="w-4 h-4 text-teal-700 border-gray-300 rounded focus:ring-teal-500"
+                      />
+                      <span className="text-sm">{spec}</span>
+                    </label>
+                    
+                    {/* Expandable Details Box */}
+                    {specializations.includes(spec) && (
+                      <div className="mt-2 ml-7 p-4 bg-gray-50 border rounded-lg space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            Price (₹)<span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            placeholder="Enter price"
+                            value={specializationDetails[spec]?.price || ''}
+                            onChange={(e) => handleDetailChange(spec, 'price', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            Description
+                          </label>
+                          <textarea
+                            placeholder="Enter description"
+                            value={specializationDetails[spec]?.description || ''}
+                            onChange={(e) => handleDetailChange(spec, 'description', e.target.value)}
+                            rows={3}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm resize-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
               {specializations.length === 0 && (
@@ -175,7 +241,7 @@ export const NewTherapist: React.FC<NewTherapistProps> = ({ onBack }) => {
             {/* Proceed Button */}
             <button
               type="submit"
-              disabled={loading || specializations.length === 0 || !therapistName.trim() || !whatsappNumber.trim() || !email.trim()}
+              disabled={loading || specializations.length === 0 || !therapistName.trim() || !whatsappNumber.trim() || !email.trim() || !areAllDetailsComplete()}
               className="w-full bg-teal-700 text-white py-2.5 rounded-lg hover:bg-teal-800 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed mt-2"
             >
               {loading ? 'Submitting...' : 'Proceed'}

@@ -547,13 +547,13 @@ app.post('/api/booking-requests', async (req, res) => {
 // Save new therapist request
 app.post('/api/new-therapist-requests', async (req, res) => {
   try {
-    const { therapistName, whatsappNumber, email, specializations } = req.body;
+    const { therapistName, whatsappNumber, email, specializations, specializationDetails } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO new_therapist_requests (therapist_name, whatsapp_number, email, specializations, status)
-       VALUES ($1, $2, $3, $4, 'pending')
+      `INSERT INTO new_therapist_requests (therapist_name, whatsapp_number, email, specializations, specialization_details, status)
+       VALUES ($1, $2, $3, $4, $5, 'pending')
        RETURNING *`,
-      [therapistName, whatsappNumber, email, specializations]
+      [therapistName, whatsappNumber, email, specializations, JSON.stringify(specializationDetails)]
     );
 
     res.json({ success: true, data: result.rows[0] });
