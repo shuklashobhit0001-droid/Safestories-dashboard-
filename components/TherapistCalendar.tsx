@@ -318,7 +318,7 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col h-full">
 
       {/* Calendar Component - Scrollable */}
       {calendarLoading ? (
@@ -326,9 +326,9 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
           <Loader />
         </div>
       ) : (
-        <div className="flex-1 bg-white rounded-lg border overflow-hidden flex flex-col">
-          {/* Calendar Content - Scrollable */}
-          <div className="flex-1 overflow-hidden">
+        <div className="flex-1 bg-white rounded-lg border flex flex-col">
+          {/* Calendar Content - Allow scrolling */}
+          <div className="flex-1">
             {calendarEvents.length === 0 ? (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center text-gray-500">

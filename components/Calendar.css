@@ -1,26 +1,25 @@
-/* Ensure calendar container is properly sized and scrollable */
-.rbc-calendar .rbc-month-view,
-.rbc-calendar .rbc-time-view,
-.rbc-calendar .rbc-agenda-view {
-  height: auto !important; /* Allow natural height */
-  min-height: 600px !important; /* Increased minimum height */
-  overflow-y: auto !important; /* Make it scrollable */
-}
-
+/* Single scrolling container - no nested scrollbars */
 .rbc-calendar {
   font-family: inherit;
   background: white;
-  height: 100% !important;
-  overflow-y: auto !important; /* Make entire calendar scrollable */
-  min-height: 650px !important; /* Increased minimum height for better coverage */
+  height: 600px !important; /* Reduced height to 600px */
+  overflow-y: auto !important; /* Single scrollable container */
+  min-height: 600px !important; /* Reduced minimum height to 600px */
+}
+
+/* Remove scrolling from all child elements */
+.rbc-calendar .rbc-month-view,
+.rbc-calendar .rbc-time-view,
+.rbc-calendar .rbc-agenda-view {
+  height: auto !important;
+  overflow-y: visible !important; /* No scrolling on child views */
 }
 
 .rbc-month-view {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  overflow-y: auto !important; /* Make month view scrollable */
-  max-height: 700px !important; /* Increased max height to reduce bottom space */
-  min-height: 650px !important; /* Increased minimum height */
+  overflow-y: visible !important; /* No scrolling on month view */
+  height: auto !important; /* Auto height */
 }
 
 .rbc-date-cell {
@@ -151,7 +150,7 @@
 
 .rbc-time-content {
   border-top: none;
-  overflow-y: auto !important;
+  overflow-y: visible !important; /* Remove scrolling from time content */
   height: 100% !important;
 }
 
@@ -180,8 +179,8 @@
 }
 
 .rbc-agenda-view .rbc-agenda-content {
-  overflow-y: auto !important;
-  max-height: calc(100vh - 300px) !important;
+  overflow-y: visible !important; /* Remove scrolling from agenda content */
+  max-height: none !important; /* Remove max height restriction */
 }
 
 .rbc-agenda-view .rbc-agenda-date-cell {
@@ -246,9 +245,9 @@
   overflow: visible;
 }
 
-/* Week and Day view scrolling */
+/* Week and Day view - Remove duplicate scrolling */
 .rbc-time-view .rbc-time-content {
-  overflow-y: auto;
+  overflow-y: visible; /* Remove scrolling from time view content */
 }
 
 /* Custom event colors for different therapists - New Solid Color Palette */
