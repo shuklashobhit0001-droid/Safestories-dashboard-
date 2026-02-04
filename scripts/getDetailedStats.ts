@@ -14,12 +14,12 @@ async function getDetailedStats() {
     
     const noShowBookings = await pool.query(`
       SELECT COUNT(*) as count FROM bookings 
-      WHERE booking_status = 'no-show'
+      WHERE booking_status = 'no show'
     `);
     
     const freeConsultations = await pool.query(`
-      SELECT COUNT(*) as count FROM booking_requests 
-      WHERE is_free_consultation = true
+      SELECT COUNT(*) as count FROM bookings
+      WHERE booking_subject LIKE '%Free Consultation%'
     `);
     
     const totalRevenue = await pool.query(`
@@ -37,7 +37,7 @@ async function getDetailedStats() {
         TO_CHAR(booking_start_at, 'YYYY-MM') as month,
         COUNT(*) as total_bookings,
         COUNT(CASE WHEN booking_status = 'cancelled' OR booking_status = 'canceled' THEN 1 END) as cancelled,
-        COUNT(CASE WHEN booking_status = 'no-show' THEN 1 END) as no_show,
+        COUNT(CASE WHEN booking_status = 'no show' THEN 1 END) as no_show,
         SUM(invitee_payment_amount) as revenue,
         SUM(CASE WHEN refund_amount IS NOT NULL THEN refund_amount ELSE 0 END) as refunds,
         SUM(invitee_payment_amount) - SUM(CASE WHEN refund_amount IS NOT NULL THEN refund_amount ELSE 0 END) as net_revenue
@@ -50,12 +50,15 @@ async function getDetailedStats() {
     // Free Consultations Month-wise
     const freeConsultationsMonthly = await pool.query(`
       SELECT 
-        TO_CHAR(created_at, 'YYYY-MM') as month,
-        COUNT(*) as free_consultations
-      FROM booking_requests 
-      WHERE is_free_consultation = true 
-        AND created_at >= '2025-12-01' AND created_at < '2026-03-01'
-      GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+        TO_CHAR(booking_start_at, 'YYYY-MM') as month,
+        COUNT(*) as free_consultations,
+        COUNT(CASE WHEN booking_status = 'confirmed' THEN 1 END) as confirmed,
+        COUNT(CASE WHEN booking_status = 'cancelled' THEN 1 END) as cancelled,
+        COUNT(CASE WHEN booking_status = 'no show' THEN 1 END) as no_show
+      FROM bookings
+      WHERE booking_subject LIKE '%Free Consultation%'
+        AND booking_start_at >= '2025-12-01' AND booking_start_at < '2026-03-01'
+      GROUP BY TO_CHAR(booking_start_at, 'YYYY-MM')
       ORDER BY month
     `);
 
@@ -99,7 +102,7 @@ async function getDetailedStats() {
       const monthName = row.month === '2025-12' ? 'December 2025' : 
                         row.month === '2026-01' ? 'January 2026' : 
                         row.month === '2026-02' ? 'February 2026' : row.month;
-      console.log(`   ${monthName}: ${row.free_consultations} sessions`);
+      console.log(`   ${monthName}: ${row.free_consultations} sessions (Confirmed: ${row.confirmed}, Cancelled: ${row.cancelled}, No-Show: ${row.no_show})`);
     });
 
     console.log('\n═══════════════════════════════════════════════════════\n');

@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ArrowLeft, User, Mail, Calendar as CalendarIcon, List } from 'lucide-react';
+import { Calendar, momentLocalizer } from 'react-big-calendar';
+import moment from 'moment';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+import './Calendar.css';
 import { Loader } from './Loader';
 import { Toast } from './Toast';
-import { TherapistCalendar } from './TherapistCalendar';
 
 interface Client {
   invitee_name: string;
@@ -19,7 +22,25 @@ interface Appointment {
   booking_status?: string;
   has_session_notes?: boolean;
   booking_start_at_raw?: string;
+  booking_mode?: string;
 }
+
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  resource: {
+    therapist: string;
+    client: string;
+    mode: string;
+    status: string;
+    sessionType: string;
+    originalAppointment: Appointment;
+  };
+}
+
+const localizer = momentLocalizer(moment);
 
 export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => void }> = ({ selectedClientProp, onBack }) => {
   const [therapists, setTherapists] = useState<any[]>([]);
@@ -33,7 +54,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [clients, setClients] = useState<Client[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expandedClientRows, setExpandedClientRows] = useState<Set<number>>(new Set());
-  const [selectedClientForAction, setSelectedClientForAction] = useState<number | null>(null);
   const [clientAppointmentTab, setClientAppointmentTab] = useState('upcoming');
   const [selectedAppointmentIndex, setSelectedAppointmentIndex] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -52,20 +72,13 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [appointmentsPage, setAppointmentsPage] = useState(1);
   const appointmentsPerPage = 10;
 
-  // Calendar view state
+  // Calendar view states
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-
-  // Calendar filter states (for calendar view)
+  const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [selectedTherapistFilters, setSelectedTherapistFilters] = useState<string[]>([]);
   const [selectedModeFilter, setSelectedModeFilter] = useState<'all' | 'online' | 'in-person'>('all');
-
-  const toggleTherapistFilter = (therapistName: string) => {
-    setSelectedTherapistFilters(prev => 
-      prev.includes(therapistName) 
-        ? prev.filter(name => name !== therapistName)
-        : [...prev, therapistName]
-    );
-  };
+  const [calendarLoading, setCalendarLoading] = useState(false);
 
   useEffect(() => {
     fetchTherapists();
@@ -73,6 +86,18 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       openClientDetails(selectedClientProp);
     }
   }, [selectedClientProp]);
+
+  useEffect(() => {
+    if (viewMode === 'calendar') {
+      fetchAllAppointments();
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (allAppointments.length > 0) {
+      convertAppointmentsToEvents();
+    }
+  }, [allAppointments, selectedTherapistFilters, selectedModeFilter]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -112,6 +137,130 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchAllAppointments = async () => {
+    try {
+      setCalendarLoading(true);
+      const response = await fetch('/api/appointments');
+      const data = await response.json();
+      setAllAppointments(data);
+    } catch (error) {
+      console.error('Error fetching all appointments:', error);
+      setToast({ message: 'Failed to fetch appointments', type: 'error' });
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  const parseAppointmentTime = (timeString: string) => {
+    // Parse "Monday, February 3, 2025 at 10:00 AM - 11:00 AM" format
+    const match = timeString.match(/(\w+,\s+\w+\s+\d+,\s+\d+)\s+at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
+    if (!match) return null;
+
+    const [, dateStr, startTimeStr, endTimeStr] = match;
+    
+    try {
+      const startDateTime = moment(`${dateStr} ${startTimeStr}`, 'dddd, MMMM D, YYYY h:mm A');
+      const endDateTime = moment(`${dateStr} ${endTimeStr}`, 'dddd, MMMM D, YYYY h:mm A');
+      
+      if (startDateTime.isValid() && endDateTime.isValid()) {
+        return {
+          start: startDateTime.toDate(),
+          end: endDateTime.toDate()
+        };
+      }
+    } catch (error) {
+      console.error('Error parsing time:', error);
+    }
+    
+    return null;
+  };
+
+  const convertAppointmentsToEvents = () => {
+    const events: CalendarEvent[] = [];
+    
+    allAppointments.forEach((apt, index) => {
+      // Apply therapist filter
+      if (selectedTherapistFilters.length > 0 && 
+          !selectedTherapistFilters.some(filter => apt.booking_host_name?.includes(filter))) {
+        return;
+      }
+
+      // Apply mode filter
+      const mode = apt.booking_mode?.toLowerCase() || 'online';
+      const isOnline = mode.includes('google') || mode.includes('meet') || mode.includes('online');
+      const isInPerson = mode.includes('person') || mode.includes('office') || mode.includes('clinic');
+      
+      if (selectedModeFilter === 'online' && !isOnline) return;
+      if (selectedModeFilter === 'in-person' && !isInPerson) return;
+
+      const timeData = parseAppointmentTime(apt.booking_invitee_time);
+      if (!timeData) return;
+
+      const event: CalendarEvent = {
+        id: `${index}-${apt.invitee_name}`,
+        title: `${apt.invitee_name} - ${apt.booking_resource_name}`,
+        start: timeData.start,
+        end: timeData.end,
+        resource: {
+          therapist: apt.booking_host_name || 'Unknown',
+          client: apt.invitee_name,
+          mode: isInPerson ? 'In-Person' : 'Online',
+          status: apt.booking_status || 'confirmed',
+          sessionType: apt.booking_resource_name,
+          originalAppointment: apt
+        }
+      };
+
+      events.push(event);
+    });
+
+    setCalendarEvents(events);
+  };
+
+  const toggleTherapistFilter = (therapistName: string) => {
+    setSelectedTherapistFilters(prev => 
+      prev.includes(therapistName) 
+        ? prev.filter(name => name !== therapistName)
+        : [...prev, therapistName]
+    );
+  };
+
+  const getEventStyle = (event: CalendarEvent) => {
+    const { therapist, mode, status } = event.resource;
+    
+    // Color by therapist (you can customize these colors)
+    const therapistColors: { [key: string]: string } = {
+      'Ishika': '#3B82F6', // Blue
+      'Nishita': '#10B981', // Green  
+      'Pooja': '#F59E0B', // Yellow
+      'Meera': '#EF4444', // Red
+      'Sanjana': '#8B5CF6', // Purple
+      'Anjali': '#06B6D4', // Cyan
+      'Rohit': '#F97316', // Orange
+    };
+
+    // Get therapist first name for color matching
+    const firstName = therapist.split(' ')[0];
+    let backgroundColor = therapistColors[firstName] || '#6B7280'; // Default gray
+
+    // Adjust opacity based on mode
+    const opacity = mode === 'Online' ? '0.8' : '0.6';
+    
+    // Adjust for status
+    if (status === 'cancelled') backgroundColor = '#9CA3AF';
+    if (status === 'completed') backgroundColor = '#059669';
+
+    return {
+      style: {
+        backgroundColor: backgroundColor + Math.round(255 * parseFloat(opacity)).toString(16).padStart(2, '0'),
+        border: `2px solid ${backgroundColor}`,
+        color: 'white',
+        fontSize: '12px',
+        padding: '2px 4px'
+      }
+    };
   };
 
   const filteredTherapists = therapists
@@ -221,82 +370,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       newExpanded.add(index);
     }
     setExpandedClientRows(newExpanded);
-  };
-
-  const toggleClientActions = (index: number) => {
-    setSelectedClientForAction(selectedClientForAction === index ? null : index);
-  };
-
-  const handleSendClientReminder = async (client: Client) => {
-    try {
-      // First, get the client's therapy type from their appointments
-      let therapyType = 'Individual Therapy Session'; // fallback default
-      
-      try {
-        const params = new URLSearchParams();
-        if (client.invitee_email) params.append('email', client.invitee_email);
-        if (client.invitee_phone) {
-          // Handle multiple phone numbers
-          const phones = client.invitee_phone.split(', ');
-          phones.forEach(phone => params.append('phone', phone.trim()));
-        }
-        
-        const clientResponse = await fetch(`/api/client-details?${params.toString()}`);
-        if (clientResponse.ok) {
-          const clientData = await clientResponse.json();
-          if (clientData.appointments && clientData.appointments.length > 0) {
-            // Get the most recent appointment's therapy type
-            const recentAppointment = clientData.appointments[0];
-            therapyType = recentAppointment.booking_resource_name || therapyType;
-          }
-        }
-      } catch (error) {
-        console.warn('Could not fetch client therapy type, using default:', error);
-      }
-
-      // Clean therapy type to remove therapist name and "Session"
-      const cleanTherapyType = (therapy: string) => {
-        // Remove "with [Therapist Name]" pattern
-        let cleaned = therapy.replace(/\s+with\s+[A-Za-z\s]+$/i, '').trim();
-        // Remove "Session" from the end
-        cleaned = cleaned.replace(/\s+Session$/i, '').trim();
-        return cleaned;
-      };
-
-      const webhookData = {
-        clientName: client.invitee_name,
-        email: client.invitee_email,
-        phone: client.invitee_phone,
-        therapistName: selectedTherapist?.name || 'Unknown',
-        therapy: cleanTherapyType(therapyType)
-      };
-
-      console.log('Sending booking link via API:', webhookData);
-
-      // Use our backend API endpoint instead of direct webhook call
-      const response = await fetch('/api/send-booking-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(webhookData)
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.warning) {
-          setToast({ message: `${result.message} (${result.warning})`, type: 'success' });
-        } else {
-          setToast({ message: 'Booking link sent to client successfully!', type: 'success' });
-        }
-      } else {
-        setToast({ message: 'Failed to send booking link to client', type: 'error' });
-      }
-    } catch (error) {
-      console.error('Error sending booking link:', error);
-      setToast({ message: 'Failed to send booking link to client', type: 'error' });
-    }
-    
-    // Close the action row
-    setSelectedClientForAction(null);
   };
 
   const openClientDetails = async (client: any) => {
@@ -485,28 +558,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     } catch (err) {
       setToast({ message: 'Failed to send reminder', type: 'error' });
     }
-  };
-
-  const getClientStatus = (client: Client) => {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    // Check if client has any appointments in the last 30 days
-    const hasRecentAppointment = appointments.some(apt => {
-      // Match by email or phone
-      const emailMatch = client.invitee_email && apt.invitee_name === client.invitee_name;
-      const phoneMatch = client.invitee_phone && client.invitee_phone.split(', ').some(phone => 
-        apt.invitee_name === client.invitee_name
-      );
-      
-      if (emailMatch || phoneMatch) {
-        const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-        return aptDate >= thirtyDaysAgo && apt.booking_status !== 'cancelled';
-      }
-      return false;
-    });
-    
-    return hasRecentAppointment ? 'active' : 'inactive';
   };
 
   if (selectedClient) {
@@ -926,13 +977,12 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Email</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Phone</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {clients.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No clients found</td>
+                          <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No clients found</td>
                         </tr>
                       ) : (
                         clients.map((client, index) => {
@@ -941,30 +991,19 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                           
                           return (
                             <React.Fragment key={index}>
-                              <tr 
-                                className={`border-b cursor-pointer transition-colors ${
-                                  selectedClientForAction === index ? 'bg-gray-100' : 'hover:bg-gray-50'
-                                }`}
-                                onClick={() => toggleClientActions(index)}
-                              >
+                              <tr className="border-b hover:bg-gray-50">
                                 <td className="px-4 py-3 text-sm">
                                   <div className="flex items-center gap-2">
                                     {hasMultiplePhones && (
                                       <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          toggleClientRow(index);
-                                        }}
+                                        onClick={() => toggleClientRow(index)}
                                         className="text-gray-500 hover:text-gray-700"
                                       >
                                         {expandedClientRows.has(index) ? '▼' : '▶'}
                                       </button>
                                     )}
                                     <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        openClientDetails(client);
-                                      }}
+                                      onClick={() => openClientDetails(client)}
                                       className="text-teal-700 hover:underline font-medium text-left"
                                     >
                                       {client.invitee_name}
@@ -973,54 +1012,13 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
                                 <td className="px-4 py-3 text-sm text-gray-600">{phoneNumbers[0]}</td>
-                                <td className="px-4 py-3 text-sm">
-                                  {(() => {
-                                    const status = getClientStatus(client);
-                                    return (
-                                      <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${
-                                        status === 'active' ? '' : ''
-                                      }`} style={{
-                                        backgroundColor: status === 'active' ? '#21615D' : '#B91C1C'
-                                      }}>
-                                        {status === 'active' ? 'Active' : 'Inactive'}
-                                      </span>
-                                    );
-                                  })()}
-                                </td>
                               </tr>
-                              {selectedClientForAction === index && (
-                                <tr className="bg-gray-50 border-b">
-                                  <td colSpan={4} className="px-4 py-4">
-                                    <div className="flex gap-3 justify-center">
-                                      <button
-                                        onClick={() => handleSendClientReminder(client)}
-                                        className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                                        Send Booking Link
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
                               {expandedClientRows.has(index) && hasMultiplePhones && (
                                 phoneNumbers.slice(1).map((phone, pIndex) => (
                                   <tr key={`${index}-${pIndex}`} className="bg-gray-50 border-b">
                                     <td className="px-4 py-3 text-sm pl-12 text-gray-600">{client.invitee_name}</td>
                                     <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
                                     <td className="px-4 py-3 text-sm text-gray-600">{phone}</td>
-                                    <td className="px-4 py-3 text-sm">
-                                      {(() => {
-                                        const status = getClientStatus(client);
-                                        return (
-                                          <span className={`px-3 py-1 rounded-full text-xs font-medium text-white`} style={{
-                                            backgroundColor: status === 'active' ? '#21615D' : '#B91C1C'
-                                          }}>
-                                            {status === 'active' ? 'Active' : 'Inactive'}
-                                          </span>
-                                        );
-                                      })()}
-                                    </td>
                                   </tr>
                                 ))
                               )}
@@ -1147,89 +1145,61 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   }
 
   return (
-    <div className="p-8 h-screen flex flex-col overflow-hidden">
-      {/* Header - Only title and subheading */}
-      <div className="flex justify-between items-start mb-2 flex-shrink-0">
+    <div className="p-8 h-full flex flex-col">
+      {/* Header */}
+      <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-1">All Therapists</h1>
           <p className="text-gray-600">View Therapists Details, Specialization and more...</p>
         </div>
-        
-        {/* Search bar for list view only */}
-        {viewMode === 'list' && (
-          <div className="relative w-96">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Search users by name or specialization..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
-        )}
+        <div className="relative w-96">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Search users by name or specialization..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+        </div>
       </div>
 
-      {/* Toggle and Filters Container */}
-      <div className="flex justify-between items-start mb-4 flex-shrink-0">
-        <div className="w-1/2">
-          {/* Toggle buttons */}
-          <div className="flex bg-gray-100 rounded-lg p-1 w-fit">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'list' 
-                  ? 'bg-white text-teal-700 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <List size={16} />
-              List View
-            </button>
-            <button
-              onClick={() => setViewMode('calendar')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'calendar' 
-                  ? 'bg-white text-teal-700 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <CalendarIcon size={16} />
-              Calendar View
-            </button>
-          </div>
+      {/* View Toggle */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => setViewMode('list')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'list' 
+                ? 'bg-white text-teal-700 shadow-sm' 
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <List size={16} />
+            List View
+          </button>
+          <button
+            onClick={() => setViewMode('calendar')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'calendar' 
+                ? 'bg-white text-teal-700 shadow-sm' 
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <CalendarIcon size={16} />
+            Calendar View
+          </button>
         </div>
-        
-        {/* Right half - Filters for calendar view only */}
-        {viewMode === 'calendar' && (
-          <div className="w-1/2 space-y-3">
-            {/* Row 1: Session Mode Filters */}
-            <div className="flex items-center gap-2">
-              <h4 className="text-sm font-medium text-gray-700 mr-2">Session Mode:</h4>
-              <div className="flex gap-2">
-                {[
-                  { value: 'all', label: 'All Sessions' },
-                  { value: 'online', label: 'Online' },
-                  { value: 'in-person', label: 'In-Person' }
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setSelectedModeFilter(option.value as any)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                      selectedModeFilter === option.value
-                        ? 'bg-teal-700 text-white border-teal-700'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+      </div>
 
-            {/* Row 2: Therapist Filters */}
-            <div className="flex items-center gap-2">
-              <h4 className="text-sm font-medium text-gray-700 mr-2">Therapists:</h4>
+      {viewMode === 'calendar' ? (
+        /* Calendar View */
+        <div className="flex-1 flex flex-col">
+          {/* Calendar Filters */}
+          <div className="flex gap-6 mb-4 p-4 bg-gray-50 rounded-lg">
+            {/* Therapist Filter */}
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Filter by Therapist:</h4>
               <div className="flex flex-wrap gap-2">
                 {therapists.map((therapist) => {
                   const firstName = therapist.name.split(' ')[0];
@@ -1258,91 +1228,141 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 )}
               </div>
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* Content Area */}
-      <div className="flex-1 overflow-hidden">
-        {viewMode === 'calendar' ? (
-          <TherapistCalendar 
-            therapists={therapists} 
-            selectedTherapistFilters={selectedTherapistFilters}
-            selectedModeFilter={selectedModeFilter}
-          />
-        ) : (
-          /* Therapists Table */
-          loading ? (
-            <div className="h-full flex items-center justify-center">
+            {/* Mode Filter */}
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Session Mode:</h4>
+              <div className="flex gap-2">
+                {[
+                  { value: 'all', label: 'All Sessions' },
+                  { value: 'online', label: 'Online' },
+                  { value: 'in-person', label: 'In-Person' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setSelectedModeFilter(option.value as any)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      selectedModeFilter === option.value
+                        ? 'bg-teal-700 text-white border-teal-700'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Calendar Component */}
+          {calendarLoading ? (
+            <div className="flex-1 flex items-center justify-center">
               <Loader />
             </div>
           ) : (
-            <div className="bg-white rounded-lg border h-full flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b sticky top-0">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapists Name</th>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Specialization</th>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Total sessions lifetime</th>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Sessions this month</th>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Live Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTherapists.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="text-center text-gray-400 py-20">
-                          No therapists found
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredTherapists.map((therapist, index) => (
-                        <tr key={index} className="border-b hover:bg-gray-50">
-                          <td className="px-6 py-4">
-                            <button
-                              onClick={() => openTherapistDetails(therapist)}
-                              className="text-teal-700 hover:underline font-medium text-left"
-                            >
-                              {therapist.name}
-                            </button>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-wrap gap-2">
-                              {therapist.specialization.split(',').map((spec: string, i: number) => (
-                                <span key={i} className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#2D757930', color: '#2D7579' }}>
-                                  {spec.trim()}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">{therapist.total_sessions_lifetime}</td>
-                          <td className="px-6 py-4">{therapist.sessions_this_month}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${therapist.isLive ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                              <span className={`text-sm font-medium ${therapist.isLive ? 'text-green-700' : 'text-red-700'}`}>
-                                {therapist.isLive ? 'In session' : 'Free'}
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="px-6 py-4 border-t flex justify-between items-center flex-shrink-0">
-                <span className="text-sm text-gray-600">Showing {filteredTherapists.length} of {therapists.length} results</span>
-                <div className="flex gap-2">
-                  <button className="p-2 border rounded hover:bg-gray-50">←</button>
-                  <button className="p-2 border rounded hover:bg-gray-50">→</button>
-                </div>
-              </div>
+            <div className="flex-1 bg-white rounded-lg border p-4" style={{ minHeight: '600px' }}>
+              <Calendar
+                localizer={localizer}
+                events={calendarEvents}
+                startAccessor="start"
+                endAccessor="end"
+                style={{ height: '100%' }}
+                eventPropGetter={getEventStyle}
+                onSelectEvent={(event) => {
+                  setToast({ 
+                    message: `${event.resource.client} - ${event.resource.sessionType} with ${event.resource.therapist}`, 
+                    type: 'success' 
+                  });
+                }}
+                views={['month', 'week', 'day', 'agenda']}
+                defaultView="month"
+                popup
+                tooltipAccessor={(event) => 
+                  `${event.resource.client}\n${event.resource.sessionType}\nTherapist: ${event.resource.therapist}\nMode: ${event.resource.mode}\nStatus: ${event.resource.status}`
+                }
+                components={{
+                  event: ({ event }) => (
+                    <div className="text-xs">
+                      <div className="font-medium">{event.resource.client}</div>
+                      <div className="opacity-90">{event.resource.therapist}</div>
+                    </div>
+                  )
+                }}
+              />
             </div>
-          )
-        )}
-      </div>
+          )}
+        </div>
+      ) : (
+        /* List View */
+        loading ? (
+          <Loader />
+        ) : (
+        <div className="bg-white rounded-lg border">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapists Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Specialization</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Total sessions lifetime</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Sessions this month</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Live Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTherapists.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center text-gray-400 py-20">
+                      No therapists found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTherapists.map((therapist, index) => (
+                    <tr key={index} className="border-b hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => openTherapistDetails(therapist)}
+                          className="text-teal-700 hover:underline font-medium text-left"
+                        >
+                          {therapist.name}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          {therapist.specialization.split(',').map((spec: string, i: number) => (
+                            <span key={i} className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#2D757930', color: '#2D7579' }}>
+                              {spec.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">{therapist.total_sessions_lifetime}</td>
+                      <td className="px-6 py-4">{therapist.sessions_this_month}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${therapist.isLive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                          <span className={`text-sm font-medium ${therapist.isLive ? 'text-green-700' : 'text-red-700'}`}>
+                            {therapist.isLive ? 'In session' : 'Free'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-6 py-4 border-t flex justify-between items-center">
+            <span className="text-sm text-gray-600">Showing {filteredTherapists.length} of {therapists.length} results</span>
+            <div className="flex gap-2">
+              <button className="p-2 border rounded hover:bg-gray-50">←</button>
+              <button className="p-2 border rounded hover:bg-gray-50">→</button>
+            </div>
+          </div>
+        </div>
+        )
+      )}
+      
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
-};

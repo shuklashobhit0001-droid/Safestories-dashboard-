@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, User } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, User, CalendarIcon } from 'lucide-react';
 import { Logo } from './Logo';
 import { Notifications } from './Notifications';
 import { Toast } from './Toast';
 import { Loader } from './Loader';
+import { TherapistCalendar } from './TherapistCalendar';
 
 interface TherapistDashboardProps {
   onLogout: () => void;
@@ -11,6 +12,14 @@ interface TherapistDashboardProps {
 }
 
 export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout, user }) => {
+  console.log('=== THERAPIST DASHBOARD DEBUG ===');
+  console.log('User object:', user);
+  console.log('User ID:', user?.id);
+  console.log('User therapist_id:', user?.therapist_id);
+  console.log('User username:', user?.username);
+  console.log('User full_name:', user?.full_name);
+  console.log('=== END THERAPIST DASHBOARD DEBUG ===');
+  
   const [activeView, setActiveView] = useState(() => {
     return localStorage.getItem('therapistActiveView') || 'dashboard';
   });
@@ -92,6 +101,12 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [timelineData, setTimelineData] = useState<any[]>([]);
   const [clientAppointmentSearchTerm, setClientAppointmentSearchTerm] = useState('');
 
+  // Calendar view state for upcoming bookings
+  const [showCalendarView, setShowCalendarView] = useState(false);
+  const [calendarModeFilter, setCalendarModeFilter] = useState<'all' | 'online' | 'in-person'>('all');
+  const [calendarStatusFilter, setCalendarStatusFilter] = useState<'all' | 'upcoming' | 'cancelled' | 'completed'>('upcoming');
+  const [selectedTherapistFilters, setSelectedTherapistFilters] = useState<string[]>([]);
+
   const resetAllStates = () => {
     setSelectedClient(null);
     setSelectedSessionNote(null);
@@ -104,6 +119,15 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     setShowCustomCalendar(false);
     setIsClientDateDropdownOpen(false);
     setShowClientCustomCalendar(false);
+    setShowCalendarView(false);
+  };
+
+  const toggleTherapistFilter = (therapistName: string) => {
+    setSelectedTherapistFilters(prev => 
+      prev.includes(therapistName) 
+        ? prev.filter(name => name !== therapistName)
+        : [...prev, therapistName]
+    );
   };
 
   const appointmentTabs = [
@@ -1609,15 +1633,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
             {/* Client Info Cards */}
             <div className="mb-6 space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
-                  <p className="text-sm text-gray-600 mb-1">Email</p>
-                  <p className="text-lg font-semibold text-teal-700">{selectedClient.client_email || 'N/A'}</p>
-                </div>
-                <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
-                  <p className="text-sm text-gray-600 mb-1">Phone</p>
-                  <p className="text-lg font-semibold text-teal-700">{selectedClient.client_phone || 'N/A'}</p>
-                </div>
+              <div className="grid grid-cols-1 gap-4">
                 <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
                   <p className="text-sm text-gray-600 mb-1">Total Sessions</p>
                   <p className="text-3xl font-bold text-teal-700">{clientAppointments.length}</p>
@@ -1806,6 +1822,77 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           renderMyAppointments()
         ) : activeView === 'notifications' ? (
           <Notifications userRole="therapist" userId={user.id} />
+        ) : showCalendarView ? (
+          <div className="p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <button 
+                onClick={() => setShowCalendarView(false)}
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+              >
+                <span className="text-2xl">←</span>
+              </button>
+              <h1 className="text-3xl font-bold">My Calendar</h1>
+            </div>
+
+            <div className="mb-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-medium text-gray-700 mr-4">Session Mode:</h4>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'all', label: 'All Sessions' },
+                    { value: 'online', label: 'Online' },
+                    { value: 'in-person', label: 'In-Person' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setCalendarModeFilter(option.value as any)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        calendarModeFilter === option.value
+                          ? 'bg-teal-700 text-white border-teal-700'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-medium text-gray-700 mr-4">Status:</h4>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'all', label: 'All Statuses' },
+                    { value: 'upcoming', label: 'Upcoming' },
+                    { value: 'cancelled', label: 'Cancelled' },
+                    { value: 'completed', label: 'Completed' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setCalendarStatusFilter(option.value as any)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        calendarStatusFilter === option.value
+                          ? 'bg-teal-700 text-white border-teal-700'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: 'calc(100vh - 200px)' }}>
+              <TherapistCalendar 
+                therapists={[{ name: user.full_name || user.username, therapist_id: user.id }]}
+                selectedTherapistFilters={[user.full_name?.split(' ')[0] || user.username]}
+                selectedModeFilter={calendarModeFilter}
+                statusFilter={calendarStatusFilter}
+                therapistId={user.id}
+              />
+            </div>
+          </div>
         ) : (
           <div className="p-8">
             {dashboardLoading ? (
@@ -1819,6 +1906,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 <p className="text-gray-600">Welcome Back, {user.username}!</p>
               </div>
               <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowCalendarView(!showCalendarView)}
+                  className="flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                >
+                  <CalendarIcon size={16} />
+                  My Calendar
+                </button>
                 <div className="relative" ref={dropdownRef}>
                   <button 
                     onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
@@ -1931,6 +2025,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               <div className="p-6 border-b">
                 <h2 className="text-xl font-bold">Upcoming Bookings</h2>
               </div>
+
               <div className="overflow-x-auto max-h-80 overflow-y-auto">
                 <table className="w-full" ref={bookingActionsRef}>
                   <thead className="bg-gray-50 border-b">

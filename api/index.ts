@@ -282,7 +282,7 @@ app.get('/api/dashboard/bookings', async (req, res) => {
 
     const bookings = result.rows.map(row => ({
       ...row,
-      booking_start_at: row.booking_invitee_time ? row.booking_invitee_time.replace(/\(GMT\+05:30\)/g, 'IST') : 'N/A',
+      booking_start_at: convertToIST(row.booking_invitee_time) || 'N/A',
       mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
     }));
 
@@ -1968,6 +1968,46 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
   } catch (error) {
     console.error('Error notifying new booking:', error);
     res.status(500).json({ error: 'Failed to notify new booking' });
+  }
+});
+
+// Send booking link webhook
+app.post('/api/send-booking-link', async (req, res) => {
+  try {
+    const { clientName, email, phone, therapistName, therapy } = req.body;
+
+    // Validate required fields
+    if (!clientName || !therapistName) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const webhookData = {
+      clientName,
+      email,
+      phone,
+      therapistName,
+      therapy
+    };
+
+    console.log('Sending booking link webhook:', webhookData);
+
+    // Send to n8n webhook
+    const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook-test/f1ee71f4-65e3-4246-baea-372e822faed7', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(webhookData)
+    });
+
+    if (response.ok) {
+      console.log('Booking link webhook sent successfully');
+      res.status(200).json({ success: true, message: 'Booking link sent successfully' });
+    } else {
+      console.error('Webhook failed:', response.status, response.statusText);
+      res.status(500).json({ error: 'Failed to send booking link' });
+    }
+  } catch (error) {
+    console.error('Error sending booking link webhook:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
