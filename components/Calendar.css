@@ -3,7 +3,7 @@
 .rbc-calendar .rbc-time-view,
 .rbc-calendar .rbc-agenda-view {
   height: auto !important; /* Allow natural height */
-  min-height: 500px !important; /* Minimum height */
+  min-height: 600px !important; /* Increased minimum height */
   overflow-y: auto !important; /* Make it scrollable */
 }
 
@@ -12,13 +12,15 @@
   background: white;
   height: 100% !important;
   overflow-y: auto !important; /* Make entire calendar scrollable */
+  min-height: 650px !important; /* Increased minimum height for better coverage */
 }
 
 .rbc-month-view {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   overflow-y: auto !important; /* Make month view scrollable */
-  max-height: 600px !important; /* Set max height to enable scrolling */
+  max-height: 700px !important; /* Increased max height to reduce bottom space */
+  min-height: 650px !important; /* Increased minimum height */
 }
 
 .rbc-date-cell {
@@ -50,14 +52,29 @@
 .rbc-event {
   border-radius: 4px;
   padding: 2px 4px;
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 12px !important; /* Increased font size for better visibility */
+  line-height: 1.3 !important; /* Improved line height */
   margin: 1px 0;
   cursor: pointer;
+  min-height: 18px !important; /* Ensure minimum height for events */
+  display: flex !important;
+  align-items: center !important;
+  font-weight: 500 !important; /* Ensure proper font weight */
 }
 
 .rbc-event:hover {
   opacity: 0.8;
+}
+
+/* Ensure event text is visible and properly sized */
+.rbc-event-content {
+  font-size: 12px !important;
+  line-height: 1.3 !important;
+  font-weight: 500 !important;
+  color: inherit !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .rbc-toolbar {
@@ -234,41 +251,64 @@
   overflow-y: auto;
 }
 
-/* Custom event colors for different therapists - Lighter Vibrant Palette */
+/* Custom event colors for different therapists - New Solid Color Palette */
 .therapist-aastha {
-  background-color: rgba(144, 190, 109, 0.7) !important; /* Willow Green - Lighter */
-  border-color: rgba(144, 190, 109, 0.4) !important;
+  background-color: #f93414 !important; /* Scarlet Fire */
+  border-color: #f93414 !important;
   color: #f1f5f9 !important;
 }
 
 .therapist-ambika {
-  background-color: rgba(67, 170, 139, 0.7) !important; /* Seagrass - Lighter */
-  border-color: rgba(67, 170, 139, 0.4) !important;
+  background-color: #fe6c31 !important; /* Atomic Tangerine */
+  border-color: #fe6c31 !important;
   color: #f1f5f9 !important;
 }
 
 .therapist-anjali {
-  background-color: rgba(77, 144, 142, 0.7) !important; /* Dark Cyan - Lighter */
-  border-color: rgba(77, 144, 142, 0.4) !important;
+  background-color: #feae6c !important; /* Sandy Brown */
+  border-color: #feae6c !important;
   color: #f1f5f9 !important;
 }
 
 .therapist-indrayani {
-  background-color: rgba(249, 199, 79, 0.8) !important; /* Tuscan Sun - Lighter */
-  border-color: rgba(249, 199, 79, 0.5) !important;
+  background-color: #06889b !important; /* Pacific Cyan */
+  border-color: #06889b !important;
   color: #f1f5f9 !important;
 }
 
 .therapist-ishika {
-  background-color: rgba(249, 132, 74, 0.7) !important; /* Coral Glow - Lighter */
-  border-color: rgba(249, 132, 74, 0.4) !important;
+  background-color: #006b8f !important; /* Cerulean */
+  border-color: #006b8f !important;
   color: #f1f5f9 !important;
 }
 
 .therapist-muskan {
-  background-color: rgba(249, 65, 68, 0.7) !important; /* Strawberry Red - Lighter */
-  border-color: rgba(249, 65, 68, 0.4) !important;
+  background-color: #011f51 !important; /* Deep Navy */
+  border-color: #011f51 !important;
   color: #f1f5f9 !important;
+}
+
+/* Ensure event text is properly displayed in production */
+.rbc-event .rbc-event-content,
+.rbc-event-content {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: #f1f5f9 !important;
+  line-height: 1.3 !important;
+  display: block !important;
+  width: 100% !important;
+}
+
+/* Fix for production build event display */
+.rbc-month-view .rbc-event,
+.rbc-month-view .rbc-event-content {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  min-height: 18px !important;
+  padding: 2px 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
 }
 
 /* Status-based styling */
