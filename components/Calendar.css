@@ -315,6 +315,14 @@
   border-left: 4px solid #059669;
 }
 
+.event-cancelled {
+  text-decoration: line-through !important; /* Strikethrough for cancelled sessions */
+}
+
+.event-cancelled * {
+  text-decoration: line-through !important; /* Ensure all child elements also get strikethrough */
+}
+
 .event-online {
   border-style: solid;
 }
