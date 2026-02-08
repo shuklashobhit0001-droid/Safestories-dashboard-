@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ArrowLeft, User, Mail, Calendar as CalendarIcon, List } from 'lucide-react';
+import { Search, ArrowLeft, User, Mail, Calendar as CalendarIcon, List, Eye, EyeOff, Edit } from 'lucide-react';
 import { Loader } from './Loader';
 import { Toast } from './Toast';
 import { TherapistCalendar } from './TherapistCalendar';
@@ -8,10 +8,20 @@ interface Client {
   invitee_name: string;
   invitee_email: string;
   invitee_phone: string;
+  emergency_contact_name?: string;
+  emergency_contact_relation?: string;
+  emergency_contact_number?: string;
+  invitee_age?: number;
+  invitee_gender?: string;
+  invitee_occupation?: string;
+  invitee_marital_status?: string;
+  clinical_profile?: string;
 }
 
 interface Appointment {
   invitee_name: string;
+  invitee_email?: string;
+  invitee_phone?: string;
   booking_resource_name: string;
   booking_start_at: string;
   booking_invitee_time: string;
@@ -51,6 +61,13 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
   const [appointmentsPage, setAppointmentsPage] = useState(1);
   const appointmentsPerPage = 10;
+  const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents'>('overview');
+  const [clientStats, setClientStats] = useState({ sessions: 0, noShows: 0, cancelled: 0 });
+  const [isCaseHistoryVisible, setIsCaseHistoryVisible] = useState(false);
+  const [showCaseHistoryPasswordModal, setShowCaseHistoryPasswordModal] = useState(false);
+  const [caseHistoryPassword, setCaseHistoryPassword] = useState('');
+  const [caseHistoryPasswordError, setCaseHistoryPasswordError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   // Calendar view state
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
@@ -299,6 +316,56 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     setSelectedClientForAction(null);
   };
 
+  const handleCaseHistoryView = () => {
+    if (isCaseHistoryVisible) {
+      // Hide case history
+      setIsCaseHistoryVisible(false);
+    } else {
+      // Show password modal to authenticate
+      setShowCaseHistoryPasswordModal(true);
+      setCaseHistoryPassword('');
+      setCaseHistoryPasswordError('');
+      setShowPassword(false);
+    }
+  };
+
+  const handleCaseHistoryPasswordSubmit = async () => {
+    if (!caseHistoryPassword) {
+      setCaseHistoryPasswordError('Please enter your password');
+      return;
+    }
+
+    try {
+      // For admin, we need to get the username from localStorage or props
+      const adminUsername = localStorage.getItem('username') || 'admin';
+      
+      // Verify password by attempting to authenticate
+      const response = await fetch('/api/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: adminUsername,
+          password: caseHistoryPassword
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setIsCaseHistoryVisible(true);
+        setShowCaseHistoryPasswordModal(false);
+        setCaseHistoryPassword('');
+        setCaseHistoryPasswordError('');
+        setShowPassword(false);
+      } else {
+        setCaseHistoryPasswordError('Incorrect password');
+      }
+    } catch (error) {
+      console.error('Password verification error:', error);
+      setCaseHistoryPasswordError('Error verifying password');
+    }
+  };
+
   const openClientDetails = async (client: any) => {
     console.log('Opening client details for:', client);
     
@@ -337,7 +404,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         const now = new Date();
         const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
         
-        if (status !== 'cancelled' && status !== 'no_show') {
+        if (status !== 'cancelled' && status !== 'no_show' && status !== 'no show') {
           if (apt.has_session_notes) {
             status = 'completed';
           } else if (sessionDate < now) {
@@ -351,6 +418,29 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       });
       
       setClientAppointments(appointmentsWithStatus);
+      
+      // Calculate stats
+      const sessions = appointmentsWithStatus.length;
+      const noShows = appointmentsWithStatus.filter((apt: any) => apt.booking_status === 'no_show').length;
+      const cancelled = appointmentsWithStatus.filter((apt: any) => apt.booking_status === 'cancelled').length;
+      setClientStats({ sessions, noShows, cancelled });
+      
+      // Update selectedClient with emergency contact and demographic data from the most recent appointment
+      if (data.appointments && data.appointments.length > 0) {
+        const aptWithEmergency = data.appointments.find((apt: any) => apt.emergency_contact_name) || data.appointments[0];
+        
+        setSelectedClient((prev: any) => ({
+          ...prev,
+          emergency_contact_name: aptWithEmergency.emergency_contact_name,
+          emergency_contact_relation: aptWithEmergency.emergency_contact_relation,
+          emergency_contact_number: aptWithEmergency.emergency_contact_number,
+          invitee_age: aptWithEmergency.invitee_age,
+          invitee_gender: aptWithEmergency.invitee_gender,
+          invitee_occupation: aptWithEmergency.invitee_occupation,
+          invitee_marital_status: aptWithEmergency.invitee_marital_status,
+          clinical_profile: aptWithEmergency.clinical_profile
+        }));
+      }
     } catch (error) {
       console.error('Error fetching client details:', error);
     } finally {
@@ -488,20 +578,50 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   };
 
   const getClientStatus = (client: Client) => {
+    // If no appointments data, return inactive
+    if (!appointments || appointments.length === 0) {
+      return 'inactive';
+    }
+    
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
+    // Debug: Log first appointment to see structure
+    if (client.invitee_name === 'Meera' && appointments.length > 0) {
+      console.log('Sample appointment structure:', appointments[0]);
+      console.log('Client data:', {
+        name: client.invitee_name,
+        email: client.invitee_email,
+        phone: client.invitee_phone
+      });
+    }
+    
     // Check if client has any appointments in the last 30 days
     const hasRecentAppointment = appointments.some(apt => {
-      // Match by email or phone
-      const emailMatch = client.invitee_email && apt.invitee_name === client.invitee_name;
-      const phoneMatch = client.invitee_phone && client.invitee_phone.split(', ').some(phone => 
-        apt.invitee_name === client.invitee_name
-      );
+      // Match by email or phone (normalize for comparison)
+      const clientEmail = client.invitee_email?.toLowerCase().trim();
+      const aptEmail = apt.invitee_email?.toLowerCase().trim();
+      const clientPhones = client.invitee_phone?.split(', ').map(p => p.replace(/[\s\-\(\)\+]/g, ''));
+      const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
+      
+      const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
+      const phoneMatch = clientPhones && aptPhone && clientPhones.some(phone => phone === aptPhone);
+      
+      // Debug for Meera
+      if (client.invitee_name === 'Meera' && (emailMatch || phoneMatch)) {
+        console.log('Match found for Meera:', {
+          emailMatch,
+          phoneMatch,
+          aptDate: apt.booking_start_at_raw,
+          status: apt.booking_status
+        });
+      }
       
       if (emailMatch || phoneMatch) {
         const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-        return aptDate >= thirtyDaysAgo && apt.booking_status !== 'cancelled';
+        const isRecent = aptDate >= thirtyDaysAgo;
+        const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
+        return isRecent && isNotCancelled;
       }
       return false;
     });
@@ -511,7 +631,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
 
   if (selectedClient) {
     return (
-      <div className="p-8 h-full flex flex-col">
+      <div className="p-8 h-full overflow-auto">
         {/* Header with Back Button */}
         <div className="flex items-center gap-4 mb-6">
           <button
@@ -520,311 +640,507 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
           >
             <ArrowLeft size={24} />
           </button>
-          <div className="flex items-center gap-3 flex-1">
-            <User size={24} className="text-teal-700" />
-            <h1 className="text-3xl font-bold">{selectedClient.invitee_name}</h1>
-          </div>
-          <div className="relative" ref={clientDropdownRef}>
-            <button 
-              onClick={() => setIsClientDateDropdownOpen(!isClientDateDropdownOpen)}
-              className="flex items-center gap-2 border rounded-lg px-4 py-2" 
-              style={{ backgroundColor: '#2D757938' }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span className="text-sm text-teal-700">{clientSelectedMonth}</span>
-              {isClientDateDropdownOpen ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              )}
-            </button>
-            {isClientDateDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
-                {!showClientCustomCalendar ? (
-                  <>
-                    <button
-                      onClick={() => {
-                        setClientSelectedMonth('All Time');
-                        setClientDateFilter({ start: '', end: '' });
-                        setIsClientDateDropdownOpen(false);
-                      }}
-                      className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
-                    >
-                      All Time
+          <h1 className="text-3xl font-bold">{selectedClient.invitee_name}</h1>
+        </div>
+
+        {/* Two Column Layout - Left side fixed, Right side with tabs */}
+        <div className="grid grid-cols-12 gap-6">
+          {/* Left Column - Client Information (Always Visible) */}
+          <div className="col-span-4 space-y-6">
+            {/* Contact Info */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">Contact Info:</h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 text-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                  <span className="text-gray-700">{selectedClient.invitee_phone || 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <Mail size={18} />
+                  <span className="text-gray-700">{selectedClient.invitee_email || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Contact */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">Emergency Contact:</h3>
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <div className="mb-2">
+                  <span className="font-medium text-sm">{selectedClient.emergency_contact_name || 'Not provided'}</span>
+                  {selectedClient.emergency_contact_relation && (
+                    <span className="text-gray-500 text-sm ml-2">({selectedClient.emergency_contact_relation})</span>
+                  )}
+                </div>
+                {selectedClient.emergency_contact_number && (
+                  <div className="text-sm text-gray-600">{selectedClient.emergency_contact_number}</div>
+                )}
+              </div>
+            </div>
+
+            {/* Case History */}
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-sm font-semibold text-gray-600">Case History:</h3>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handleCaseHistoryView}
+                    className="p-1.5 hover:bg-gray-200 rounded transition-colors" 
+                    title={isCaseHistoryVisible ? "Hide Case History" : "View Case History"}
+                  >
+                    {isCaseHistoryVisible ? (
+                      <Eye size={16} className="text-gray-600" />
+                    ) : (
+                      <EyeOff size={16} className="text-gray-600" />
+                    )}
+                  </button>
+                  <button 
+                    disabled={!isCaseHistoryVisible}
+                    className={`p-1.5 rounded transition-colors ${
+                      isCaseHistoryVisible 
+                        ? 'hover:bg-gray-200 cursor-pointer' 
+                        : 'cursor-not-allowed opacity-40'
+                    }`}
+                    title={isCaseHistoryVisible ? "Edit Case History" : "View case history first to edit"}
+                  >
+                    <Edit size={16} className="text-gray-600" />
+                  </button>
+                </div>
+              </div>
+              <div className="border rounded-lg p-4 bg-gray-50 min-h-[100px]">
+                {isCaseHistoryVisible ? (
+                  selectedClient.clinical_profile ? (
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedClient.clinical_profile}</p>
+                  ) : (
+                    <button className="text-teal-600 text-sm hover:text-teal-700 flex items-center gap-2">
+                      <span>+ add case history</span>
                     </button>
-                    <button
-                      onClick={() => setShowClientCustomCalendar(true)}
-                      className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
-                    >
-                      Custom Dates
-                    </button>
-                    <div className="max-h-60 overflow-y-auto">
-                      {(() => {
-                        const months = [];
-                        const startDate = new Date(2025, 9, 1); // Oct 2025
-                        const currentDate = new Date();
-                        const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1); // +1 month ahead
-                        
-                        for (let d = new Date(endDate); d >= startDate; d.setMonth(d.getMonth() - 1)) {
-                          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                          months.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
-                        }
-                        return months;
-                      })().map((month) => (
-                        <button
-                          key={month}
-                          onClick={() => handleClientMonthSelect(month)}
-                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
-                        >
-                          {month}
-                        </button>
-                      ))}
-                    </div>
-                  </>
+                  )
                 ) : (
-                  <div className="p-4">
-                    <div className="mb-3">
-                      <label className="block text-xs text-gray-600 mb-1">Start Date</label>
-                      <input
-                        type="date"
-                        value={clientStartDate}
-                        onChange={(e) => setClientStartDate(e.target.value)}
-                        className="w-full px-3 py-2 border rounded text-sm"
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="block text-xs text-gray-600 mb-1">End Date</label>
-                      <input
-                        type="date"
-                        value={clientEndDate}
-                        onChange={(e) => setClientEndDate(e.target.value)}
-                        className="w-full px-3 py-2 border rounded text-sm"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setShowClientCustomCalendar(false)}
-                        className="flex-1 px-3 py-2 border rounded text-sm hover:bg-gray-100"
-                      >
-                        Back
-                      </button>
-                      <button
-                        onClick={handleClientCustomDateApply}
-                        className="flex-1 px-3 py-2 bg-teal-700 text-white rounded text-sm hover:bg-teal-800"
-                      >
-                        Apply
-                      </button>
-                    </div>
+                  <div className="flex items-center justify-center h-20">
+                    <p className="text-gray-400 text-sm">Case history is hidden. Click the eye icon to view.</p>
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Client Info */}
-        <div className="mb-6 space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
-              <p className="text-sm text-gray-600 mb-1">Email</p>
-              <p className="text-lg font-semibold text-teal-700">{selectedClient.invitee_email || 'N/A'}</p>
-            </div>
-            <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
-              <p className="text-sm text-gray-600 mb-1">Phone</p>
-              <p className="text-lg font-semibold text-teal-700">{selectedClient.invitee_phone || 'N/A'}</p>
-            </div>
-            <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
-              <p className="text-sm text-gray-600 mb-1">Total Sessions</p>
-              <p className="text-3xl font-bold text-teal-700">{clientAppointments.filter(apt => {
-                if (clientDateFilter.start && clientDateFilter.end) {
-                  const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                  const startDate = new Date(clientDateFilter.start);
-                  const endDate = new Date(clientDateFilter.end + 'T23:59:59');
-                  if (aptDate < startDate || aptDate > endDate) return false;
-                }
-                return true;
-              }).length}</p>
             </div>
           </div>
-        </div>
 
-        {clientDetailsLoading ? (
-          <Loader />
-        ) : (
-          <div>
-            <div className="flex gap-6 mb-4">
+          {/* Right Column - Tabbed Content */}
+          <div className="col-span-8 space-y-6">
+            {/* Navigation Tabs */}
+            <div className="flex gap-8 border-b">
               {[
-                { id: 'upcoming', label: 'Upcoming' },
-                { id: 'all', label: 'All Appointments' },
-                { id: 'completed', label: 'Completed' },
-                { id: 'pending_notes', label: 'Pending Notes' },
-                { id: 'cancelled', label: 'Cancelled' },
-                { id: 'no_show', label: 'No Show' },
+                { id: 'overview' as const, label: 'Overview' },
+                { id: 'sessions' as const, label: 'Progress notes' },
+                { id: 'documents' as const, label: 'Goal Tracking' }
               ].map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setClientAppointmentTab(tab.id)}
-                  className={`pb-2 font-medium ${
-                    clientAppointmentTab === tab.id
+                  onClick={() => setClientViewTab(tab.id)}
+                  className={`pb-3 font-medium text-sm ${
+                    clientViewTab === tab.id
                       ? 'text-teal-700 border-b-2 border-teal-700'
-                      : 'text-gray-400'
+                      : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   {tab.label}
                 </button>
               ))}
             </div>
-            
-            <h3 className="text-lg font-semibold mb-3">
-              Appointments ({clientAppointments.filter(apt => {
-                // Search filter
-                if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
-                  return false;
-                }
-                // Date filter
-                if (clientDateFilter.start && clientDateFilter.end) {
-                  const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                  const startDate = new Date(clientDateFilter.start);
-                  const endDate = new Date(clientDateFilter.end + 'T23:59:59');
-                  if (aptDate < startDate || aptDate > endDate) return false;
-                }
-                // Tab filter
-                if (clientAppointmentTab === 'all') return true;
-                if (clientAppointmentTab === 'upcoming') {
-                  const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                  return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
-                }
-                return apt.booking_status === clientAppointmentTab;
-              }).length})
-            </h3>
-            <div className="bg-white border rounded-lg overflow-hidden">
-              <table className="w-full" ref={appointmentActionsRef}>
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Session Type</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Date & Time</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Therapist</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clientAppointments.filter(apt => {
-                    // Search filter
-                    if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
-                      return false;
-                    }
-                    // Date filter
-                    if (clientDateFilter.start && clientDateFilter.end) {
-                      const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                      const startDate = new Date(clientDateFilter.start);
-                      const endDate = new Date(clientDateFilter.end + 'T23:59:59');
-                      if (aptDate < startDate || aptDate > endDate) return false;
-                    }
-                    // Tab filter
-                    if (clientAppointmentTab === 'all') return true;
-                    if (clientAppointmentTab === 'upcoming') {
-                      const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                      return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
-                    }
-                    return apt.booking_status === clientAppointmentTab;
-                  }).length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
-                    </tr>
+
+            {/* Date Filter */}
+            <div className="flex justify-end">
+              <div className="relative" ref={clientDropdownRef}>
+                <button 
+                  onClick={() => setIsClientDateDropdownOpen(!isClientDateDropdownOpen)}
+                  className="flex items-center gap-2 border rounded-lg px-4 py-2" 
+                  style={{ backgroundColor: '#2D757938' }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span className="text-sm text-teal-700">{clientSelectedMonth}</span>
+                  {isClientDateDropdownOpen ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
                   ) : (
-                    clientAppointments.filter(apt => {
-                      // Search filter
-                      if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
-                        return false;
-                      }
-                      // Date filter
-                      if (clientDateFilter.start && clientDateFilter.end) {
-                        const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                        const startDate = new Date(clientDateFilter.start);
-                        const endDate = new Date(clientDateFilter.end + 'T23:59:59');
-                        if (aptDate < startDate || aptDate > endDate) return false;
-                      }
-                      // Tab filter
-                      if (clientAppointmentTab === 'all') return true;
-                      if (clientAppointmentTab === 'upcoming') {
-                        const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                        return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
-                      }
-                      return apt.booking_status === clientAppointmentTab;
-                    }).map((apt, index) => (
-                      <React.Fragment key={index}>
-                        <tr 
-                          className={`border-b cursor-pointer transition-colors ${
-                            selectedAppointmentIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
-                          }`}
-                          onClick={() => setSelectedAppointmentIndex(selectedAppointmentIndex === index ? null : index)}
-                        >
-                          <td className="px-4 py-3 text-sm">{apt.booking_resource_name}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_host_name || selectedTherapist?.name || 'N/A'}</td>
-                          <td className="px-4 py-3 text-sm">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                              apt.booking_status === 'completed' ? 'bg-green-100 text-green-700' :
-                              apt.booking_status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                              apt.booking_status === 'no_show' ? 'bg-orange-100 text-orange-700' :
-                              apt.booking_status === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-blue-100 text-blue-700'
-                            }`}>
-                              {apt.booking_status === 'pending_notes' ? 'Pending Notes' :
-                               apt.booking_status === 'no_show' ? 'No Show' :
-                               apt.booking_status === 'scheduled' ? 'Scheduled' :
-                               apt.booking_status?.charAt(0).toUpperCase() + apt.booking_status?.slice(1)}
-                            </span>
-                          </td>
-                        </tr>
-                        {selectedAppointmentIndex === index && (
-                          <tr className="bg-gray-100">
-                            <td colSpan={4} className="px-4 py-4">
-                              <div className="flex gap-3 justify-center">
-                                <button
-                                  onClick={() => copyAppointmentDetails(apt)}
-                                  className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                  Copy to Clipboard
-                                </button>
-                                <button
-                                  onClick={() => handleReminderClick(apt)}
-                                  disabled={isMeetingEnded(apt) || apt.booking_status === 'cancelled'}
-                                  className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                                    isMeetingEnded(apt) || apt.booking_status === 'cancelled'
-                                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
-                                      : 'border border-gray-400 text-gray-700 hover:bg-white'
-                                  }`}
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                                  Send Manual Reminder to Client
-                                </button>
-                                <button
-                                  onClick={() => handleSessionNotesReminder(apt)}
-                                  disabled={!isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'}
-                                  className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                                    !isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'
-                                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
-                                      : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-                                  }`}
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                                  Send Session Note Reminder to Therapist
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                   )}
-                </tbody>
-              </table>
+                </button>
+                {isClientDateDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
+                    {!showClientCustomCalendar ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            setClientSelectedMonth('All Time');
+                            setClientDateFilter({ start: '', end: '' });
+                            setIsClientDateDropdownOpen(false);
+                          }}
+                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                        >
+                          All Time
+                        </button>
+                        <button
+                          onClick={() => setShowClientCustomCalendar(true)}
+                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                        >
+                          Custom Dates
+                        </button>
+                        <div className="max-h-60 overflow-y-auto">
+                          {(() => {
+                            const months = [];
+                            const startDate = new Date(2025, 9, 1);
+                            const currentDate = new Date();
+                            const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+                            
+                            for (let d = new Date(endDate); d >= startDate; d.setMonth(d.getMonth() - 1)) {
+                              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                              months.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
+                            }
+                            return months;
+                          })().map((month) => (
+                            <button
+                              key={month}
+                              onClick={() => handleClientMonthSelect(month)}
+                              className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
+                            >
+                              {month}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="p-4">
+                        <div className="mb-3">
+                          <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                          <input
+                            type="date"
+                            value={clientStartDate}
+                            onChange={(e) => setClientStartDate(e.target.value)}
+                            className="w-full px-3 py-2 border rounded text-sm"
+                          />
+                        </div>
+                        <div className="mb-3">
+                          <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                          <input
+                            type="date"
+                            value={clientEndDate}
+                            onChange={(e) => setClientEndDate(e.target.value)}
+                            className="w-full px-3 py-2 border rounded text-sm"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setShowClientCustomCalendar(false)}
+                            className="flex-1 px-3 py-2 border rounded text-sm hover:bg-gray-100"
+                          >
+                            Back
+                          </button>
+                          <button
+                            onClick={handleClientCustomDateApply}
+                            className="flex-1 px-3 py-2 bg-teal-700 text-white rounded text-sm hover:bg-teal-800"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tab Content - Overview */}
+            {clientViewTab === 'overview' && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Sessions</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.sessions}</p>
+                  </div>
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Next Session</p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {(() => {
+                        const upcoming = clientAppointments
+                          .filter(apt => {
+                            const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                          })
+                          .sort((a, b) => {
+                            const dateA = a.booking_start_at_raw ? new Date(a.booking_start_at_raw) : new Date();
+                            const dateB = b.booking_start_at_raw ? new Date(b.booking_start_at_raw) : new Date();
+                            return dateA.getTime() - dateB.getTime();
+                          })[0];
+                        
+                        if (upcoming && upcoming.booking_start_at_raw) {
+                          const date = new Date(upcoming.booking_start_at_raw);
+                          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        }
+                        return 'N/A';
+                      })()}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Cancellation</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.cancelled}</p>
+                  </div>
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">NoShow</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.noShows}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <User size={20} className="text-gray-700" />
+                    Appointments
+                  </h3>
+
+                  <div className="flex gap-6 mb-4">
+                    {[
+                      { id: 'upcoming', label: 'Upcoming' },
+                      { id: 'all', label: 'All Appointments' },
+                      { id: 'completed', label: 'Completed' },
+                      { id: 'pending_notes', label: 'Pending Notes' },
+                      { id: 'cancelled', label: 'Cancelled' },
+                      { id: 'no_show', label: 'No Show' },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setClientAppointmentTab(tab.id)}
+                        className={`pb-2 font-medium ${
+                          clientAppointmentTab === tab.id
+                            ? 'text-teal-700 border-b-2 border-teal-700'
+                            : 'text-gray-400'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {clientDetailsLoading ? (
+                    <div className="p-8 text-center"><Loader /></div>
+                  ) : (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3">
+                        Appointments ({clientAppointments.filter(apt => {
+                          if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                            return false;
+                          }
+                          if (clientDateFilter.start && clientDateFilter.end) {
+                            const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                            const startDate = new Date(clientDateFilter.start);
+                            const endDate = new Date(clientDateFilter.end + 'T23:59:59');
+                            if (aptDate < startDate || aptDate > endDate) return false;
+                          }
+                          if (clientAppointmentTab === 'all') return true;
+                          if (clientAppointmentTab === 'upcoming') {
+                            const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                          }
+                          return apt.booking_status === clientAppointmentTab;
+                        }).length})
+                      </h3>
+                      <div className="bg-white border rounded-lg overflow-hidden">
+                        <table className="w-full" ref={appointmentActionsRef}>
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Session Type</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Date & Time</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Therapist</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {clientAppointments.filter(apt => {
+                              if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                                return false;
+                              }
+                              if (clientDateFilter.start && clientDateFilter.end) {
+                                const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                                const startDate = new Date(clientDateFilter.start);
+                                const endDate = new Date(clientDateFilter.end + 'T23:59:59');
+                                if (aptDate < startDate || aptDate > endDate) return false;
+                              }
+                              if (clientAppointmentTab === 'all') return true;
+                              if (clientAppointmentTab === 'upcoming') {
+                                const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                                return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                              }
+                              return apt.booking_status === clientAppointmentTab;
+                            }).length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
+                              </tr>
+                            ) : (
+                              clientAppointments.filter(apt => {
+                                if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                                  return false;
+                                }
+                                if (clientDateFilter.start && clientDateFilter.end) {
+                                  const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                                  const startDate = new Date(clientDateFilter.start);
+                                  const endDate = new Date(clientDateFilter.end + 'T23:59:59');
+                                  if (aptDate < startDate || aptDate > endDate) return false;
+                                }
+                                if (clientAppointmentTab === 'all') return true;
+                                if (clientAppointmentTab === 'upcoming') {
+                                  const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                                  return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                                }
+                                return apt.booking_status === clientAppointmentTab;
+                              }).map((apt, index) => (
+                                <React.Fragment key={index}>
+                                  <tr 
+                                    className={`border-b cursor-pointer transition-colors ${
+                                      selectedAppointmentIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                                    }`}
+                                    onClick={() => setSelectedAppointmentIndex(selectedAppointmentIndex === index ? null : index)}
+                                  >
+                                    <td className="px-4 py-3 text-sm">{apt.booking_resource_name}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_host_name || selectedTherapist?.name || 'N/A'}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                      <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                                        apt.booking_status === 'completed' ? 'bg-green-100 text-green-700' :
+                                        apt.booking_status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                        apt.booking_status === 'no_show' ? 'bg-orange-100 text-orange-700' :
+                                        apt.booking_status === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {apt.booking_status === 'pending_notes' ? 'Pending Notes' :
+                                         apt.booking_status === 'no_show' ? 'No Show' :
+                                         apt.booking_status === 'scheduled' ? 'Scheduled' :
+                                         apt.booking_status?.charAt(0).toUpperCase() + apt.booking_status?.slice(1)}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                  {selectedAppointmentIndex === index && (
+                                    <tr className="bg-gray-100">
+                                      <td colSpan={4} className="px-4 py-4">
+                                        <div className="flex gap-3 justify-center">
+                                          <button
+                                            onClick={() => copyAppointmentDetails(apt)}
+                                            className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            Copy to Clipboard
+                                          </button>
+                                          <button
+                                            onClick={() => handleReminderClick(apt)}
+                                            disabled={isMeetingEnded(apt) || apt.booking_status === 'cancelled'}
+                                            className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                              isMeetingEnded(apt) || apt.booking_status === 'cancelled'
+                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                                : 'border border-gray-400 text-gray-700 hover:bg-white'
+                                            }`}
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                            Send Manual Reminder to Client
+                                          </button>
+                                          <button
+                                            onClick={() => handleSessionNotesReminder(apt)}
+                                            disabled={!isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'}
+                                            className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                                              !isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'
+                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                                : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                                            }`}
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                            Send Session Note Reminder to Therapist
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Sessions Tab */}
+            {clientViewTab === 'sessions' && (
+              <div className="text-center py-12">
+                <p className="text-gray-500 text-lg">Progress notes view coming soon...</p>
+              </div>
+            )}
+
+            {/* Documents Tab */}
+            {clientViewTab === 'documents' && (
+              <div className="text-center py-12">
+                <p className="text-gray-500 text-lg">Goal Tracking view coming soon...</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+        
+        {/* Case History Password Modal */}
+        {showCaseHistoryPasswordModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4">Verify Password</h3>
+              <p className="text-gray-600 mb-4">Please enter your password to view case history</p>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={caseHistoryPassword}
+                  onChange={(e) => setCaseHistoryPassword(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleCaseHistoryPasswordSubmit()}
+                  placeholder="Enter your password"
+                  className="w-full px-4 py-2 pr-10 border rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? (
+                    <EyeOff size={18} />
+                  ) : (
+                    <Eye size={18} />
+                  )}
+                </button>
+              </div>
+              {caseHistoryPasswordError && (
+                <p className="text-red-600 text-sm mb-4">{caseHistoryPasswordError}</p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCaseHistoryPasswordSubmit}
+                  className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+                >
+                  Verify
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCaseHistoryPasswordModal(false);
+                    setCaseHistoryPassword('');
+                    setCaseHistoryPasswordError('');
+                    setShowPassword(false);
+                  }}
+                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+        
         {showReminderModal && selectedAppointmentForReminder && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">

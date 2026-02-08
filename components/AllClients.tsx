@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Download, ChevronDown, ChevronRight, ArrowRightLeft, Plus } from 'lucide-react';
+import { MessageCircle, Search, Download, ChevronDown, ChevronRight, ArrowRightLeft, Plus, Send } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { TransferClientModal } from './TransferClientModal';
 import { Loader } from './Loader';
+import { Toast } from './Toast';
 
 interface Therapist {
   invitee_name: string;
@@ -19,6 +20,7 @@ interface Client {
   session_count: number;
   therapists: Therapist[];
   latest_booking_date?: string;
+  booking_link_sent_at?: string;
 }
 
 export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCreateBooking?: () => void }> = ({ onClientClick, onCreateBooking }) => {
@@ -30,6 +32,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<'clients' | 'leads'>('clients');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const itemsPerPage = 10;
   const [adminUser] = useState(() => {
     const savedUser = localStorage.getItem('user');
@@ -59,14 +63,32 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     setExpandedRows(newExpanded);
   };
 
+  const formatBookingLinkDate = (dateString: string | undefined) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const day = date.getDate();
+    const month = date.toLocaleString('en-US', { month: 'short' });
+    const year = date.getFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
   const filteredClients = clients.filter(client => {
     const query = searchQuery.toLowerCase();
-    return (
+    const matchesSearch = (
       (client.invitee_name || '').toLowerCase().includes(query) ||
       (client.invitee_phone || '').toLowerCase().includes(query) ||
       (client.invitee_email || '').toLowerCase().includes(query) ||
       (client.booking_host_name || '').toLowerCase().includes(query)
     );
+    
+    if (!matchesSearch) return false;
+    
+    // Filter by tab
+    if (activeTab === 'leads') {
+      return client.session_count === 0;
+    } else {
+      return client.session_count > 0;
+    }
   });
 
   const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
@@ -116,6 +138,57 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     return false;
   };
 
+  const handleSendBookingLink = async (client: Client) => {
+    try {
+      // Get the most recent therapy type for this client
+      let therapyType = 'Individual Therapy';
+      try {
+        const response = await fetch(`/api/client-therapy-type?email=${encodeURIComponent(client.invitee_email)}&phone=${encodeURIComponent(client.invitee_phone)}`);
+        if (response.ok) {
+          const data = await response.json();
+          therapyType = data.therapy_type || 'Individual Therapy';
+        }
+      } catch (error) {
+        console.warn('Could not fetch client therapy type, using default:', error);
+      }
+
+      // Clean therapy type to remove therapist name and "Session"
+      const cleanTherapyType = (therapy: string) => {
+        let cleaned = therapy.replace(/\s+with\s+[A-Za-z\s]+$/i, '').trim();
+        cleaned = cleaned.replace(/\s+Session$/i, '').trim();
+        return cleaned;
+      };
+
+      const webhookData = {
+        clientName: client.invitee_name,
+        email: client.invitee_email,
+        phone: client.invitee_phone,
+        therapistName: client.booking_host_name,
+        therapy: cleanTherapyType(therapyType)
+      };
+
+      const response = await fetch('/api/send-booking-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.warning) {
+          setToast({ message: `${result.message} (${result.warning})`, type: 'success' });
+        } else {
+          setToast({ message: 'Booking link sent to client successfully!', type: 'success' });
+        }
+      } else {
+        setToast({ message: 'Failed to send booking link to client', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error sending booking link:', error);
+      setToast({ message: 'Failed to send booking link to client', type: 'error' });
+    }
+  };
+
   const handleTransferSuccess = () => {
     fetch('/api/clients')
       .then(res => res.json())
@@ -132,6 +205,36 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
           <h1 className="text-3xl font-bold mb-1">All Clients</h1>
           <p className="text-gray-600">View Client Details, Sessions and more...</p>
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-6 mb-6">
+        <button
+          onClick={() => {
+            setActiveTab('clients');
+            setCurrentPage(1);
+          }}
+          className={`pb-2 font-medium ${
+            activeTab === 'clients'
+              ? 'text-teal-700 border-b-2 border-teal-700'
+              : 'text-gray-400'
+          }`}
+        >
+          Clients
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('leads');
+            setCurrentPage(1);
+          }}
+          className={`pb-2 font-medium ${
+            activeTab === 'leads'
+              ? 'text-teal-700 border-b-2 border-teal-700'
+              : 'text-gray-400'
+          }`}
+        >
+          Leads
+        </button>
       </div>
 
       {/* Search Bar */}
@@ -165,24 +268,28 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Phone No.</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Email ID</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Sessions</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Actions</th>
+                {activeTab === 'leads' && (
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Booking Link Sent</th>
+                )}
+                {activeTab === 'clients' && (
+                  <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center text-gray-400 py-8">
+                  <td colSpan={activeTab === 'clients' ? 5 : 5} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center text-gray-400 py-8">
-                    No clients found
+                  <td colSpan={activeTab === 'clients' ? 5 : 5} className="text-center text-gray-400 py-8">
+                    No {activeTab === 'clients' ? 'clients' : 'leads'} found
                   </td>
                 </tr>
               ) : (
@@ -221,35 +328,56 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm">{client.invitee_phone}</td>
-                      <td className="px-6 py-4 text-sm">{client.invitee_email}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <div>{client.invitee_phone}</div>
+                        <div className="text-gray-500 text-xs">{client.invitee_email}</div>
+                      </td>
                       <td className="px-6 py-4 text-sm">{client.session_count}</td>
                       <td className="px-6 py-4 text-sm">
                         {client.booking_host_name}
                       </td>
-                      <td className="px-6 py-4 text-sm">
-                        <button
-                          onClick={() => handleTransferClick(client)}
-                          disabled={isTransferDisabled(client)}
-                          className={`flex items-center gap-1 text-sm font-medium ${
-                            isTransferDisabled(client)
-                              ? 'text-gray-400 cursor-not-allowed'
-                              : 'text-orange-600 hover:text-orange-700'
-                          }`}
-                        >
-                          <ArrowRightLeft size={16} />
-                          Transfer
-                        </button>
-                      </td>
+                      {activeTab === 'leads' && (
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {formatBookingLinkDate(client.booking_link_sent_at)}
+                        </td>
+                      )}
+                      {activeTab === 'clients' && (
+                        <td className="px-6 py-4 text-sm">
+                          <div className="flex gap-4 justify-center">
+                            <button
+                              onClick={() => handleSendBookingLink(client)}
+                              className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                            >
+                              <Send size={16} />
+                              Send Booking Link
+                            </button>
+                            <button
+                              onClick={() => handleTransferClick(client)}
+                              disabled={isTransferDisabled(client)}
+                              className={`flex items-center gap-1 text-sm font-medium ${
+                                isTransferDisabled(client)
+                                  ? 'text-gray-400 cursor-not-allowed'
+                                  : 'text-orange-600 hover:text-orange-700'
+                              }`}
+                            >
+                              <ArrowRightLeft size={16} />
+                              Transfer
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                     {expandedRows.has(index) && client.therapists && client.therapists.length > 1 && (
                       client.therapists.map((therapist, tIndex) => (
                         <tr key={`${index}-${tIndex}`} className="bg-gray-50 border-b">
                           <td className="px-6 py-4 text-sm pl-16 text-gray-600">{therapist.invitee_name}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{therapist.invitee_phone}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{client.invitee_email}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            <div>{therapist.invitee_phone}</div>
+                            <div className="text-gray-400 text-xs">{client.invitee_email}</div>
+                          </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{therapist.session_count}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{therapist.booking_host_name}</td>
+                          {activeTab === 'clients' && <td></td>}
                         </tr>
                       ))
                     )}
@@ -288,6 +416,13 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         onTransferSuccess={handleTransferSuccess}
         adminUser={adminUser}
       />
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 };

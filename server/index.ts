@@ -64,6 +64,30 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Verify password endpoint (for case history access)
+app.post('/api/verify-password', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    console.log('🔐 Password verification attempt:', { username });
+
+    const result = await pool.query(
+      'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND password = $2',
+      [username, password]
+    );
+
+    if (result.rows.length > 0) {
+      console.log('✅ Password verified for:', username);
+      res.json({ success: true });
+    } else {
+      console.log('❌ Password verification failed for:', username);
+      res.json({ success: false });
+    }
+  } catch (error) {
+    console.error('Password verification error:', error);
+    res.status(500).json({ success: false, message: 'Verification failed' });
+  }
+});
+
 // Get live sessions count
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
@@ -371,12 +395,20 @@ app.get('/api/clients', async (req, res) => {
           booking_host_name: row.booking_host_name,
           created_at: row.created_at,
           latest_booking_date: null,
+          booking_link_sent_at: null,
           therapists: []
         });
       }
       
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
+      
+      // Track most recent booking_request created_at (only for leads with session_count = 0)
+      if (parseInt(row.session_count) === 0 && row.created_at) {
+        if (!client.booking_link_sent_at || new Date(row.created_at) > new Date(client.booking_link_sent_at)) {
+          client.booking_link_sent_at = row.created_at;
+        }
+      }
       
       // Update latest_booking_date only from active bookings
       const isActiveBooking = row.booking_status && !['cancelled', 'canceled', 'no_show', 'no show'].includes(row.booking_status);
@@ -707,9 +739,13 @@ app.get('/api/therapist-details', async (req, res) => {
     const appointmentsResult = await pool.query(`
       SELECT 
         invitee_name,
+        invitee_email,
+        invitee_phone,
         booking_resource_name,
         booking_start_at,
-        booking_invitee_time
+        booking_start_at as booking_start_at_raw,
+        booking_invitee_time,
+        booking_status
       FROM bookings
       WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
       ORDER BY booking_start_at DESC
@@ -894,12 +930,12 @@ app.get('/api/therapist-stats', async (req, res) => {
 
     const noShows = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
-          [`%${therapistFirstName}%`, 'no_show', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+          [`%${therapistFirstName}%`, 'no_show', 'no show', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2',
-          [`%${therapistFirstName}%`, 'no_show']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3)',
+          [`%${therapistFirstName}%`, 'no_show', 'no show']
         );
 
     const cancelled = hasDateFilter
@@ -918,8 +954,8 @@ app.get('/api/therapist-stats', async (req, res) => {
     );
 
     const lastMonthNoShows = await pool.query(
-      'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
-      [`%${therapistFirstName}%`, 'no_show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+      [`%${therapistFirstName}%`, 'no_show', 'no show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
     );
 
     const lastMonthCancelled = await pool.query(
@@ -1197,6 +1233,15 @@ app.get('/api/client-appointments', async (req, res) => {
           b.booking_mode as mode,
           b.booking_start_at as booking_date,
           b.booking_status,
+          b.invitee_payment_amount,
+          b.emergency_contact_name,
+          b.emergency_contact_relation,
+          b.emergency_contact_number,
+          b.invitee_age,
+          b.invitee_gender,
+          b.invitee_occupation,
+          b.invitee_marital_status,
+          b.clinical_profile,
           CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
@@ -1209,6 +1254,15 @@ app.get('/api/client-appointments', async (req, res) => {
           b.booking_mode as mode,
           b.booking_start_at as booking_date,
           b.booking_status,
+          b.invitee_payment_amount,
+          b.emergency_contact_name,
+          b.emergency_contact_relation,
+          b.emergency_contact_number,
+          b.invitee_age,
+          b.invitee_gender,
+          b.invitee_occupation,
+          b.invitee_marital_status,
+          b.clinical_profile,
           CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
@@ -1227,7 +1281,16 @@ app.get('/api/client-appointments', async (req, res) => {
       mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
       has_session_notes: row.has_session_notes,
       booking_status: row.booking_status,
-      booking_date: row.booking_date
+      booking_date: row.booking_date,
+      invitee_payment_amount: row.invitee_payment_amount,
+      emergency_contact_name: row.emergency_contact_name,
+      emergency_contact_relation: row.emergency_contact_relation,
+      emergency_contact_number: row.emergency_contact_number,
+      invitee_age: row.invitee_age,
+      invitee_gender: row.invitee_gender,
+      invitee_occupation: row.invitee_occupation,
+      invitee_marital_status: row.invitee_marital_status,
+      clinical_profile: row.clinical_profile
     }));
 
     res.json({ appointments });
@@ -2025,6 +2088,133 @@ app.post('/api/send-booking-link', async (req, res) => {
   } catch (error) {
     console.error('❌ Error in booking link endpoint:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// SOS Risk Assessments endpoints
+app.post('/api/sos-assessments', async (req, res) => {
+  try {
+    const {
+      booking_id,
+      therapist_id,
+      therapist_name,
+      client_name,
+      session_name,
+      session_timings,
+      contact_info,
+      mode,
+      risk_assessment
+    } = req.body;
+
+    // Validate required fields
+    if (!risk_assessment || !risk_assessment.severity_level || !risk_assessment.risk_summary) {
+      return res.status(400).json({ error: 'Missing required risk assessment data' });
+    }
+
+    const insertQuery = `
+      INSERT INTO sos_risk_assessments (
+        booking_id, therapist_id, therapist_name, client_name, session_name,
+        session_timings, contact_info, mode,
+        risk_severity_level, risk_severity_description,
+        emotional_dysregulation, physical_harm_ideas, drug_alcohol_abuse,
+        suicidal_attempt, self_harm, delusions_hallucinations, impulsiveness,
+        severe_stress, social_isolation, concern_by_others, other_risk,
+        other_details, risk_summary
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+      ) RETURNING id, created_at
+    `;
+
+    const values = [
+      booking_id,
+      therapist_id,
+      therapist_name,
+      client_name,
+      session_name,
+      session_timings,
+      contact_info,
+      mode,
+      risk_assessment.severity_level,
+      risk_assessment.severity_description,
+      risk_assessment.risk_indicators?.emotionalDysregulation || null,
+      risk_assessment.risk_indicators?.physicalHarmIdeas || null,
+      risk_assessment.risk_indicators?.drugAlcoholAbuse || null,
+      risk_assessment.risk_indicators?.suicidalAttempt || null,
+      risk_assessment.risk_indicators?.selfHarm || null,
+      risk_assessment.risk_indicators?.delusionsHallucinations || null,
+      risk_assessment.risk_indicators?.impulsiveness || null,
+      risk_assessment.risk_indicators?.severeStress || null,
+      risk_assessment.risk_indicators?.socialIsolation || null,
+      risk_assessment.risk_indicators?.concernByOthers || null,
+      risk_assessment.risk_indicators?.other || null,
+      risk_assessment.other_details || null,
+      risk_assessment.risk_summary
+    ];
+
+    const result = await pool.query(insertQuery, values);
+    const assessmentId = result.rows[0].id;
+    const createdAt = result.rows[0].created_at;
+
+    res.status(201).json({
+      success: true,
+      assessment_id: assessmentId,
+      created_at: createdAt,
+      message: 'SOS Risk Assessment saved successfully'
+    });
+
+  } catch (error) {
+    console.error('Error saving SOS Risk Assessment:', error);
+    res.status(500).json({ 
+      error: 'Failed to save SOS Risk Assessment',
+      details: error.message 
+    });
+  }
+});
+
+// Update SOS Risk Assessment
+app.put('/api/sos-assessments', async (req, res) => {
+  try {
+    const { id } = req.query;
+    const { webhook_sent, webhook_response, status, reviewed_by, resolution_notes } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Assessment ID is required' });
+    }
+
+    const updateQuery = `
+      UPDATE sos_risk_assessments 
+      SET 
+        webhook_sent = COALESCE($2, webhook_sent),
+        webhook_response = COALESCE($3, webhook_response),
+        status = COALESCE($4, status),
+        reviewed_by = COALESCE($5, reviewed_by),
+        resolution_notes = COALESCE($6, resolution_notes),
+        updated_at = CURRENT_TIMESTAMP,
+        reviewed_at = CASE WHEN $5 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE reviewed_at END
+      WHERE id = $1
+      RETURNING *
+    `;
+
+    const values = [id, webhook_sent, webhook_response, status, reviewed_by, resolution_notes];
+    const result = await pool.query(updateQuery, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'SOS Risk Assessment not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      assessment: result.rows[0],
+      message: 'SOS Risk Assessment updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating SOS Risk Assessment:', error);
+    res.status(500).json({ 
+      error: 'Failed to update SOS Risk Assessment',
+      details: error.message 
+    });
   }
 });
 

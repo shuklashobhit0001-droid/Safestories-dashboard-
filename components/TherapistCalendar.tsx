@@ -67,7 +67,7 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
   // Calendar view state
-  const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda'>('month');
+  const [currentView, setCurrentView] = useState<'month' | 'week' | 'day'>('month');
   const [currentDate, setCurrentDate] = useState(new Date(2026, 1, 4)); // February 4, 2026
 
   // Event modal state
@@ -273,7 +273,7 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
   };
 
   // Calendar navigation handlers
-  const handleViewChange = (view: 'month' | 'week' | 'day' | 'agenda') => {
+  const handleViewChange = (view: 'month' | 'week' | 'day') => {
     setCurrentView(view);
   };
 
@@ -362,7 +362,7 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
                   onNavigate={handleNavigate}
                   view={currentView}
                   date={currentDate}
-                  views={['month', 'week', 'day', 'agenda']}
+                  views={['month', 'week', 'day']}
                   selectable
                   popup
                   showMultiDayTimes
@@ -476,7 +476,7 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
                         {/* Right side - View buttons */}
                         <div className="flex-1 flex justify-end">
                           <div className="rbc-btn-group">
-                            {['month', 'week', 'day', 'agenda'].map((viewName) => (
+                            {['month', 'week', 'day'].map((viewName) => (
                               <button
                                 key={viewName}
                                 type="button"

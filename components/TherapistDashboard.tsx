@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, User, CalendarIcon } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, User, CalendarIcon, ArrowLeft, Mail, Eye, EyeOff, Edit } from 'lucide-react';
 import { Logo } from './Logo';
 import { Notifications } from './Notifications';
 import { Toast } from './Toast';
@@ -72,6 +72,24 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [sosConfirmText, setSosConfirmText] = useState('');
   const [selectedSOSBooking, setSelectedSOSBooking] = useState<any>(null);
+  
+  // SOS Risk Assessment Form State
+  const [sosRiskSeverity, setSosRiskSeverity] = useState<number>(0);
+  const [sosRiskIndicators, setSosRiskIndicators] = useState<{[key: string]: 'Y' | 'N' | 'U' | ''}>({
+    emotionalDysregulation: '',
+    physicalHarmIdeas: '',
+    drugAlcoholAbuse: '',
+    suicidalAttempt: '',
+    selfHarm: '',
+    delusionsHallucinations: '',
+    impulsiveness: '',
+    severeStress: '',
+    socialIsolation: '',
+    concernByOthers: '',
+    other: ''
+  });
+  const [sosOtherDetails, setSosOtherDetails] = useState('');
+  const [sosRiskSummary, setSosRiskSummary] = useState('');
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [sessionNotesData, setSessionNotesData] = useState<any>(null);
   const [sessionNotesLoading, setSessionNotesLoading] = useState(false);
@@ -90,10 +108,37 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [clientEndDate, setClientEndDate] = useState('');
   const [selectedSessionNote, setSelectedSessionNote] = useState<any>(null);
   const [sessionNoteTab, setSessionNoteTab] = useState('notes');
+  const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents'>('overview');
+  const [isCaseHistoryVisible, setIsCaseHistoryVisible] = useState(false);
+  const [showCaseHistoryPasswordModal, setShowCaseHistoryPasswordModal] = useState(false);
+  const [caseHistoryPassword, setCaseHistoryPassword] = useState('');
+  const [caseHistoryPasswordError, setCaseHistoryPasswordError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
   const clientDropdownRef = React.useRef<HTMLDivElement>(null);
   const bookingActionsRef = React.useRef<HTMLTableElement>(null);
   const appointmentActionsRef = React.useRef<HTMLTableElement>(null);
+
+  // Utility functions to mask contact information
+  const maskPhone = (phone: string): string => {
+    if (!phone || phone === 'N/A') return phone;
+    // Show first 5 characters (e.g., "+91 98"), mask the rest
+    if (phone.length > 5) {
+      return phone.substring(0, 5) + '*** *****';
+    }
+    return phone;
+  };
+
+  const maskEmail = (email: string): string => {
+    if (!email || email === 'N/A') return email;
+    const [localPart, domain] = email.split('@');
+    if (!domain) return email;
+    // Show first 2 characters of local part, mask middle, show domain
+    if (localPart.length > 2) {
+      return localPart.substring(0, 2) + '***@' + domain;
+    }
+    return email;
+  };
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [additionalNoteText, setAdditionalNoteText] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState<any[]>([]);
@@ -120,6 +165,58 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     setIsClientDateDropdownOpen(false);
     setShowClientCustomCalendar(false);
     setShowCalendarView(false);
+    setIsCaseHistoryVisible(false);
+    setShowCaseHistoryPasswordModal(false);
+    setCaseHistoryPassword('');
+    setCaseHistoryPasswordError('');
+    setShowPassword(false);
+  };
+
+  const handleCaseHistoryView = () => {
+    if (isCaseHistoryVisible) {
+      // Hide case history
+      setIsCaseHistoryVisible(false);
+    } else {
+      // Show password modal to authenticate
+      setShowCaseHistoryPasswordModal(true);
+      setCaseHistoryPassword('');
+      setCaseHistoryPasswordError('');
+      setShowPassword(false);
+    }
+  };
+
+  const handleCaseHistoryPasswordSubmit = async () => {
+    if (!caseHistoryPassword) {
+      setCaseHistoryPasswordError('Please enter your password');
+      return;
+    }
+
+    try {
+      // Verify password by attempting to authenticate
+      const response = await fetch('/api/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: user.username,
+          password: caseHistoryPassword
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setIsCaseHistoryVisible(true);
+        setShowCaseHistoryPasswordModal(false);
+        setCaseHistoryPassword('');
+        setCaseHistoryPasswordError('');
+        setShowPassword(false);
+      } else {
+        setCaseHistoryPasswordError('Incorrect password');
+      }
+    } catch (error) {
+      console.error('Password verification error:', error);
+      setCaseHistoryPasswordError('Error verifying password');
+    }
   };
 
   const toggleTherapistFilter = (therapistName: string) => {
@@ -291,6 +388,24 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         const noShows = filteredAppointments.filter((a: any) => a.booking_status === 'no_show').length;
         const cancelled = filteredAppointments.filter((a: any) => a.booking_status === 'cancelled').length;
         setClientStats({ sessions, noShows, cancelled });
+        
+        // Update selectedClient with emergency contact and demographic data from the most recent appointment
+        if (data.appointments && data.appointments.length > 0) {
+          // Find the first appointment that has emergency contact info
+          const aptWithEmergency = data.appointments.find((apt: any) => apt.emergency_contact_name) || data.appointments[0];
+          
+          setSelectedClient((prev: any) => ({
+            ...prev,
+            emergency_contact_name: aptWithEmergency.emergency_contact_name,
+            emergency_contact_relation: aptWithEmergency.emergency_contact_relation,
+            emergency_contact_number: aptWithEmergency.emergency_contact_number,
+            invitee_age: aptWithEmergency.invitee_age,
+            invitee_gender: aptWithEmergency.invitee_gender,
+            invitee_occupation: aptWithEmergency.invitee_occupation,
+            invitee_marital_status: aptWithEmergency.invitee_marital_status,
+            clinical_profile: aptWithEmergency.clinical_profile
+          }));
+        }
       }
     } catch (error) {
       console.error('Error fetching client details:', error);
@@ -618,6 +733,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     console.log('Booking:', booking);
     console.log('Session timings:', booking.session_timings);
     
+    // Time validation enabled
     const timeMatch = booking.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
     if (timeMatch) {
       const [, dateStr, startTimeStr, endTimeStr] = timeMatch;
@@ -626,7 +742,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       const now = new Date();
       const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
       
-      console.log('Start date time:', endDateTime);
+      console.log('Start date time:', startDateTime);
       console.log('Current time:', now);
       console.log('End date time:', endDateTime);
       console.log('Hours since end:', hoursSinceEnd);
@@ -654,6 +770,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleSOSClickFromClient = (apt: any) => {
+    // Time validation enabled
     if (!apt.session_timings) {
       setToast({ message: 'Unable to validate session timing', type: 'error' });
       setSelectedAppointmentIndex(null);
@@ -697,77 +814,172 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleSOSConfirm = async () => {
-    if (sosConfirmText === 'Confirm') {
-      console.log('=== SOS TICKET DATA ===');
-      console.log('Selected booking:', selectedSOSBooking);
-      
-      const webhookData = {
-        therapist_id: user.therapist_id,
-        therapist_name: user.username,
-        client_name: selectedSOSBooking?.client_name,
-        session_name: selectedSOSBooking?.session_name || selectedSOSBooking?.therapy_type,
-        session_timings: selectedSOSBooking?.session_timings,
-        contact_info: selectedSOSBooking?.contact_info,
-        mode: selectedSOSBooking?.mode,
-        booking_id: selectedSOSBooking?.booking_id,
-        timestamp: new Date().toISOString()
+    try {
+      // Validate all required fields are completed
+      if (sosRiskSeverity === 0 || 
+          Object.values(sosRiskIndicators).some(val => val === '') ||
+          sosRiskSummary.trim() === '' ||
+          (sosRiskIndicators.other === 'Y' && sosOtherDetails.trim() === '')) {
+        setToast({ message: 'Please complete all required fields', type: 'error' });
+        return;
+      }
+
+      const riskAssessmentData = {
+        severity_level: sosRiskSeverity,
+        severity_description: sosRiskSeverity === 1 ? 'None - no evidence of risk present'
+          : sosRiskSeverity === 2 ? 'Low - low or minor evidence of risk of harm to self or others'
+          : sosRiskSeverity === 3 ? 'Medium - moderate risk present'
+          : sosRiskSeverity === 4 ? 'High - high or major risk of harm/injury to self or others'
+          : 'Severe/catastrophic - immediate attention needed',
+        risk_indicators: sosRiskIndicators,
+        other_details: sosOtherDetails,
+        risk_summary: sosRiskSummary
       };
       
-      console.log('Webhook data:', webhookData);
-      console.log('Webhook URL:', 'https://n8n.srv1169280.hstgr.cloud/webhook/3e725c04-ed19-4967-8a05-c0a1e8c8441d');
+      // 1. Save to database first - this is the critical step
+      const dbResponse = await fetch('/api/sos-assessments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: selectedSOSBooking?.booking_id,
+          therapist_id: user?.therapist_id,
+          therapist_name: user?.username,
+          client_name: selectedSOSBooking?.client_name,
+          session_name: selectedSOSBooking?.session_name || selectedSOSBooking?.therapy_type,
+          session_timings: selectedSOSBooking?.session_timings,
+          contact_info: selectedSOSBooking?.contact_info,
+          mode: selectedSOSBooking?.mode,
+          risk_assessment: riskAssessmentData
+        })
+      });
       
-      // Send to n8n webhook
+      let assessmentId = null;
+      if (!dbResponse.ok) {
+        const errorData = await dbResponse.json();
+        console.error('Database save failed:', errorData);
+        setToast({ message: 'Failed to save SOS assessment to database', type: 'error' });
+        return;
+      }
+      
+      const dbResult = await dbResponse.json();
+      assessmentId = dbResult.assessment_id;
+      console.log('✅ SOS assessment saved to database with ID:', assessmentId);
+      
+      // 2. Send to webhook with database ID (non-critical - don't fail if this fails)
       try {
-        const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/3e725c04-ed19-4967-8a05-c0a1e8c8441d', {
+        const webhookData = {
+          database_id: assessmentId,
+          therapist_id: user?.therapist_id,
+          therapist_name: user?.username,
+          client_name: selectedSOSBooking?.client_name,
+          session_name: selectedSOSBooking?.session_name || selectedSOSBooking?.therapy_type,
+          session_timings: selectedSOSBooking?.session_timings,
+          contact_info: selectedSOSBooking?.contact_info,
+          mode: selectedSOSBooking?.mode,
+          booking_id: selectedSOSBooking?.booking_id,
+          timestamp: new Date().toISOString(),
+          risk_assessment: riskAssessmentData
+        };
+        
+        const webhookResponse = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/3e725c04-ed19-4967-8a05-c0a1e8c8441d', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(webhookData)
         });
         
-        console.log('Webhook response status:', response.status);
-        console.log('Webhook response ok:', response.ok);
-        
-        if (response.ok) {
-          console.log('✓ Webhook sent successfully');
-        } else {
-          console.error('✗ Webhook failed:', await response.text());
+        // 3. Update database with webhook status
+        if (assessmentId) {
+          await fetch(`/api/sos-assessments?id=${assessmentId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              webhook_sent: webhookResponse.ok,
+              webhook_response: webhookResponse.ok ? 'Success' : `Failed: ${webhookResponse.status}`
+            })
+          });
         }
-      } catch (error) {
-        console.error('✗ Webhook error:', error);
+        
+        console.log('✅ Webhook sent successfully');
+      } catch (webhookError) {
+        console.error('⚠️ Webhook failed (non-critical):', webhookError);
+        // Update database to record webhook failure
+        if (assessmentId) {
+          try {
+            await fetch(`/api/sos-assessments?id=${assessmentId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                webhook_sent: false,
+                webhook_response: `Error: ${webhookError.message}`
+              })
+            });
+          } catch (updateError) {
+            console.error('Failed to update webhook status:', updateError);
+          }
+        }
       }
       
-      // Create audit log
-      await fetch('/api/audit-logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          therapist_id: user.therapist_id,
-          therapist_name: user.username,
-          action_type: 'raise_sos',
-          action_description: `${user.username} raised SOS ticket`,
-          client_name: selectedSOSBooking?.client_name
-        })
-      });
+      // 4. Create audit log (non-critical)
+      try {
+        await fetch('/api/audit-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            therapist_id: user?.therapist_id,
+            therapist_name: user?.username,
+            action_type: 'raise_sos',
+            action_description: `${user?.username} raised SOS ticket with risk assessment (Severity: ${sosRiskSeverity})`,
+            client_name: selectedSOSBooking?.client_name
+          })
+        });
+        console.log('✅ Audit log created');
+      } catch (auditError) {
+        console.error('⚠️ Audit log failed (non-critical):', auditError);
+      }
       
-      // Notify all admins
-      await fetch('/api/notifications/create-admin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          notification_type: 'sos_ticket',
-          title: 'SOS Ticket Raised',
-          message: `${user.username} raised an SOS ticket for client ${selectedSOSBooking?.client_name}`,
-          related_id: selectedSOSBooking?.booking_id
-        })
-      });
+      // 5. Notify all admins (non-critical)
+      try {
+        await fetch('/api/notifications/create-admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            notification_type: 'sos_ticket',
+            title: 'SOS Risk Assessment Submitted',
+            message: `${user?.username} submitted SOS risk assessment for client ${selectedSOSBooking?.client_name} (Severity Level: ${sosRiskSeverity})`,
+            related_id: selectedSOSBooking?.booking_id
+          })
+        });
+        console.log('✅ Admin notifications sent');
+      } catch (notificationError) {
+        console.error('⚠️ Admin notification failed (non-critical):', notificationError);
+      }
       
-      console.log('✓ Audit log created');
-      console.log('======================');
-      
-      setToast({ message: 'SOS ticket raised successfully!', type: 'success' });
+      // Success! Show success message and reset form
+      setToast({ message: 'SOS Risk Assessment submitted successfully!', type: 'success' });
       setShowSOSModal(false);
       setSosConfirmText('');
       setSelectedSOSBooking(null);
+      // Reset form
+      setSosRiskSeverity(0);
+      setSosRiskIndicators({
+        emotionalDysregulation: '',
+        physicalHarmIdeas: '',
+        drugAlcoholAbuse: '',
+        suicidalAttempt: '',
+        selfHarm: '',
+        delusionsHallucinations: '',
+        impulsiveness: '',
+        severeStress: '',
+        socialIsolation: '',
+        concernByOthers: '',
+        other: ''
+      });
+      setSosOtherDetails('');
+      setSosRiskSummary('');
+      
+    } catch (error) {
+      console.error('❌ Critical SOS assessment error:', error);
+      setToast({ message: 'Failed to submit SOS assessment. Please try again.', type: 'error' });
     }
   };
 
@@ -1007,7 +1219,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   const getAppointmentStatus = (apt: any) => {
     if (apt.booking_status === 'cancelled') return 'cancelled';
-    if (apt.booking_status === 'no_show') return 'no_show';
+    if (apt.booking_status === 'no_show' || apt.booking_status === 'no show') return 'no_show';
     if (apt.has_session_notes) return 'completed';
     
     // Parse session_timings to check if session ended - handle both IST and GMT formats
@@ -1536,17 +1748,123 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             </div>
           </div>
         ) : selectedClient ? (
-          <div className="p-8">
-            <button onClick={() => setSelectedClient(null)} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6">
-              <span className="text-2xl">←</span>
-            </button>
-            
-            <div className="flex justify-between items-start mb-6">
-              <div className="flex items-center gap-3">
-                <User size={24} className="text-teal-700" />
-                <h1 className="text-3xl font-bold">{selectedClient.client_name}</h1>
+          <div className="p-8 h-full overflow-auto">
+            {/* Header with Back Button */}
+            <div className="flex items-center gap-4 mb-6">
+              <button onClick={() => setSelectedClient(null)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <ArrowLeft size={24} />
+              </button>
+              <h1 className="text-3xl font-bold">{selectedClient.client_name}</h1>
+            </div>
+
+            {/* Two Column Layout - Left side fixed, Right side with tabs */}
+            <div className="grid grid-cols-12 gap-6">
+              {/* Left Column - Client Information (Always Visible) */}
+              <div className="col-span-4 space-y-6">
+                {/* Contact Info */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-600 mb-3">Contact Info:</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 text-sm">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                      <span className="text-gray-700">{maskPhone(selectedClient.client_phone || 'N/A')}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm">
+                      <Mail size={18} />
+                      <span className="text-gray-700">{maskEmail(selectedClient.client_email || 'N/A')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Emergency Contact */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-600 mb-3">Emergency Contact:</h3>
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <div className="mb-2">
+                      <span className="font-medium text-sm">{selectedClient.emergency_contact_name || 'Not provided'}</span>
+                      {selectedClient.emergency_contact_relation && (
+                        <span className="text-gray-500 text-sm ml-2">({selectedClient.emergency_contact_relation})</span>
+                      )}
+                    </div>
+                    {selectedClient.emergency_contact_number && (
+                      <div className="text-sm text-gray-600">{maskPhone(selectedClient.emergency_contact_number)}</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Case History */}
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-sm font-semibold text-gray-600">Case History:</h3>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={handleCaseHistoryView}
+                        className="p-1.5 hover:bg-gray-200 rounded transition-colors" 
+                        title={isCaseHistoryVisible ? "Hide Case History" : "View Case History"}
+                      >
+                        {isCaseHistoryVisible ? (
+                          <Eye size={16} className="text-gray-600" />
+                        ) : (
+                          <EyeOff size={16} className="text-gray-600" />
+                        )}
+                      </button>
+                      <button 
+                        disabled={!isCaseHistoryVisible}
+                        className={`p-1.5 rounded transition-colors ${
+                          isCaseHistoryVisible 
+                            ? 'hover:bg-gray-200 cursor-pointer' 
+                            : 'cursor-not-allowed opacity-40'
+                        }`}
+                        title={isCaseHistoryVisible ? "Edit Case History" : "View case history first to edit"}
+                      >
+                        <Edit size={16} className="text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="border rounded-lg p-4 bg-gray-50 min-h-[100px]">
+                    {isCaseHistoryVisible ? (
+                      selectedClient.clinical_profile ? (
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedClient.clinical_profile}</p>
+                      ) : (
+                        <button className="text-teal-600 text-sm hover:text-teal-700 flex items-center gap-2">
+                          <span>+ add case history</span>
+                        </button>
+                      )
+                    ) : (
+                      <div className="flex items-center justify-center h-20">
+                        <p className="text-gray-400 text-sm">Case history is hidden. Click the eye icon to view.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="relative" ref={clientDropdownRef}>
+
+              {/* Right Column - Tabbed Content */}
+              <div className="col-span-8 space-y-6">
+                {/* Navigation Tabs */}
+                <div className="flex gap-8 border-b">
+                  {[
+                    { id: 'overview' as const, label: 'Overview' },
+                    { id: 'sessions' as const, label: 'Progress notes' },
+                    { id: 'documents' as const, label: 'Goal Tracking' }
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setClientViewTab(tab.id)}
+                      className={`pb-3 font-medium text-sm ${
+                        clientViewTab === tab.id
+                          ? 'text-teal-700 border-b-2 border-teal-700'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Date Filter */}
+                <div className="flex justify-end">
+                  <div className="relative" ref={clientDropdownRef}>
                 <button 
                   onClick={() => setIsClientDateDropdownOpen(!isClientDateDropdownOpen)}
                   className="flex items-center gap-2 border rounded-lg px-4 py-2"
@@ -1631,15 +1949,58 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               </div>
             </div>
 
-            {/* Client Info Cards */}
-            <div className="mb-6 space-y-4">
-              <div className="grid grid-cols-1 gap-4">
-                <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
-                  <p className="text-sm text-gray-600 mb-1">Total Sessions</p>
-                  <p className="text-3xl font-bold text-teal-700">{clientAppointments.length}</p>
+                {/* Tab Content - Overview */}
+                {clientViewTab === 'overview' && (
+                <>
+                {/* Stats Cards */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Sessions</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.sessions}</p>
+                  </div>
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Next Session</p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {(() => {
+                        const upcoming = clientAppointments
+                          .filter(apt => {
+                            const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
+                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                          })
+                          .sort((a, b) => {
+                            const dateA = a.booking_date ? new Date(a.booking_date) : new Date();
+                            const dateB = b.booking_date ? new Date(b.booking_date) : new Date();
+                            return dateA.getTime() - dateB.getTime();
+                          })[0];
+                        
+                        if (upcoming && upcoming.booking_date) {
+                          const date = new Date(upcoming.booking_date);
+                          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        }
+                        return 'N/A';
+                      })()}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </div>
+
+                {/* Additional Stats Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Cancellation</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.cancelled}</p>
+                  </div>
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">NoShow</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.noShows}</p>
+                  </div>
+                </div>
+
+                {/* Appointments Section */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <User size={20} className="text-gray-700" />
+                    Appointments
+                  </h3>
 
             {/* Tabs */}
             <div className="flex gap-6 mb-4">
@@ -1815,6 +2176,25 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 </div>
               </div>
             )}
+                </div>
+                </>
+                )}
+
+                {/* Sessions Tab */}
+                {clientViewTab === 'sessions' && (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500 text-lg">Progress notes view coming soon...</p>
+                  </div>
+                )}
+
+                {/* Documents Tab */}
+                {clientViewTab === 'documents' && (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500 text-lg">Goal Tracking view coming soon...</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         ) : activeView === 'clients' ? (
           renderMyClients()
@@ -2302,55 +2682,266 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           onClose={() => setToast(null)}
         />
       )}
-      
-      {showSOSModal && (
+
+      {/* Case History Password Modal */}
+      {showCaseHistoryPasswordModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4 text-red-600">Raise SOS Ticket</h3>
-            <p className="text-gray-600 mb-4">Are you sure you want to raise a ticket for this appointment?</p>
-            
-            {selectedSOSBooking && (
-              <div className="bg-gray-50 p-3 rounded mb-4 text-sm">
-                <p><strong>Client:</strong> {selectedSOSBooking.client_name}</p>
-                <p><strong>Session:</strong> {selectedSOSBooking.session_name || selectedSOSBooking.therapy_type}</p>
-              </div>
-            )}
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Type "Confirm" to proceed:
-              </label>
+            <h3 className="text-xl font-bold mb-4">Verify Password</h3>
+            <p className="text-gray-600 mb-4">Please enter your password to view case history</p>
+            <div className="relative">
               <input
-                type="text"
-                value={sosConfirmText}
-                onChange={(e) => setSosConfirmText(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="Type Confirm"
+                type={showPassword ? "text" : "password"}
+                value={caseHistoryPassword}
+                onChange={(e) => setCaseHistoryPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleCaseHistoryPasswordSubmit()}
+                placeholder="Enter your password"
+                className="w-full px-4 py-2 pr-10 border rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                autoFocus
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700"
+              >
+                {showPassword ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
+              </button>
             </div>
-            
+            {caseHistoryPasswordError && (
+              <p className="text-red-600 text-sm mb-4">{caseHistoryPasswordError}</p>
+            )}
             <div className="flex gap-3">
               <button
+                onClick={handleCaseHistoryPasswordSubmit}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+              >
+                Verify
+              </button>
+              <button
                 onClick={() => {
-                  setShowSOSModal(false);
-                  setSosConfirmText('');
-                  setSelectedSOSBooking(null);
+                  setShowCaseHistoryPasswordModal(false);
+                  setCaseHistoryPassword('');
+                  setCaseHistoryPasswordError('');
+                  setShowPassword(false);
                 }}
                 className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
               >
                 Cancel
               </button>
-              <button
-                onClick={handleSOSConfirm}
-                disabled={sosConfirmText !== 'Confirm'}
-                className={`flex-1 px-4 py-2 rounded-lg ${
-                  sosConfirmText === 'Confirm'
-                    ? 'bg-red-600 text-white hover:bg-red-700'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
-              >
-                Raise Ticket
-              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showSOSModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
+            {/* Sticky Header */}
+            <div className="p-6 border-b bg-white rounded-t-lg flex-shrink-0">
+              <h3 className="text-2xl font-bold text-red-600 mb-2">SOS Risk Assessment</h3>
+              <p className="text-gray-600 mb-4">You're raising an SOS for client safety. Please answer the following so we can support you and the client appropriately:</p>
+              
+              {selectedSOSBooking && (
+                <div className="bg-gray-50 p-3 rounded text-sm">
+                  <p><strong>Client:</strong> {selectedSOSBooking.client_name}</p>
+                  <p><strong>Session:</strong> {selectedSOSBooking.session_name || selectedSOSBooking.therapy_type}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              
+              {/* Section 1: Risk Severity */}
+              <div className="space-y-4">
+                <h4 className="text-lg font-semibold text-gray-800">1. Risk Severity</h4>
+                
+                {/* Progress Bar */}
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => setSosRiskSeverity(level)}
+                        className={`flex-1 h-8 rounded-lg border-2 transition-all ${
+                          sosRiskSeverity >= level
+                            ? level === 1 ? 'bg-green-500 border-green-500'
+                            : level === 2 ? 'bg-yellow-400 border-yellow-400'
+                            : level === 3 ? 'bg-orange-400 border-orange-400'
+                            : level === 4 ? 'bg-red-500 border-red-500'
+                            : 'bg-red-700 border-red-700'
+                            : 'bg-gray-100 border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        <span className={`text-sm font-medium ${
+                          sosRiskSeverity >= level ? 'text-white' : 'text-gray-600'
+                        }`}>
+                          {level}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {/* Level Labels */}
+                  <div className="flex justify-between text-xs text-gray-600">
+                    <span>None</span>
+                    <span>Low</span>
+                    <span>Medium</span>
+                    <span>High</span>
+                    <span>Severe</span>
+                  </div>
+                  
+                  {/* Selected Level Description */}
+                  {sosRiskSeverity > 0 && (
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                      <p className="text-sm font-medium text-blue-800">
+                        Level {sosRiskSeverity}: {
+                          sosRiskSeverity === 1 ? 'None - no evidence of risk present'
+                          : sosRiskSeverity === 2 ? 'Low - low or minor evidence of risk of harm to self or others'
+                          : sosRiskSeverity === 3 ? 'Medium - moderate risk present'
+                          : sosRiskSeverity === 4 ? 'High - high or major risk of harm/injury to self or others'
+                          : 'Severe/catastrophic - immediate attention needed'
+                        }
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 2: Current Risk Indicators */}
+              <div className="space-y-4">
+                <h4 className="text-lg font-semibold text-gray-800">2. Current Risk Indicators</h4>
+                <p className="text-sm text-gray-600 mb-4">Y – Yes, risk present. N – No, no risk. U – Unknown, it is not possible to rate at present.</p>
+                
+                <div className="space-y-4">
+                  {[
+                    { key: 'emotionalDysregulation', label: 'a. Severe emotional dysregulation' },
+                    { key: 'physicalHarmIdeas', label: 'b. Physical harm to others or ideas of harming others' },
+                    { key: 'drugAlcoholAbuse', label: 'c. Drug/Alcohol Abuse' },
+                    { key: 'suicidalAttempt', label: 'd. Suicidal Attempt or plan to commit Suicide' },
+                    { key: 'selfHarm', label: 'e. Deliberate Self Harm or ideas of self harm / suicidal ideation' },
+                    { key: 'delusionsHallucinations', label: 'f. Delusions or hallucinations' },
+                    { key: 'impulsiveness', label: 'g. Impulsiveness' },
+                    { key: 'severeStress', label: 'h. Recent severe stress/life event' },
+                    { key: 'socialIsolation', label: 'i. Social Isolation' },
+                    { key: 'concernByOthers', label: 'j. Concern expressed by others (relatives, carers)' },
+                    { key: 'other', label: 'k. Other (please specify)' }
+                  ].map((item) => (
+                    <div key={item.key} className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-start justify-between">
+                        <label className="text-sm font-medium text-gray-700 flex-1 mr-4">
+                          {item.label}
+                        </label>
+                        <div className="flex space-x-4">
+                          {['Y', 'N', 'U'].map((option) => (
+                            <label key={option} className="flex items-center space-x-1 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={item.key}
+                                value={option}
+                                checked={sosRiskIndicators[item.key] === option}
+                                onChange={(e) => setSosRiskIndicators(prev => ({
+                                  ...prev,
+                                  [item.key]: e.target.value as 'Y' | 'N' | 'U'
+                                }))}
+                                className="text-red-600 focus:ring-red-500"
+                              />
+                              <span className="text-sm font-medium text-gray-700">{option}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Other details input */}
+                      {item.key === 'other' && sosRiskIndicators.other === 'Y' && (
+                        <div className="mt-3">
+                          <input
+                            type="text"
+                            value={sosOtherDetails}
+                            onChange={(e) => setSosOtherDetails(e.target.value)}
+                            placeholder="Please specify other risk factors..."
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Section 3: Risk Summary */}
+              <div className="space-y-4">
+                <h4 className="text-lg font-semibold text-gray-800">3. Risk Summary</h4>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Give brief details of risks identified and any protective factors and what risk remains:
+                  </label>
+                  <textarea
+                    value={sosRiskSummary}
+                    onChange={(e) => setSosRiskSummary(e.target.value)}
+                    rows={6}
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder="Provide detailed risk assessment summary..."
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Sticky Footer */}
+            <div className="p-6 border-t bg-white rounded-b-lg flex-shrink-0">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowSOSModal(false);
+                    setSosConfirmText('');
+                    setSelectedSOSBooking(null);
+                    // Reset form
+                    setSosRiskSeverity(0);
+                    setSosRiskIndicators({
+                      emotionalDysregulation: '',
+                      physicalHarmIdeas: '',
+                      drugAlcoholAbuse: '',
+                      suicidalAttempt: '',
+                      selfHarm: '',
+                      delusionsHallucinations: '',
+                      impulsiveness: '',
+                      severeStress: '',
+                      socialIsolation: '',
+                      concernByOthers: '',
+                      other: ''
+                    });
+                    setSosOtherDetails('');
+                    setSosRiskSummary('');
+                  }}
+                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSOSConfirm}
+                  disabled={
+                    sosRiskSeverity === 0 || 
+                    Object.values(sosRiskIndicators).some(val => val === '') ||
+                    sosRiskSummary.trim() === '' ||
+                    (sosRiskIndicators.other === 'Y' && sosOtherDetails.trim() === '')
+                  }
+                  className={`flex-1 px-4 py-2 rounded-lg ${
+                    sosRiskSeverity > 0 && 
+                    Object.values(sosRiskIndicators).every(val => val !== '') &&
+                    sosRiskSummary.trim() !== '' &&
+                    (sosRiskIndicators.other !== 'Y' || sosOtherDetails.trim() !== '')
+                      ? 'bg-red-600 text-white hover:bg-red-700'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Submit SOS Assessment
+                </button>
+              </div>
             </div>
           </div>
         </div>

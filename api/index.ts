@@ -908,12 +908,12 @@ app.get('/api/therapist-stats', async (req, res) => {
 
     const noShows = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
-          [`%${therapistFirstName}%`, 'no_show', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+          [`%${therapistFirstName}%`, 'no_show', 'no show', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2',
-          [`%${therapistFirstName}%`, 'no_show']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3)',
+          [`%${therapistFirstName}%`, 'no_show', 'no show']
         );
 
     const cancelled = hasDateFilter
@@ -932,8 +932,8 @@ app.get('/api/therapist-stats', async (req, res) => {
     );
 
     const lastMonthNoShows = await pool.query(
-      'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status = $2 AND booking_start_at BETWEEN $3 AND $4',
-      [`%${therapistFirstName}%`, 'no_show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
+      [`%${therapistFirstName}%`, 'no_show', 'no show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
     );
 
     const lastMonthCancelled = await pool.query(
