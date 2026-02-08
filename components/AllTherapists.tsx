@@ -586,16 +586,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    // Debug: Log first appointment to see structure
-    if (client.invitee_name === 'Meera' && appointments.length > 0) {
-      console.log('Sample appointment structure:', appointments[0]);
-      console.log('Client data:', {
-        name: client.invitee_name,
-        email: client.invitee_email,
-        phone: client.invitee_phone
-      });
-    }
-    
     // Check if client has any appointments in the last 30 days
     const hasRecentAppointment = appointments.some(apt => {
       // Match by email or phone (normalize for comparison)
@@ -606,16 +596,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       
       const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
       const phoneMatch = clientPhones && aptPhone && clientPhones.some(phone => phone === aptPhone);
-      
-      // Debug for Meera
-      if (client.invitee_name === 'Meera' && (emailMatch || phoneMatch)) {
-        console.log('Match found for Meera:', {
-          emailMatch,
-          phoneMatch,
-          aptDate: apt.booking_start_at_raw,
-          status: apt.booking_status
-        });
-      }
       
       if (emailMatch || phoneMatch) {
         const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
