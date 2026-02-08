@@ -721,9 +721,13 @@ app.get('/api/therapist-details', async (req, res) => {
     const appointmentsResult = await pool.query(`
       SELECT 
         invitee_name,
+        invitee_email,
+        invitee_phone,
         booking_resource_name,
         booking_start_at,
-        booking_invitee_time
+        booking_start_at as booking_start_at_raw,
+        booking_invitee_time,
+        booking_status
       FROM bookings
       WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
       ORDER BY booking_start_at DESC
