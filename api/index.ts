@@ -366,12 +366,20 @@ app.get('/api/clients', async (req, res) => {
           booking_host_name: row.booking_host_name,
           created_at: row.created_at,
           latest_booking_date: null,
+          booking_link_sent_at: null,
           therapists: []
         });
       }
       
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
+      
+      // Track most recent booking_request created_at (only for leads with session_count = 0)
+      if (parseInt(row.session_count) === 0 && row.created_at) {
+        if (!client.booking_link_sent_at || new Date(row.created_at) > new Date(client.booking_link_sent_at)) {
+          client.booking_link_sent_at = row.created_at;
+        }
+      }
       
       // Update latest_booking_date only from active bookings
       const isActiveBooking = row.booking_status && !['cancelled', 'canceled', 'no_show', 'no show'].includes(row.booking_status);
