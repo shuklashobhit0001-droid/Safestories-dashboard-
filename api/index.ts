@@ -851,6 +851,65 @@ app.put('/api/therapist-profile', async (req, res) => {
   }
 });
 
+// Get admin profile
+app.get('/api/admin-profile', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+
+    if (!user_id) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, username, full_name, email, phone, profile_picture_url FROM users WHERE id = $1 AND role = 'admin'`,
+      [user_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching admin profile:', error);
+    res.status(500).json({ error: 'Failed to fetch admin profile' });
+  }
+});
+
+// Update admin profile
+app.put('/api/admin-profile', async (req, res) => {
+  try {
+    const { 
+      user_id,
+      name, 
+      email, 
+      phone, 
+      profilePictureUrl
+    } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE users 
+       SET full_name = $1, email = $2, phone = $3, profile_picture_url = $4
+       WHERE id = $5 AND role = 'admin'
+       RETURNING id, username, full_name, email, phone, profile_picture_url`,
+      [name, email, phone, profilePictureUrl, user_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating admin profile:', error);
+    res.status(500).json({ error: 'Failed to update admin profile' });
+  }
+});
+
 // Update password
 app.post('/api/update-password', async (req, res) => {
   try {
