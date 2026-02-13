@@ -1124,6 +1124,7 @@ app.get('/api/client-details', async (req, res) => {
         b.invitee_phone,
         b.booking_resource_name,
         b.booking_start_at,
+        b.booking_end_at,
         b.booking_invitee_time,
         b.booking_host_name,
         b.booking_status,
@@ -1159,7 +1160,8 @@ app.get('/api/client-details', async (req, res) => {
     const appointments = appointmentsResult.rows.map(apt => ({
       ...apt,
       booking_invitee_time: convertToIST(apt.booking_invitee_time),
-      booking_start_at_raw: apt.booking_start_at
+      booking_start_at_raw: apt.booking_start_at,
+      booking_end_at_raw: apt.booking_end_at
     }));
 
     res.json({
