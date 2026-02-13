@@ -8,8 +8,8 @@ interface CreatePageProps {
 }
 
 export const CreatePage: React.FC<CreatePageProps> = ({ onCreateBooking, onSendBookingLink, onAddNewTherapist }) => {
-  // Check if running in production (Vercel)
-  const isProduction = import.meta.env.PROD || import.meta.env.VITE_VERCEL === '1';
+  // Check if running in production (disabled on Vercel, enabled in local development)
+  const isProduction = import.meta.env.MODE !== 'development';
   
   return (
     <div className="p-8">

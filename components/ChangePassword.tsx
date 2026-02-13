@@ -186,10 +186,10 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
       </button>
 
       <h1 className="text-3xl font-bold mb-1">
-        {import.meta.env.VITE_VERCEL !== '1' ? 'Change/Forgot Password' : 'Change Password'}
+        {import.meta.env.MODE === 'development' ? 'Change/Forgot Password' : 'Change Password'}
       </h1>
       <p className="text-gray-600 mb-8">
-        {import.meta.env.VITE_VERCEL !== '1' ? 'Update or recover your account password' : 'Update your account password'}
+        {import.meta.env.MODE === 'development' ? 'Update or recover your account password' : 'Update your account password'}
       </p>
 
       {/* Tabs */}
@@ -209,23 +209,23 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
         </button>
         <button
           onClick={() => {
-            // Only allow tab switch in local (not on Vercel)
-            if (import.meta.env.VITE_VERCEL !== '1') {
+            // Only allow tab switch in local (not in production)
+            if (import.meta.env.MODE === 'development') {
               setActiveTab('forgot');
               setPasswordError('');
             }
           }}
-          disabled={import.meta.env.VITE_VERCEL === '1'}
+          disabled={import.meta.env.MODE !== 'development'}
           className={`pb-3 px-4 font-medium flex items-center gap-2 ${
             activeTab === 'forgot'
               ? 'text-teal-700 border-b-2 border-teal-700'
-              : import.meta.env.VITE_VERCEL === '1'
+              : import.meta.env.MODE !== 'development'
               ? 'text-gray-400 cursor-not-allowed opacity-60'
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
           Forgot Password
-          {import.meta.env.VITE_VERCEL === '1' && (
+          {import.meta.env.MODE !== 'development' && (
             <span className="text-red-500 text-xs">✕</span>
           )}
         </button>

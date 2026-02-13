@@ -1672,7 +1672,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               >
                 <Eye size={18} className="text-gray-600" />
                 <span className="text-sm font-medium">
-                  {import.meta.env.VITE_VERCEL !== '1' ? 'Change/Forgot Password' : 'Change Password'}
+                  {import.meta.env.MODE === 'development' ? 'Change/Forgot Password' : 'Change Password'}
                 </span>
               </button>
             </div>
