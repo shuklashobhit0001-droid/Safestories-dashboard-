@@ -2328,6 +2328,48 @@ app.post('/api/send-booking-link', async (req, res) => {
   }
 });
 
+// Check client session type (free consultation vs paid sessions)
+app.get('/api/client-session-type', async (req, res) => {
+  try {
+    const { client_id } = req.query;
+    
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
+    }
+
+    // Check if client has any PAID session bookings (non-free-consultation)
+    const paidBookingsResult = await pool.query(
+      `SELECT booking_id FROM bookings 
+       WHERE invitee_phone = $1 
+       AND booking_resource_name NOT ILIKE '%free consultation%'
+       LIMIT 1`,
+      [client_id]
+    );
+    const hasPaidSessions = paidBookingsResult.rows.length > 0;
+
+    // Check if client has free consultation bookings
+    const freeConsultBookingResult = await pool.query(
+      `SELECT booking_id FROM bookings 
+       WHERE invitee_phone = $1 
+       AND booking_resource_name ILIKE '%free consultation%'
+       LIMIT 1`,
+      [client_id]
+    );
+    const hasFreeConsultation = freeConsultBookingResult.rows.length > 0;
+
+    res.json({ 
+      success: true, 
+      data: { 
+        hasPaidSessions, 
+        hasFreeConsultation 
+      } 
+    });
+  } catch (error) {
+    console.error('Error checking client session type:', error);
+    res.status(500).json({ error: 'Failed to check client session type' });
+  }
+});
+
 const PORT = 3002;
 app.listen(PORT, () => {
   console.log(`\n✓ API server running on http://localhost:${PORT}`);
