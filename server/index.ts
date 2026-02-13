@@ -1273,25 +1273,11 @@ app.get('/api/client-details', async (req, res) => {
     const appointmentsResult = await pool.query(query, params);
 
     const appointments = appointmentsResult.rows.map(apt => {
-      let status = apt.booking_status || 'confirmed';
-      
-      // Calculate status server-side (same logic as /api/appointments)
-      if (status !== 'cancelled' && status !== 'canceled' && status !== 'no_show' && status !== 'no show') {
-        if (apt.has_session_notes) {
-          status = 'completed';
-        } else if (apt.is_past) {
-          status = 'pending_notes';
-        } else {
-          status = 'scheduled';
-        }
-      }
-      
       return {
         ...apt,
         booking_invitee_time: convertToIST(apt.booking_invitee_time),
         booking_start_at_raw: apt.booking_start_at,
         booking_end_at_raw: apt.booking_end_at,
-        booking_status: status,
         is_past: apt.is_past
       };
     });
