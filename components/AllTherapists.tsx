@@ -417,27 +417,18 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       const data = await response.json();
       
       const appointmentsWithStatus = (data.appointments || []).map((apt: any) => {
-        let status = apt.booking_status || 'confirmed';
-        const now = new Date();
+        // Server already calculated the status, just use it
+        console.log('📅 Appointment:', apt.booking_resource_name);
+        console.log('   Status from server:', apt.booking_status);
+        console.log('   Is past (server):', apt.is_past);
+        console.log('   Has notes:', apt.has_session_notes);
+        console.log('');
         
-        // Parse the session date - booking_start_at_raw is in IST format
-        const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-        
-        // Also check booking_end_at to determine if session has ended
-        const sessionEndDate = apt.booking_end_at_raw ? new Date(apt.booking_end_at_raw) : sessionDate;
-        
-        if (status !== 'cancelled' && status !== 'no_show' && status !== 'no show') {
-          if (apt.has_session_notes) {
-            status = 'completed';
-          } else if (sessionEndDate < now) {
-            // Session has ended (use end time, not start time)
-            status = 'pending_notes';
-          } else {
-            status = 'scheduled';
-          }
-        }
-        
-        return { ...apt, booking_status: status };
+        return {
+          ...apt,
+          // Use the status calculated by the server
+          booking_status: apt.booking_status
+        };
       });
       
       setClientAppointments(appointmentsWithStatus);
@@ -445,10 +436,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       // Calculate stats
       const bookings = appointmentsWithStatus.length; // Total appointments
       const sessionsCompleted = appointmentsWithStatus.filter((apt: any) => {
-        const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-        const isPast = sessionDate < new Date();
         const isNotCancelledOrNoShow = apt.booking_status !== 'cancelled' && apt.booking_status !== 'no_show';
-        return isPast && isNotCancelledOrNoShow;
+        return apt.is_past && isNotCancelledOrNoShow;
       }).length; // Only past sessions (completed + pending notes), excluding cancelled/no_show
       const noShows = appointmentsWithStatus.filter((apt: any) => apt.booking_status === 'no_show').length;
       const cancelled = appointmentsWithStatus.filter((apt: any) => apt.booking_status === 'cancelled').length;

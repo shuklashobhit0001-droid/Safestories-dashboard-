@@ -1128,7 +1128,8 @@ app.get('/api/client-details', async (req, res) => {
         b.booking_invitee_time,
         b.booking_host_name,
         b.booking_status,
-        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
+        CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes,
+        (b.booking_end_at < NOW()) as is_past
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
       WHERE 1=1
@@ -1157,12 +1158,29 @@ app.get('/api/client-details', async (req, res) => {
 
     const appointmentsResult = await pool.query(query, params);
 
-    const appointments = appointmentsResult.rows.map(apt => ({
-      ...apt,
-      booking_invitee_time: convertToIST(apt.booking_invitee_time),
-      booking_start_at_raw: apt.booking_start_at,
-      booking_end_at_raw: apt.booking_end_at
-    }));
+    const appointments = appointmentsResult.rows.map(apt => {
+      let status = apt.booking_status || 'confirmed';
+      
+      // Calculate status server-side (same logic as /api/appointments)
+      if (status !== 'cancelled' && status !== 'canceled' && status !== 'no_show' && status !== 'no show') {
+        if (apt.has_session_notes) {
+          status = 'completed';
+        } else if (apt.is_past) {
+          status = 'pending_notes';
+        } else {
+          status = 'scheduled';
+        }
+      }
+      
+      return {
+        ...apt,
+        booking_invitee_time: convertToIST(apt.booking_invitee_time),
+        booking_start_at_raw: apt.booking_start_at,
+        booking_end_at_raw: apt.booking_end_at,
+        booking_status: status,
+        is_past: apt.is_past
+      };
+    });
 
     res.json({
       appointments
