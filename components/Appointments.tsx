@@ -42,7 +42,7 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
     { id: 'all', label: 'All Appointments' },
     { id: 'completed', label: 'Completed' },
     { id: 'free_consultation', label: 'Free Consultation' },
-    { id: 'pending_notes', label: 'Pending Notes' },
+    { id: 'pending_notes', label: 'Pending Session Notes' },
     { id: 'cancelled', label: 'Cancelled' },
     { id: 'no_show', label: 'No Show' },
   ];

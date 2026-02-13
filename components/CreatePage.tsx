@@ -8,7 +8,8 @@ interface CreatePageProps {
 }
 
 export const CreatePage: React.FC<CreatePageProps> = ({ onCreateBooking, onSendBookingLink, onAddNewTherapist }) => {
-  // const isProduction = process.env.NODE_ENV === 'production';
+  // Check if running in production (Vercel)
+  const isProduction = import.meta.env.PROD || import.meta.env.VITE_VERCEL === '1';
   
   return (
     <div className="p-8">
@@ -59,20 +60,34 @@ export const CreatePage: React.FC<CreatePageProps> = ({ onCreateBooking, onSendB
 
         {/* Add New Therapist Card */}
         <div 
-          onClick={onAddNewTherapist}
-          className="bg-white rounded-lg border-2 p-6 cursor-pointer hover:shadow-lg transition-shadow"
-          style={{ borderColor: '#21615D' }}
+          onClick={isProduction ? undefined : onAddNewTherapist}
+          className={`bg-white rounded-lg border-2 p-6 transition-shadow ${
+            isProduction 
+              ? 'cursor-not-allowed opacity-60' 
+              : 'cursor-pointer hover:shadow-lg'
+          }`}
+          style={{ borderColor: isProduction ? '#9CA3AF' : '#21615D' }}
         >
+          {isProduction && (
+            <div className="absolute top-3 right-3 bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+              Development in Progress
+            </div>
+          )}
           <div className="flex items-center gap-3 mb-4">
             <div 
               className="w-12 h-12 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: '#21615D' }}
+              style={{ backgroundColor: isProduction ? '#9CA3AF' : '#21615D' }}
             >
               <UserPlus size={24} className="text-white" />
             </div>
-            <h2 className="text-xl font-bold" style={{ color: '#21615D' }}>Add New Therapist</h2>
+            <h2 
+              className="text-xl font-bold" 
+              style={{ color: isProduction ? '#6B7280' : '#21615D' }}
+            >
+              Add New Therapist
+            </h2>
           </div>
-          <p className="text-gray-600 text-sm leading-relaxed">
+          <p className={`text-sm leading-relaxed ${isProduction ? 'text-gray-500' : 'text-gray-600'}`}>
             Add a new therapist to the platform with their details and availability.
           </p>
         </div>

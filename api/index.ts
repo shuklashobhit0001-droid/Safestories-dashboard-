@@ -1,8 +1,18 @@
 import express from 'express';
+import multer from 'multer';
 import cors from 'cors';
 import pool from './lib/db.js';
 import { convertToIST } from './lib/timezone.js';
 import { startDashboardApiBookingSync } from './lib/dashboardApiBookingSync.js';
+import { uploadFile } from './lib/minio.js';
+
+// Configure multer for memory storage
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 12 * 1024 * 1024, // 12MB limit
+  }
+});
 
 // Helper function to get current IST timestamp as formatted string
 const getCurrentISTTimestamp = () => {
@@ -59,6 +69,27 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Verify password endpoint (for case history access and password change)
+app.post('/api/verify-password', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    const result = await pool.query(
+      'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND password = $2',
+      [username, password]
+    );
+
+    if (result.rows.length > 0) {
+      res.json({ success: true });
+    } else {
+      res.json({ success: false });
+    }
+  } catch (error) {
+    console.error('Password verification error:', error);
+    res.status(500).json({ success: false, message: 'Verification failed' });
+  }
+});
+
 // Get live sessions count
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
@@ -105,20 +136,10 @@ app.get('/api/dashboard/stats', async (req, res) => {
     const { start, end } = req.query;
     const hasDateFilter = start && end;
     
-    // LOGGING: Request parameters
-    console.log('\n=== DASHBOARD STATS API CALLED ===');
-    console.log('Date Filter:', hasDateFilter ? `${start} to ${end}` : 'All Time');
-    
     // Calculate last month date range
     const now = new Date();
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-    
-    // Debug: Get all booking statuses
-    const statusDebug = await pool.query(
-      'SELECT booking_status, COUNT(*) as count FROM bookings GROUP BY booking_status ORDER BY count DESC'
-    );
-    console.log('Total Booking Statuses:', statusDebug.rows);
     
     const revenue = hasDateFilter
       ? await pool.query(
@@ -129,20 +150,32 @@ app.get('/api/dashboard/stats', async (req, res) => {
           'SELECT COALESCE(SUM(invitee_payment_amount), 0) as total FROM bookings WHERE booking_status NOT IN ($1, $2)',
           ['cancelled', 'canceled']
         );
-    
-    console.log('Revenue Query Result:', revenue.rows[0].total);
 
-    const sessions = hasDateFilter
+    // NEW: Bookings - count everything
+    const bookings = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_status NOT IN ($1, $2, $3, $4) AND booking_start_at BETWEEN $5 AND $6',
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_start_at BETWEEN $1 AND $2',
+          [start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          'SELECT COUNT(*) as total FROM bookings'
+        );
+
+    // NEW: Sessions Completed - count ALL completed sessions (paid + free) where session date has passed
+    const sessionsCompleted = hasDateFilter
+      ? await pool.query(
+          `SELECT COUNT(*) as total FROM bookings b
+           WHERE b.booking_start_at < NOW()
+           AND b.booking_status NOT IN ($1, $2, $3, $4)
+           AND b.booking_start_at BETWEEN $5 AND $6`,
           ['cancelled', 'canceled', 'no_show', 'no show', start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_status NOT IN ($1, $2, $3, $4)',
+          `SELECT COUNT(*) as total FROM bookings b
+           WHERE b.booking_start_at < NOW()
+           AND b.booking_status NOT IN ($1, $2, $3, $4)`,
           ['cancelled', 'canceled', 'no_show', 'no show']
         );
-    
-    console.log('Sessions Query Result:', sessions.rows[0].total);
 
     const freeConsultations = hasDateFilter
       ? await pool.query(
@@ -191,8 +224,17 @@ app.get('/api/dashboard/stats', async (req, res) => {
           ['no_show', 'no show']
         );
 
-    const lastMonthSessions = await pool.query(
-      'SELECT COUNT(*) as total FROM bookings WHERE booking_status NOT IN ($1, $2, $3, $4) AND booking_start_at BETWEEN $5 AND $6',
+    // Last month stats
+    const lastMonthBookings = await pool.query(
+      'SELECT COUNT(*) as total FROM bookings WHERE booking_start_at BETWEEN $1 AND $2',
+      [lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
+    );
+
+    const lastMonthSessionsCompleted = await pool.query(
+      `SELECT COUNT(*) as total FROM bookings b
+       WHERE b.booking_start_at < NOW()
+       AND b.booking_status NOT IN ($1, $2, $3, $4)
+       AND b.booking_start_at BETWEEN $5 AND $6`,
       ['cancelled', 'canceled', 'no_show', 'no show', lastMonthStart.toISOString(), lastMonthEnd.toISOString()]
     );
 
@@ -219,8 +261,10 @@ app.get('/api/dashboard/stats', async (req, res) => {
     const responseData = {
       revenue: revenue.rows[0].total,
       refundedAmount: refundedAmount.rows[0].total,
-      sessions: sessions.rows[0].total,
-      lastMonthSessions: lastMonthSessions.rows[0].total,
+      bookings: bookings.rows[0].total,
+      lastMonthBookings: lastMonthBookings.rows[0].total,
+      sessionsCompleted: sessionsCompleted.rows[0].total,
+      lastMonthSessionsCompleted: lastMonthSessionsCompleted.rows[0].total,
       freeConsultations: freeConsultations.rows[0].total,
       lastMonthFreeConsultations: lastMonthFreeConsultations.rows[0].total,
       cancelled: cancelled.rows[0].total,
@@ -230,9 +274,6 @@ app.get('/api/dashboard/stats', async (req, res) => {
       noShows: noShows.rows[0].total,
       lastMonthNoShows: lastMonthNoShows.rows[0].total,
     };
-    
-    console.log('Response Data:', responseData);
-    console.log('=== END DASHBOARD STATS API ===\n');
     
     res.json(responseData);
   } catch (error) {
@@ -244,7 +285,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
 // Get upcoming bookings
 app.get('/api/dashboard/bookings', async (req, res) => {
   try {
-    const { start, end } = req.query;
+    const { start, end, limit = '3' } = req.query;
+    const limitNum = parseInt(limit as string) || 3;
     
     const result = start && end
       ? await pool.query(
@@ -260,8 +302,8 @@ app.get('/api/dashboard/bookings', async (req, res) => {
           WHERE booking_status NOT IN ($1, $2)
             AND booking_start_at BETWEEN $3 AND $4
           ORDER BY booking_start_at ASC
-          LIMIT 10`,
-          ['cancelled', 'canceled', start, `${end} 23:59:59`]
+          LIMIT $5`,
+          ['cancelled', 'canceled', start, `${end} 23:59:59`, limitNum]
         )
       : await pool.query(
           `SELECT 
@@ -276,8 +318,8 @@ app.get('/api/dashboard/bookings', async (req, res) => {
           WHERE booking_status NOT IN ($1, $2, $3, $4)
             AND booking_start_at + INTERVAL '50 minutes' >= NOW()
           ORDER BY booking_start_at ASC
-          LIMIT 10`,
-          ['cancelled', 'canceled', 'no_show', 'no show']
+          LIMIT $5`,
+          ['cancelled', 'canceled', 'no_show', 'no show', limitNum]
         );
 
     const bookings = result.rows.map(row => ({
@@ -557,17 +599,280 @@ app.post('/api/new-therapist-requests', async (req, res) => {
   try {
     const { therapistName, whatsappNumber, email, specializations, specializationDetails } = req.body;
 
+    // Generate 6-digit OTP
+    const otpToken = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Set expiry to 24 hours from now
+    const otpExpiresAt = new Date();
+    otpExpiresAt.setHours(otpExpiresAt.getHours() + 24);
+
     const result = await pool.query(
-      `INSERT INTO new_therapist_requests (therapist_name, whatsapp_number, email, specializations, specialization_details, status)
-       VALUES ($1, $2, $3, $4, $5, 'pending')
+      `INSERT INTO new_therapist_requests (therapist_name, whatsapp_number, email, specializations, specialization_details, otp_token, otp_expires_at, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
        RETURNING *`,
-      [therapistName, whatsappNumber, email, specializations, JSON.stringify(specializationDetails)]
+      [therapistName, whatsappNumber, email, specializations, JSON.stringify(specializationDetails), otpToken, otpExpiresAt]
     );
+
+    // TODO: Send email with OTP to therapist
+    // Email should contain: login link with token
+    // Link format: https://yourdomain.com/login?token={otpToken}&email={email}
+    console.log(`📧 OTP for ${email}: ${otpToken} (expires at ${otpExpiresAt})`);
 
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error saving new therapist request:', error);
     res.status(500).json({ success: false, error: 'Failed to save new therapist request' });
+  }
+});
+
+// Verify therapist OTP
+app.post('/api/verify-therapist-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, error: 'Email and OTP are required' });
+    }
+
+    const result = await pool.query(
+      `SELECT * FROM new_therapist_requests 
+       WHERE LOWER(email) = LOWER($1) AND otp_token = $2 AND status = 'pending'`,
+      [email, otp]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ success: false, error: 'Invalid email or OTP' });
+    }
+
+    const request = result.rows[0];
+
+    // Check if OTP is expired
+    const now = new Date();
+    const expiresAt = new Date(request.otp_expires_at);
+    
+    if (now > expiresAt) {
+      await pool.query(
+        `UPDATE new_therapist_requests SET status = 'expired' WHERE request_id = $1`,
+        [request.request_id]
+      );
+      return res.status(401).json({ success: false, error: 'OTP has expired' });
+    }
+
+    // Return therapist request data for pre-filling
+    res.json({ 
+      success: true, 
+      data: {
+        requestId: request.request_id,
+        name: request.therapist_name,
+        email: request.email,
+        phone: request.whatsapp_number,
+        specializations: request.specializations,
+        specializationDetails: JSON.parse(request.specialization_details || '[]')
+      }
+    });
+  } catch (error) {
+    console.error('Error verifying OTP:', error);
+    res.status(500).json({ success: false, error: 'Failed to verify OTP' });
+  }
+});
+
+// Complete therapist profile
+app.post('/api/complete-therapist-profile', async (req, res) => {
+  try {
+    const { 
+      requestId,
+      name, 
+      email, 
+      phone, 
+      specializations, 
+      specializationDetails,
+      qualification,
+      qualificationPdfUrl,
+      profilePictureUrl,
+      password 
+    } = req.body;
+
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({ success: false, error: 'All required fields must be provided' });
+    }
+
+    // Check if therapist already exists
+    const existingTherapist = await pool.query(
+      `SELECT * FROM therapists WHERE LOWER(email) = LOWER($1)`,
+      [email]
+    );
+
+    if (existingTherapist.rows.length > 0) {
+      return res.status(400).json({ success: false, error: 'Therapist with this email already exists' });
+    }
+
+    // Create therapist entry
+    const therapistResult = await pool.query(
+      `INSERT INTO therapists (
+        name, email, phone_number, specializations, 
+        qualification_pdf_url, profile_picture_url, is_profile_complete
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, true)
+       RETURNING *`,
+      [name, email, phone, specializations, qualificationPdfUrl || null, profilePictureUrl || null]
+    );
+
+    const therapist = therapistResult.rows[0];
+
+    // Create user entry for login
+    const username = email.split('@')[0]; // Use email prefix as username
+    await pool.query(
+      `INSERT INTO users (username, password, role, therapist_id, full_name)
+       VALUES ($1, $2, 'therapist', $3, $4)`,
+      [username, password, therapist.therapist_id, name]
+    );
+
+    // Update new_therapist_requests status
+    await pool.query(
+      `UPDATE new_therapist_requests SET status = 'completed' WHERE request_id = $1`,
+      [requestId]
+    );
+
+    res.json({ success: true, message: 'Profile created successfully', therapistId: therapist.therapist_id });
+  } catch (error) {
+    console.error('Error completing therapist profile:', error);
+    res.status(500).json({ success: false, error: 'Failed to complete profile' });
+  }
+});
+
+// Get therapist profile
+app.get('/api/therapist-profile', async (req, res) => {
+  try {
+    const { therapist_id } = req.query;
+
+    if (!therapist_id) {
+      return res.status(400).json({ error: 'Therapist ID is required' });
+    }
+
+    const result = await pool.query(
+      `SELECT * FROM therapists WHERE therapist_id = $1`,
+      [therapist_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching therapist profile:', error);
+    res.status(500).json({ error: 'Failed to fetch therapist profile' });
+  }
+});
+
+// Upload file endpoint (profile picture or qualification PDF)
+app.post('/api/upload-file', upload.single('file'), async (req, res) => {
+  try {
+    console.log('📤 Upload file request received');
+    
+    if (!req.file) {
+      console.log('❌ No file in request');
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    console.log('📁 File details:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
+
+    const { folder } = req.body; // 'profile-pictures' or 'qualification-pdfs'
+    
+    if (!folder || !['profile-pictures', 'qualification-pdfs'].includes(folder)) {
+      console.log('❌ Invalid folder:', folder);
+      return res.status(400).json({ success: false, error: 'Invalid folder specified' });
+    }
+
+    console.log('📂 Target folder:', folder);
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const originalName = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const fileName = `${timestamp}-${originalName}`;
+
+    console.log('🔄 Uploading to MinIO:', fileName);
+
+    // Upload to MinIO
+    const fileUrl = await uploadFile(
+      req.file.buffer,
+      fileName,
+      folder as 'profile-pictures' | 'qualification-pdfs',
+      req.file.mimetype
+    );
+
+    console.log('✅ Upload successful:', fileUrl);
+    res.json({ success: true, url: fileUrl });
+  } catch (error) {
+    console.error('❌ Error uploading file:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to upload file';
+    res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// Update therapist profile
+app.put('/api/therapist-profile', async (req, res) => {
+  try {
+    const { 
+      therapist_id,
+      name, 
+      email, 
+      phone, 
+      specializations,
+      qualificationPdfUrl,
+      profilePictureUrl
+    } = req.body;
+
+    if (!therapist_id) {
+      return res.status(400).json({ error: 'Therapist ID is required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE therapists 
+       SET name = $1, email = $2, phone_number = $3, specializations = $4,
+           qualification_pdf_url = $5, profile_picture_url = $6
+       WHERE therapist_id = $7
+       RETURNING *`,
+      [name, email, phone, specializations, qualificationPdfUrl, profilePictureUrl, therapist_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating therapist profile:', error);
+    res.status(500).json({ error: 'Failed to update therapist profile' });
+  }
+});
+
+// Update password
+app.post('/api/update-password', async (req, res) => {
+  try {
+    const { user_id, new_password } = req.body;
+
+    if (!user_id || !new_password) {
+      return res.status(400).json({ success: false, error: 'User ID and new password are required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE users SET password = $1 WHERE id = $2 RETURNING id`,
+      [new_password, user_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error updating password:', error);
+    res.status(500).json({ success: false, error: 'Failed to update password' });
   }
 });
 
@@ -762,11 +1067,6 @@ app.get('/api/client-details', async (req, res) => {
     const phones = req.query.phone;
     const email = req.query.email;
 
-    console.log('=== CLIENT DETAILS API CALLED ===');
-    console.log('Email:', email);
-    console.log('Phones:', phones);
-    console.log('Phones type:', typeof phones, Array.isArray(phones));
-
     if (!email && !phones) {
       return res.status(400).json({ error: 'Client email or phone is required' });
     }
@@ -820,6 +1120,8 @@ app.get('/api/client-details', async (req, res) => {
     let query = `
       SELECT 
         b.invitee_name,
+        b.invitee_email,
+        b.invitee_phone,
         b.booking_resource_name,
         b.booking_start_at,
         b.booking_invitee_time,
@@ -1030,10 +1332,12 @@ app.get('/api/therapist-appointments', async (req, res) => {
         b.booking_id,
         b.invitee_name as client_name,
         b.invitee_phone as contact_info,
+        b.invitee_email,
         b.booking_resource_name as session_name,
         b.booking_invitee_time as session_timings,
         b.booking_mode as mode,
         b.booking_start_at as booking_date,
+        b.booking_start_at,
         b.booking_status,
         CASE WHEN csn.note_id IS NOT NULL THEN true ELSE false END as has_session_notes
       FROM bookings b
@@ -1044,6 +1348,7 @@ app.get('/api/therapist-appointments', async (req, res) => {
 
     const appointments = appointmentsResult.rows.map(apt => ({
       ...apt,
+      invitee_phone: apt.contact_info, // Add this for compatibility with getClientStatus
       session_timings: convertToIST(apt.session_timings),
       mode: apt.mode?.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Google Meet'
     }));

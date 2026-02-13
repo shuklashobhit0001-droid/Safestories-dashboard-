@@ -77,7 +77,26 @@ export const AuditLogs: React.FC = () => {
     if (actionType.includes('logout')) return 'text-gray-600';
     if (actionType.includes('cancel')) return 'text-red-600';
     if (actionType.includes('reschedule')) return 'text-orange-600';
+    if (actionType.includes('sos')) return 'text-red-600';
+    if (actionType.includes('transfer')) return 'text-orange-600';
     return 'text-blue-600';
+  };
+
+  const formatActionType = (actionType: string) => {
+    const actionMap: { [key: string]: string } = {
+      'copy_appointment': 'Appointment details copied',
+      'send_whatsapp': 'Whatsapp reminder',
+      'raise_sos': 'SOS raised',
+      'client_transfer': 'Client Transferred',
+      'login': 'Login',
+      'logout': 'Logout',
+      'cancel': 'Booking Canceled',
+      'reschedule': 'Booking Rescheduled',
+      'cancel_booking': 'Booking Canceled',
+      'reschedule_booking': 'Booking Rescheduled'
+    };
+    
+    return actionMap[actionType] || actionType.replace(/_/g, ' ');
   };
 
   return (
@@ -131,10 +150,10 @@ export const AuditLogs: React.FC = () => {
               ) : (
                 paginatedLogs.map((log) => (
                   <tr key={log.log_id} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm">{formatTimestamp(log.timestamp)}</td>
+                    <td className="px-6 py-4 text-sm whitespace-nowrap">{formatTimestamp(log.timestamp)}</td>
                     <td className="px-6 py-4 text-sm">{log.therapist_name}</td>
-                    <td className={`px-6 py-4 text-sm font-medium uppercase ${getActionColor(log.action_type)}`}>
-                      {log.action_type.replace(/_/g, ' ')}
+                    <td className={`px-6 py-4 text-sm font-medium ${getActionColor(log.action_type)}`}>
+                      {formatActionType(log.action_type)}
                     </td>
                     <td className="px-6 py-4 text-sm">{log.action_description}</td>
                     <td className="px-6 py-4 text-sm">{log.client_name || '-'}</td>

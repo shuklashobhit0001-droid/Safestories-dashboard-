@@ -259,7 +259,7 @@ export const NewTherapist: React.FC<NewTherapistProps> = ({ onBack }) => {
             </div>
             <h3 className="text-xl font-bold mb-4">New Therapist Details Captured</h3>
             <p className="text-gray-600 mb-6">
-              Our tech team will take around 5-10 days to onboard the new therapist
+              The link has been sent to the therapist for profile completion, once it completed our tech team will further start the new therapist onboarding.
             </p>
             <button
               onClick={() => {

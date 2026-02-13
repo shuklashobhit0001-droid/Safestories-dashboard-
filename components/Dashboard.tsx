@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell, Copy, Send, Plus } from 'lucide-react';
+import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell, Copy, Send, Plus, User, Eye } from 'lucide-react';
 import { Logo } from './Logo';
 import { AllClients } from './AllClients';
 import { AllTherapists } from './AllTherapists';
@@ -13,6 +13,8 @@ import { AuditLogs } from './AuditLogs';
 import { Notifications } from './Notifications';
 import { Loader } from './Loader';
 import { Toast } from './Toast';
+import { ChangePassword } from './ChangePassword';
+import { AdminEditProfile } from './AdminEditProfile';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -31,6 +33,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [clientViewSource, setClientViewSource] = useState<string>(() => {
     return localStorage.getItem('clientViewSource') || '';
   });
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string>('');
 
   useEffect(() => {
     localStorage.setItem('adminActiveView', activeView);
@@ -84,13 +88,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [stats, setStats] = useState([
     { title: 'Revenue', value: '₹0', lastMonth: '₹0' },
     { title: 'Refunded', value: '₹0', lastMonth: '₹0' },
-    { title: 'Sessions', value: '0', lastMonth: '0' },
+    { title: 'Bookings', value: '0', lastMonth: '0' },
+    { title: 'Sessions Completed', value: '0', lastMonth: '0' },
     { title: 'Free Consultations', value: '0', lastMonth: '0' },
     { title: 'Cancelled', value: '0', lastMonth: '0' },
     { title: 'Refunds', value: '0', lastMonth: '0' },
-    { title: 'No-shows', value: '0', lastMonth: '0' },
+    { title: 'No Show', value: '0', lastMonth: '0' },
   ]);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [allBookings, setAllBookings] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalBookings, setTotalBookings] = useState(0);
+  const bookingsPerPage = 3;
   const [notifications, setNotifications] = useState<any[]>([]);
   const [selectedBookingIndex, setSelectedBookingIndex] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -98,6 +107,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [liveSessionsCount, setLiveSessionsCount] = useState(0);
   const bookingActionsRef = React.useRef<HTMLTableElement>(null);
+  const profileMenuRef = React.useRef<HTMLDivElement>(null);
 
   const resetAllStates = () => {
     setIsModalOpen(false);
@@ -105,6 +115,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     setShowCustomCalendar(false);
     setSelectedBookingIndex(null);
     setSelectedClientForView(null);
+  };
+
+  const handleNextPage = () => {
+    const totalPages = Math.ceil(totalBookings / bookingsPerPage);
+    if (currentPage < totalPages) {
+      const nextPage = currentPage + 1;
+      setCurrentPage(nextPage);
+      const startIndex = (nextPage - 1) * bookingsPerPage;
+      const endIndex = startIndex + bookingsPerPage;
+      setBookings(allBookings.slice(startIndex, endIndex));
+      setSelectedBookingIndex(null);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      const prevPage = currentPage - 1;
+      setCurrentPage(prevPage);
+      const startIndex = (prevPage - 1) * bookingsPerPage;
+      const endIndex = startIndex + bookingsPerPage;
+      setBookings(allBookings.slice(startIndex, endIndex));
+      setSelectedBookingIndex(null);
+    }
   };
 
   const copyBookingDetails = (booking: any) => {
@@ -213,6 +246,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       if (bookingActionsRef.current && !bookingActionsRef.current.contains(event.target as Node)) {
         setSelectedBookingIndex(null);
       }
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -221,6 +257,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      
+      // Fetch admin profile picture
+      try {
+        const profileRes = await fetch(`/api/admin-profile?user_id=${user.id}`);
+        if (profileRes.ok) {
+          const contentType = profileRes.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const profileData = await profileRes.json();
+            if (profileData.success && profileData.data.profile_picture_url) {
+              setProfilePictureUrl(profileData.data.profile_picture_url);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching profile picture:', error);
+      }
+      
       const statsUrl = dateRange.start && dateRange.end 
         ? `/api/dashboard/stats?start=${dateRange.start}&end=${dateRange.end}`
         : '/api/dashboard/stats';
@@ -229,19 +282,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       const statsData = await statsRes.json();
       
       setStats([
-        { title: 'Revenue', value: `₹${Number(statsData.revenue || 0).toLocaleString()}`, lastMonth: '₹0' },
-        { title: 'Refunded', value: `₹${Number(statsData.refundedAmount || 0).toLocaleString()}`, lastMonth: '₹0' },
-        { title: 'Sessions', value: (statsData.sessions || 0).toString(), lastMonth: '0' },
+        { title: 'Revenue', value: `₹${Number(statsData.revenue || 0).toLocaleString('en-IN')}`, lastMonth: '₹0' },
+        { title: 'Refunded', value: `₹${Number(statsData.refundedAmount || 0).toLocaleString('en-IN')}`, lastMonth: '₹0' },
+        { title: 'Bookings', value: (statsData.bookings || 0).toString(), lastMonth: '0' },
+        { title: 'Sessions Completed', value: (statsData.sessionsCompleted || 0).toString(), lastMonth: '0' },
         { title: 'Free Consultations', value: (statsData.freeConsultations || 0).toString(), lastMonth: '0' },
         { title: 'Cancelled', value: (statsData.cancelled || 0).toString(), lastMonth: '0' },
         { title: 'Refunds', value: (statsData.refunds || 0).toString(), lastMonth: '0' },
-        { title: 'No-shows', value: (statsData.noShows || 0).toString(), lastMonth: '0' },
+        { title: 'No Show', value: (statsData.noShows || 0).toString(), lastMonth: '0' },
       ]);
 
-      const bookingsRes = await fetch(`/api/dashboard/bookings`);
+      // Fetch all bookings (with a high limit to get total count)
+      const bookingsRes = await fetch(`/api/dashboard/bookings?limit=1000`);
       if (!bookingsRes.ok) throw new Error('Failed to fetch bookings');
       const bookingsData = await bookingsRes.json();
-      setBookings(bookingsData);
+      setAllBookings(bookingsData);
+      setTotalBookings(bookingsData.length);
+      
+      // Set initial page bookings
+      setCurrentPage(1);
+      setBookings(bookingsData.slice(0, bookingsPerPage));
 
       const notificationsRes = await fetch(`/api/notifications?user_id=${user?.id}&user_role=admin`);
       if (notificationsRes.ok) {
@@ -357,23 +417,69 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           </div>
         </div>
 
-        <div className="p-4 border-t">
-          <div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: '#2D757930' }}>
-            <div className="w-10 h-10 bg-orange-400 rounded-lg flex items-center justify-center">
-              <Users size={20} className="text-white" />
+        <div className="p-4 border-t relative" ref={profileMenuRef}>
+          {/* Profile Dropdown Menu */}
+          {showProfileMenu && (
+            <div className="absolute bottom-full left-4 right-4 mb-2 bg-white border rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  setActiveView('settings');
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b"
+              >
+                <User size={18} className="text-gray-600" />
+                <span className="text-sm font-medium">Edit Profile</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  setActiveView('changePassword');
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3"
+              >
+                <Eye size={18} className="text-gray-600" />
+                <span className="text-sm font-medium">Change/Forgot Password</span>
+              </button>
             </div>
+          )}
+          
+          {/* Profile Box */}
+          <div 
+            className="flex items-center gap-3 rounded-lg p-3 cursor-pointer hover:bg-gray-100" 
+            style={{ backgroundColor: '#2D757930' }}
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+          >
+            {profilePictureUrl ? (
+              <img 
+                src={profilePictureUrl} 
+                alt="Profile" 
+                className="w-10 h-10 rounded-lg object-cover"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-orange-400 rounded-lg flex items-center justify-center">
+                <Users size={20} className="text-white" />
+              </div>
+            )}
             <div className="flex-1">
               <div className="font-semibold text-sm">{user?.full_name || user?.username}</div>
               <div className="text-xs text-gray-600">Role: Admin</div>
             </div>
-            <LogOut size={18} className="text-red-500 cursor-pointer" onClick={onLogout} />
+            <LogOut size={18} className="text-red-500 cursor-pointer" onClick={(e) => {
+              e.stopPropagation();
+              onLogout();
+            }} />
           </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto relative">
-        {activeView === 'create' ? (
+        {activeView === 'settings' ? (
+          <AdminEditProfile user={user} onBack={() => setActiveView('dashboard')} />
+        ) : activeView === 'changePassword' ? (
+          <ChangePassword user={user} onBack={() => setActiveView('dashboard')} />
+        ) : activeView === 'create' ? (
           <CreatePage 
             onCreateBooking={() => setActiveView('createBooking')} 
             onSendBookingLink={() => setIsModalOpen(true)}
@@ -526,10 +632,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             ))}
           </div>
 
-          {/* Upcoming Bookings */}
+          {/* Upcoming Sessions */}
           <div className="bg-white rounded-lg border">
             <div className="p-6 border-b">
-              <h2 className="text-xl font-bold">Upcoming Bookings</h2>
+              <h2 className="text-xl font-bold">Upcoming Sessions</h2>
             </div>
             <div className="overflow-x-auto max-h-80 overflow-y-auto">
               <table className="w-full" ref={bookingActionsRef}>
@@ -546,7 +652,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                   {bookings.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-6 py-20 text-center text-gray-400">
-                        No upcoming bookings
+                        No upcoming sessions
                       </td>
                     </tr>
                   ) : (
@@ -610,10 +716,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
               </table>
             </div>
             <div className="px-6 py-4 border-t flex justify-between items-center">
-              <span className="text-sm text-gray-600">Showing {bookings.length} result{bookings.length !== 1 ? 's' : ''}</span>
+              <span className="text-sm text-gray-600">
+                Showing {((currentPage - 1) * bookingsPerPage) + 1}-{Math.min(currentPage * bookingsPerPage, totalBookings)} of {totalBookings} result{totalBookings !== 1 ? 's' : ''}
+              </span>
               <div className="flex gap-2">
-                <button className="p-2 border rounded hover:bg-gray-50">←</button>
-                <button className="p-2 border rounded hover:bg-gray-50">→</button>
+                <button 
+                  onClick={handlePrevPage}
+                  disabled={currentPage === 1}
+                  className={`p-2 border rounded ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                >
+                  ←
+                </button>
+                <button 
+                  onClick={handleNextPage}
+                  disabled={currentPage >= Math.ceil(totalBookings / bookingsPerPage)}
+                  className={`p-2 border rounded ${currentPage >= Math.ceil(totalBookings / bookingsPerPage) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                >
+                  →
+                </button>
               </div>
             </div>
           </div>

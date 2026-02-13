@@ -21,6 +21,8 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const notificationsPerPage = 10;
 
   useEffect(() => {
     fetchNotifications();
@@ -80,6 +82,20 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
     : notifications;
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  // Pagination
+  const totalPages = Math.ceil(filteredNotifications.length / notificationsPerPage);
+  const startIndex = (currentPage - 1) * notificationsPerPage;
+  const endIndex = startIndex + notificationsPerPage;
+  const paginatedNotifications = filteredNotifications.slice(startIndex, endIndex);
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) setCurrentPage(currentPage - 1);
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+  };
 
   const formatTime = (timestamp: string) => {
     if (!timestamp) {
@@ -154,34 +170,69 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filteredNotifications.map((notification) => (
-            <div
-              key={notification.notification_id}
-              className={`bg-white rounded-lg border p-4 flex items-start gap-4 ${
-                !notification.is_read ? 'border-l-4 border-l-teal-600' : ''
-              }`}
-            >
-              <div className="flex-1">
-                <div className="flex items-start justify-between mb-1">
-                  <h3 className={`font-semibold ${!notification.is_read ? 'text-gray-900' : 'text-gray-600'}`}>
-                    {notification.title}
-                  </h3>
-                  <span className="text-xs text-gray-500">{formatTime(notification.created_at)}</span>
+        <div>
+          <div className="space-y-2">
+            {paginatedNotifications.map((notification) => (
+              <div
+                key={notification.notification_id}
+                className={`bg-white rounded-lg border p-4 flex items-start gap-4 ${
+                  !notification.is_read ? 'border-l-4 border-l-teal-600' : ''
+                }`}
+              >
+                <div className="flex-1">
+                  <div className="flex items-start justify-between mb-1">
+                    <h3 className={`font-semibold ${!notification.is_read ? 'text-gray-900' : 'text-gray-600'}`}>
+                      {notification.title}
+                    </h3>
+                    <span className="text-xs text-gray-500">{formatTime(notification.created_at)}</span>
+                  </div>
+                  <p className="text-sm text-gray-600">{notification.message}</p>
                 </div>
-                <p className="text-sm text-gray-600">{notification.message}</p>
+                {!notification.is_read && (
+                  <button
+                    onClick={() => markAsRead(notification.notification_id)}
+                    className="p-2 hover:bg-gray-100 rounded-lg text-teal-600"
+                    title="Mark as read"
+                  >
+                    <Check size={18} />
+                  </button>
+                )}
               </div>
-              {!notification.is_read && (
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {filteredNotifications.length > notificationsPerPage && (
+            <div className="mt-6 flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                Showing {startIndex + 1}-{Math.min(endIndex, filteredNotifications.length)} of {filteredNotifications.length} results
+              </p>
+              <div className="flex gap-2">
                 <button
-                  onClick={() => markAsRead(notification.notification_id)}
-                  className="p-2 hover:bg-gray-100 rounded-lg text-teal-600"
-                  title="Mark as read"
+                  onClick={handlePreviousPage}
+                  disabled={currentPage === 1}
+                  className={`px-3 py-1 rounded ${
+                    currentPage === 1
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-white border hover:bg-gray-50'
+                  }`}
                 >
-                  <Check size={18} />
+                  ←
                 </button>
-              )}
+                <button
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages}
+                  className={`px-3 py-1 rounded ${
+                    currentPage === totalPages
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-white border hover:bg-gray-50'
+                  }`}
+                >
+                  →
+                </button>
+              </div>
             </div>
-          ))}
+          )}
         </div>
       )}
 

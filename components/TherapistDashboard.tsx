@@ -5,6 +5,13 @@ import { Notifications } from './Notifications';
 import { Toast } from './Toast';
 import { Loader } from './Loader';
 import { TherapistCalendar } from './TherapistCalendar';
+import { EditProfile } from './EditProfile';
+import { ChangePassword } from './ChangePassword';
+import { CaseHistoryTab } from './CaseHistoryTab';
+import { ProgressNotesTab } from './ProgressNotesTab';
+import { ProgressNoteDetail } from './ProgressNoteDetail';
+import { GoalTrackingTab } from './GoalTrackingTab';
+import { FreeConsultationDetail } from './FreeConsultationDetail';
 
 interface TherapistDashboardProps {
   onLogout: () => void;
@@ -12,13 +19,8 @@ interface TherapistDashboardProps {
 }
 
 export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout, user }) => {
-  console.log('=== THERAPIST DASHBOARD DEBUG ===');
-  console.log('User object:', user);
-  console.log('User ID:', user?.id);
-  console.log('User therapist_id:', user?.therapist_id);
-  console.log('User username:', user?.username);
-  console.log('User full_name:', user?.full_name);
-  console.log('=== END THERAPIST DASHBOARD DEBUG ===');
+  // Force re-render check - v2.0
+  console.log('🔄 TherapistDashboard rendered at:', new Date().toISOString());
   
   const [activeView, setActiveView] = useState(() => {
     return localStorage.getItem('therapistActiveView') || 'dashboard';
@@ -98,7 +100,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [activeAppointmentTab, setActiveAppointmentTab] = useState('scheduled');
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [clientDetailLoading, setClientDetailLoading] = useState(false);
-  const [clientStats, setClientStats] = useState({ sessions: 0, noShows: 0, cancelled: 0 });
+  const [clientStats, setClientStats] = useState({ bookings: 0, sessionsCompleted: 0, noShows: 0, cancelled: 0 });
   const [clientAppointments, setClientAppointments] = useState<any[]>([]);
   const [clientDateRange, setClientDateRange] = useState({ start: '', end: '' });
   const [clientSelectedMonth, setClientSelectedMonth] = useState('All Time');
@@ -108,16 +110,21 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [clientEndDate, setClientEndDate] = useState('');
   const [selectedSessionNote, setSelectedSessionNote] = useState<any>(null);
   const [sessionNoteTab, setSessionNoteTab] = useState('notes');
-  const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents'>('overview');
+  const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents' | 'caseHistory'>('overview');
   const [isCaseHistoryVisible, setIsCaseHistoryVisible] = useState(false);
   const [showCaseHistoryPasswordModal, setShowCaseHistoryPasswordModal] = useState(false);
   const [caseHistoryPassword, setCaseHistoryPassword] = useState('');
   const [caseHistoryPasswordError, setCaseHistoryPasswordError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [selectedProgressNoteId, setSelectedProgressNoteId] = useState<number | null>(null);
+  const [isFreeConsultationNote, setIsFreeConsultationNote] = useState(false);
+  const [clientSessionType, setClientSessionType] = useState<{ hasPaidSessions: boolean; hasFreeConsultation: boolean }>({ hasPaidSessions: false, hasFreeConsultation: false });
   const dropdownRef = React.useRef<HTMLDivElement>(null);
   const clientDropdownRef = React.useRef<HTMLDivElement>(null);
   const bookingActionsRef = React.useRef<HTMLTableElement>(null);
   const appointmentActionsRef = React.useRef<HTMLTableElement>(null);
+  const profileMenuRef = React.useRef<HTMLDivElement>(null);
 
   // Utility functions to mask contact information
   const maskPhone = (phone: string): string => {
@@ -151,6 +158,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [calendarModeFilter, setCalendarModeFilter] = useState<'all' | 'online' | 'in-person'>('all');
   const [calendarStatusFilter, setCalendarStatusFilter] = useState<'all' | 'upcoming' | 'cancelled' | 'completed'>('upcoming');
   const [selectedTherapistFilters, setSelectedTherapistFilters] = useState<string[]>([]);
+  
+  // Profile picture state
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string>('');
 
   const resetAllStates = () => {
     setSelectedClient(null);
@@ -231,7 +241,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     { id: 'scheduled', label: 'Upcoming' },
     { id: 'all', label: 'All Appointments' },
     { id: 'completed', label: 'Completed' },
-    { id: 'pending_notes', label: 'Pending Notes' },
+    { id: 'pending_notes', label: 'Pending Session Notes' },
     { id: 'cancelled', label: 'Cancelled' },
     { id: 'no_show', label: 'No Show' },
   ];
@@ -268,6 +278,39 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     }
   }, [clientDateRange]);
 
+  const getClientStatus = (client: any) => {
+    // If no appointments data, return inactive
+    if (!appointments || appointments.length === 0) {
+      return 'inactive';
+    }
+    
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    // Check if client has any appointments in the last 30 days
+    const hasRecentAppointment = appointments.some(apt => {
+      // Match by email or phone (normalize for comparison)
+      const clientEmail = client.client_email?.toLowerCase().trim();
+      const aptEmail = apt.invitee_email?.toLowerCase().trim();
+      const clientPhone = client.client_phone?.replace(/[\s\-\(\)\+]/g, '');
+      const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
+      
+      const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
+      const phoneMatch = clientPhone && aptPhone && clientPhone === aptPhone;
+      
+      if (emailMatch || phoneMatch) {
+        // Use booking_start_at (standardized field from API)
+        const aptDate = apt.booking_start_at ? new Date(apt.booking_start_at) : new Date();
+        const isRecent = aptDate >= thirtyDaysAgo;
+        const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
+        return isRecent && isNotCancelled;
+      }
+      return false;
+    });
+    
+    return hasRecentAppointment ? 'active' : 'inactive';
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -283,6 +326,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       }
       if (appointmentActionsRef.current && !appointmentActionsRef.current.contains(event.target as Node)) {
         setSelectedAppointmentIndex(null);
+      }
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -324,6 +370,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       fetchClientsData();
     } else if (activeView === 'appointments') {
       fetchAppointmentsData();
+    } else if (activeView === 'dashboard') {
+      // Fetch clients for Active/Inactive stats on dashboard
+      fetchClientsData();
     }
   }, [activeView]);
 
@@ -369,6 +418,18 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const fetchClientDetails = async (client: any) => {
     try {
       setClientDetailLoading(true);
+      
+      // Fetch client session type
+      const sessionTypeRes = await fetch(`/api/client-session-type?client_id=${encodeURIComponent(client.client_phone)}`);
+      if (sessionTypeRes.ok) {
+        const sessionTypeData = await sessionTypeRes.json();
+        console.log('📊 Client Session Type:', sessionTypeData);
+        if (sessionTypeData.success) {
+          setClientSessionType(sessionTypeData.data);
+          console.log('✅ Session type set:', sessionTypeData.data);
+        }
+      }
+      
       const response = await fetch(`/api/client-appointments?client_phone=${encodeURIComponent(client.client_phone)}&therapist_id=${user.id}`);
       if (response.ok) {
         const data = await response.json();
@@ -384,10 +445,16 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         }
         
         setClientAppointments(filteredAppointments);
-        const sessions = filteredAppointments.length;
+        const bookings = filteredAppointments.length; // Total appointments
+        const sessionsCompleted = filteredAppointments.filter((a: any) => {
+          const sessionDate = a.booking_date ? new Date(a.booking_date) : new Date();
+          const isPast = sessionDate < new Date();
+          const isNotCancelledOrNoShow = a.booking_status !== 'cancelled' && a.booking_status !== 'no_show';
+          return isPast && isNotCancelledOrNoShow;
+        }).length; // Only past sessions (completed + pending notes), excluding cancelled/no_show
         const noShows = filteredAppointments.filter((a: any) => a.booking_status === 'no_show').length;
         const cancelled = filteredAppointments.filter((a: any) => a.booking_status === 'cancelled').length;
-        setClientStats({ sessions, noShows, cancelled });
+        setClientStats({ bookings, sessionsCompleted, noShows, cancelled });
         
         // Update selectedClient with emergency contact and demographic data from the most recent appointment
         if (data.appointments && data.appointments.length > 0) {
@@ -417,6 +484,20 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const fetchTherapistData = async () => {
     try {
       setDashboardLoading(true);
+      
+      // Fetch therapist profile picture
+      try {
+        const profileRes = await fetch(`/api/therapist-profile?therapist_id=${user.therapist_id}`);
+        if (profileRes.ok) {
+          const profileData = await profileRes.json();
+          if (profileData.success && profileData.data.profile_picture_url) {
+            setProfilePictureUrl(profileData.data.profile_picture_url);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching profile picture:', error);
+      }
+      
       // Fetch therapist-specific stats and bookings
       const statsUrl = dateRange.start && dateRange.end 
         ? `/api/therapist-stats?therapist_id=${user.id}&start=${dateRange.start}&end=${dateRange.end}`
@@ -733,36 +814,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     console.log('Booking:', booking);
     console.log('Session timings:', booking.session_timings);
     
-    // Time validation enabled
-    const timeMatch = booking.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
-    if (timeMatch) {
-      const [, dateStr, startTimeStr, endTimeStr] = timeMatch;
-      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-      const startDateTime = new Date(`${dateStr} ${startTimeStr}`);
-      const now = new Date();
-      const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
-      
-      console.log('Start date time:', startDateTime);
-      console.log('Current time:', now);
-      console.log('End date time:', endDateTime);
-      console.log('Hours since end:', hoursSinceEnd);
-      
-      if (now < startDateTime) {
-        console.log('❌ Session has not started yet');
-        setToast({ message: 'SOS ticket can only be raised after the session starts', type: 'error' });
-        setSelectedAppointmentIndex(null);
-        return;
-      }
-      
-      if (hoursSinceEnd > 24) {
-        console.log('❌ More than 24 hours since session ended');
-        setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
-        setSelectedAppointmentIndex(null);
-        return;
-      }
-      
-      console.log('✓ All checks passed, showing modal');
-    }
+    // Time validation DISABLED - Allow SOS at any time
+    console.log('✓ Time validation disabled, showing modal');
     
     setSelectedSOSBooking(booking);
     setShowSOSModal(true);
@@ -770,36 +823,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleSOSClickFromClient = (apt: any) => {
-    // Time validation enabled
-    if (!apt.session_timings) {
-      setToast({ message: 'Unable to validate session timing', type: 'error' });
-      setSelectedAppointmentIndex(null);
-      return;
-    }
-    
-    // Handle both IST and GMT timezone formats
-    const timeMatch = apt.session_timings.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
-    if (timeMatch) {
-      const [, dateStr, startTimeStr, endTimeStr] = timeMatch;
-      const startDateTime = new Date(`${dateStr} ${startTimeStr}`);
-      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-      const now = new Date();
-      
-      if (now < startDateTime) {
-        setToast({ message: 'SOS ticket can only be raised after the session starts', type: 'error' });
-        setSelectedAppointmentIndex(null);
-        return;
-      }
-      
-      const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
-      
-      if (hoursSinceEnd > 24) {
-        setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
-        setSelectedAppointmentIndex(null);
-        return;
-      }
-    }
-    
+    // Time validation DISABLED - Allow SOS at any time
     const booking = {
       ...apt,
       client_name: selectedClient?.client_name,
@@ -1176,10 +1200,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 </tr>
               ) : (
                 paginatedClients.map((client, index) => (
-                    <tr key={index} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => {
-                      setSelectedClient(client);
+                    <tr key={index} className="border-b hover:bg-gray-50 cursor-pointer" onClick={async () => {
+                      console.log('🖱️ Client clicked:', client.client_name);
                       setActiveAppointmentTab('upcoming');
-                      fetchClientDetails(client);
+                      await fetchClientDetails(client);
+                      setSelectedClient(client);
                     }}>
                       <td className="px-6 py-4 text-sm">{client.client_name}</td>
                       <td className="px-6 py-4 text-sm">{client.client_phone}</td>
@@ -1215,6 +1240,111 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       )}
     </div>
   );
+  };
+
+  // Inline component for Free Consultation Notes List
+  const FreeConsultationNotesList = ({ clientId, onViewNote }: { clientId: string; onViewNote: (id: number) => void }) => {
+    const [notes, setNotes] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [hasBooking, setHasBooking] = React.useState(false);
+
+    React.useEffect(() => {
+      const fetchNotes = async () => {
+        try {
+          const response = await fetch(`/api/free-consultation-notes?client_id=${clientId}`);
+          const data = await response.json();
+          if (data.success) {
+            setNotes(data.data);
+          }
+          
+          // Check if client has free consultation booking
+          if (data.data.length === 0) {
+            // Check bookings to see if there's a free consultation scheduled
+            setHasBooking(clientSessionType.hasFreeConsultation);
+          }
+        } catch (error) {
+          console.error('Error fetching free consultation notes:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchNotes();
+    }, [clientId]);
+
+    if (loading) {
+      return <div className="flex items-center justify-center py-12"><div className="text-gray-500">Loading...</div></div>;
+    }
+
+    if (notes.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <FileText size={48} className="mx-auto text-gray-300 mb-4" />
+          {hasBooking ? (
+            <>
+              <p className="text-gray-500 text-lg mb-4">Free consultation session booked</p>
+              <p className="text-gray-400 text-sm">Pre-therapy notes will appear here after the therapist fills the consultation form</p>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-500 text-lg mb-4">No pre-therapy consultation notes yet</p>
+              <p className="text-gray-400 text-sm">Notes will appear after the free consultation session</p>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold mb-4">Pre-therapy Consultation Notes</h2>
+        {notes.map((note) => (
+          <div
+            key={note.id}
+            className="bg-purple-50 rounded-lg border-2 border-purple-200 hover:border-purple-400 transition-colors cursor-pointer p-6"
+            onClick={() => onViewNote(note.id)}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-full">
+                    FREE CONSULTATION
+                  </span>
+                  <span className="text-sm text-gray-600">
+                    {new Date(note.session_date).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric'
+                    })}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-500 flex items-center gap-3">
+                  <span>Mode: {note.session_mode || 'N/A'}</span>
+                  <span>•</span>
+                  <span>Duration: {note.session_duration || 'N/A'}</span>
+                  <span>•</span>
+                  <span>Therapist: {note.therapist_name || 'N/A'}</span>
+                </div>
+              </div>
+              <ChevronRight size={20} className="text-purple-400" />
+            </div>
+            <div className="space-y-3">
+              <div>
+                <span className="text-xs font-medium text-purple-700">Presenting Concerns:</span>
+                <p className="text-sm text-gray-700 mt-1 line-clamp-3">
+                  {note.presenting_concerns || 'No concerns recorded'}
+                </p>
+              </div>
+              {note.assigned_therapist_name && (
+                <div>
+                  <span className="text-xs font-medium text-purple-700">Assigned Therapist:</span>
+                  <p className="text-sm text-gray-700 mt-1">{note.assigned_therapist_name}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const getAppointmentStatus = (apt: any) => {
@@ -1519,16 +1649,56 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           </div>
         </nav>
 
-        <div className="p-4 border-t">
-          <div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: '#2D757930' }}>
-            <div className="w-10 h-10 bg-orange-400 rounded-lg flex items-center justify-center">
-              <Users size={20} className="text-white" />
+        <div className="p-4 border-t relative" ref={profileMenuRef}>
+          {/* Profile Dropdown Menu */}
+          {showProfileMenu && (
+            <div className="absolute bottom-full left-4 right-4 mb-2 bg-white border rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  setActiveView('settings');
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b"
+              >
+                <Edit size={18} className="text-gray-600" />
+                <span className="text-sm font-medium">Edit Profile</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  setActiveView('changePassword');
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3"
+              >
+                <Eye size={18} className="text-gray-600" />
+                <span className="text-sm font-medium">Change/Forgot Password</span>
+              </button>
             </div>
+          )}
+          
+          {/* Profile Box */}
+          <div 
+            className="flex items-center gap-3 rounded-lg p-3 cursor-pointer hover:bg-gray-100" 
+            style={{ backgroundColor: '#2D757930' }}
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+          >
+            {profilePictureUrl ? (
+              <img 
+                src={profilePictureUrl} 
+                alt="Profile" 
+                className="w-10 h-10 rounded-lg object-cover"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-orange-400 rounded-lg flex items-center justify-center">
+                <Users size={20} className="text-white" />
+              </div>
+            )}
             <div className="flex-1">
               <div className="font-semibold text-sm">{user.full_name || user.username}</div>
               <div className="text-xs text-gray-600">Role: Therapist</div>
             </div>
-            <LogOut size={18} className="text-red-500 cursor-pointer" onClick={async () => {
+            <LogOut size={18} className="text-red-500 cursor-pointer" onClick={async (e) => {
+              e.stopPropagation();
               await fetch('/api/logout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1754,7 +1924,17 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               <button onClick={() => setSelectedClient(null)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                 <ArrowLeft size={24} />
               </button>
-              <h1 className="text-3xl font-bold">{selectedClient.client_name}</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold">{selectedClient.client_name}</h1>
+                <span 
+                  className="px-3 py-1 rounded-full text-sm font-medium text-white"
+                  style={{ 
+                    backgroundColor: getClientStatus(selectedClient) === 'active' ? '#21615D' : '#B91C1C'
+                  }}
+                >
+                  {getClientStatus(selectedClient) === 'active' ? 'Active' : 'Inactive'}
+                </span>
+              </div>
             </div>
 
             {/* Two Column Layout - Left side fixed, Right side with tabs */}
@@ -1792,47 +1972,59 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   </div>
                 </div>
 
-                {/* Case History */}
+                {/* Case History / Pre-therapy Notes */}
                 <div>
                   <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-sm font-semibold text-gray-600">Case History:</h3>
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={handleCaseHistoryView}
-                        className="p-1.5 hover:bg-gray-200 rounded transition-colors" 
-                        title={isCaseHistoryVisible ? "Hide Case History" : "View Case History"}
-                      >
-                        {isCaseHistoryVisible ? (
-                          <Eye size={16} className="text-gray-600" />
-                        ) : (
-                          <EyeOff size={16} className="text-gray-600" />
-                        )}
-                      </button>
-                      <button 
-                        disabled={!isCaseHistoryVisible}
-                        className={`p-1.5 rounded transition-colors ${
-                          isCaseHistoryVisible 
-                            ? 'hover:bg-gray-200 cursor-pointer' 
-                            : 'cursor-not-allowed opacity-40'
-                        }`}
-                        title={isCaseHistoryVisible ? "Edit Case History" : "View case history first to edit"}
-                      >
-                        <Edit size={16} className="text-gray-600" />
-                      </button>
-                    </div>
+                    <h3 className="text-sm font-semibold text-gray-600">
+                      {clientSessionType.hasPaidSessions ? 'Case History:' : 'Pre-therapy Notes:'}
+                    </h3>
+                    {clientSessionType.hasPaidSessions && (
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={handleCaseHistoryView}
+                          className="p-1.5 hover:bg-gray-200 rounded transition-colors" 
+                          title={isCaseHistoryVisible ? "Hide Case History" : "View Case History"}
+                        >
+                          {isCaseHistoryVisible ? (
+                            <Eye size={16} className="text-gray-600" />
+                          ) : (
+                            <EyeOff size={16} className="text-gray-600" />
+                          )}
+                        </button>
+                        <button 
+                          disabled={!isCaseHistoryVisible}
+                          className={`p-1.5 rounded transition-colors ${
+                            isCaseHistoryVisible 
+                              ? 'hover:bg-gray-200 cursor-pointer' 
+                              : 'cursor-not-allowed opacity-40'
+                          }`}
+                          title={isCaseHistoryVisible ? "Edit Case History" : "View case history first to edit"}
+                        >
+                          <Edit size={16} className="text-gray-600" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="border rounded-lg p-4 bg-gray-50 min-h-[100px]">
-                    {isCaseHistoryVisible ? (
-                      selectedClient.clinical_profile ? (
-                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedClient.clinical_profile}</p>
+                    {clientSessionType.hasPaidSessions ? (
+                      // Show case history for paid sessions
+                      isCaseHistoryVisible ? (
+                        selectedClient.clinical_profile ? (
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedClient.clinical_profile}</p>
+                        ) : (
+                          <button className="text-teal-600 text-sm hover:text-teal-700 flex items-center gap-2">
+                            <span>+ add case history</span>
+                          </button>
+                        )
                       ) : (
-                        <button className="text-teal-600 text-sm hover:text-teal-700 flex items-center gap-2">
-                          <span>+ add case history</span>
-                        </button>
+                        <div className="flex items-center justify-center h-20">
+                          <p className="text-gray-400 text-sm">Case history is hidden. Click the eye icon to view.</p>
+                        </div>
                       )
                     ) : (
+                      // Show message for free consultation only
                       <div className="flex items-center justify-center h-20">
-                        <p className="text-gray-400 text-sm">Case history is hidden. Click the eye icon to view.</p>
+                        <p className="text-gray-400 text-sm">Pre-therapy notes will appear after consultation form is filled</p>
                       </div>
                     )}
                   </div>
@@ -1843,23 +2035,48 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               <div className="col-span-8 space-y-6">
                 {/* Navigation Tabs */}
                 <div className="flex gap-8 border-b">
-                  {[
-                    { id: 'overview' as const, label: 'Overview' },
-                    { id: 'sessions' as const, label: 'Progress notes' },
-                    { id: 'documents' as const, label: 'Goal Tracking' }
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setClientViewTab(tab.id)}
-                      className={`pb-3 font-medium text-sm ${
-                        clientViewTab === tab.id
-                          ? 'text-teal-700 border-b-2 border-teal-700'
-                          : 'text-gray-500 hover:text-gray-700'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                  {(() => {
+                    console.log('🎯 Rendering tabs with clientSessionType:', clientSessionType);
+                    return clientSessionType.hasPaidSessions ? (
+                      // Show all tabs for paid sessions
+                      [
+                        { id: 'overview' as const, label: 'Overview' },
+                        { id: 'caseHistory' as const, label: 'Case History' },
+                        { id: 'sessions' as const, label: 'Progress notes' },
+                        { id: 'documents' as const, label: 'Goal Tracking' }
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setClientViewTab(tab.id)}
+                          className={`pb-3 font-medium text-sm ${
+                            clientViewTab === tab.id
+                              ? 'text-teal-700 border-b-2 border-teal-700'
+                              : 'text-gray-500 hover:text-gray-700'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))
+                    ) : (
+                      // Show only Overview and Pre-therapy Notes for free consultation only
+                      [
+                        { id: 'overview' as const, label: 'Overview' },
+                        { id: 'caseHistory' as const, label: 'Pre-therapy Notes' }
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setClientViewTab(tab.id)}
+                          className={`pb-3 font-medium text-sm ${
+                            clientViewTab === tab.id
+                              ? 'text-teal-700 border-b-2 border-teal-700'
+                              : 'text-gray-500 hover:text-gray-700'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))
+                    );
+                  })()}
                 </div>
 
                 {/* Date Filter */}
@@ -1955,9 +2172,17 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 {/* Stats Cards */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white border rounded-lg p-4">
-                    <p className="text-sm text-gray-600 mb-1">Sessions</p>
-                    <p className="text-3xl font-bold text-gray-900">{clientStats.sessions}</p>
+                    <p className="text-sm text-gray-600 mb-1">Bookings</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.bookings}</p>
                   </div>
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Sessions Completed</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.sessionsCompleted}</p>
+                  </div>
+                </div>
+
+                {/* Additional Stats Row */}
+                <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white border rounded-lg p-4">
                     <p className="text-sm text-gray-600 mb-1">Next Session</p>
                     <p className="text-lg font-bold text-gray-900">
@@ -1981,16 +2206,16 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                       })()}
                     </p>
                   </div>
-                </div>
-
-                {/* Additional Stats Row */}
-                <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white border rounded-lg p-4">
                     <p className="text-sm text-gray-600 mb-1">Cancellation</p>
                     <p className="text-3xl font-bold text-gray-900">{clientStats.cancelled}</p>
                   </div>
+                </div>
+
+                {/* Third Stats Row */}
+                <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white border rounded-lg p-4">
-                    <p className="text-sm text-gray-600 mb-1">NoShow</p>
+                    <p className="text-sm text-gray-600 mb-1">No Show</p>
                     <p className="text-3xl font-bold text-gray-900">{clientStats.noShows}</p>
                   </div>
                 </div>
@@ -1999,50 +2224,51 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 <div>
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <User size={20} className="text-gray-700" />
-                    Appointments
+                    Bookings
                   </h3>
 
             {/* Tabs */}
             <div className="flex gap-6 mb-4">
               {[
                 { id: 'upcoming', label: 'Upcoming' },
-                { id: 'all', label: 'All Appointments' },
+                { id: 'all', label: 'All' },
                 { id: 'completed', label: 'Completed' },
-                { id: 'pending_notes', label: 'Pending Notes' },
+                { id: 'pending_notes', label: 'Pending Session Notes' },
                 { id: 'cancelled', label: 'Cancelled' },
                 { id: 'no_show', label: 'No Show' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveAppointmentTab(tab.id)}
-                  className={`pb-2 font-medium ${
-                    activeAppointmentTab === tab.id
-                      ? 'text-teal-700 border-b-2 border-teal-700'
-                      : 'text-gray-400'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+              ].map((tab) => {
+                const count = clientAppointments.filter(apt => {
+                  if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                    return false;
+                  }
+                  if (tab.id === 'all') return true;
+                  if (tab.id === 'upcoming') {
+                    const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
+                    return sessionDate >= new Date() && apt.booking_status !== 'cancelled' && !apt.has_session_notes;
+                  }
+                  return getAppointmentStatus(apt) === tab.id;
+                }).length;
+                
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveAppointmentTab(tab.id)}
+                    className={`pb-2 font-medium ${
+                      activeAppointmentTab === tab.id
+                        ? 'text-teal-700 border-b-2 border-teal-700'
+                        : 'text-gray-400'
+                    }`}
+                  >
+                    {tab.label} ({count})
+                  </button>
+                );
+              })}
             </div>
 
             {clientDetailLoading ? (
               <div className="p-8 text-center"><Loader /></div>
             ) : (
               <div>
-                <h3 className="text-lg font-semibold mb-3">
-                  Appointments ({clientAppointments.filter(apt => {
-                    if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
-                      return false;
-                    }
-                    if (activeAppointmentTab === 'all') return true;
-                    if (activeAppointmentTab === 'upcoming') {
-                      const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
-                      return sessionDate >= new Date() && apt.booking_status !== 'cancelled' && !apt.has_session_notes;
-                    }
-                    return getAppointmentStatus(apt) === activeAppointmentTab;
-                  }).length})
-                </h3>
                 <div className="bg-white border rounded-lg overflow-hidden">
                   <table className="w-full" ref={appointmentActionsRef}>
                     <thead className="bg-gray-50 border-b">
@@ -2182,16 +2408,65 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
                 {/* Sessions Tab */}
                 {clientViewTab === 'sessions' && (
-                  <div className="text-center py-12">
-                    <p className="text-gray-500 text-lg">Progress notes view coming soon...</p>
-                  </div>
+                  selectedProgressNoteId ? (
+                    isFreeConsultationNote ? (
+                      <FreeConsultationDetail 
+                        noteId={selectedProgressNoteId}
+                        onBack={() => {
+                          setSelectedProgressNoteId(null);
+                          setIsFreeConsultationNote(false);
+                        }}
+                      />
+                    ) : (
+                      <ProgressNoteDetail 
+                        noteId={selectedProgressNoteId}
+                        onBack={() => {
+                          setSelectedProgressNoteId(null);
+                          setIsFreeConsultationNote(false);
+                        }}
+                      />
+                    )
+                  ) : (
+                    <ProgressNotesTab 
+                      clientId={selectedClient.client_phone}
+                      onViewNote={(noteId, isFreeConsult = false) => {
+                        setSelectedProgressNoteId(noteId);
+                        setIsFreeConsultationNote(isFreeConsult);
+                      }}
+                      hasFreeConsultation={clientSessionType.hasFreeConsultation}
+                    />
+                  )
+                )}
+
+                {/* Case History Tab */}
+                {clientViewTab === 'caseHistory' && (
+                  clientSessionType.hasPaidSessions ? (
+                    <CaseHistoryTab clientId={selectedClient.client_phone} />
+                  ) : (
+                    // Show free consultation notes when only free consultation exists
+                    selectedProgressNoteId ? (
+                      <FreeConsultationDetail 
+                        noteId={selectedProgressNoteId}
+                        onBack={() => setSelectedProgressNoteId(null)}
+                      />
+                    ) : (
+                      <div>
+                        {/* Free Consultation Notes List */}
+                        <FreeConsultationNotesList 
+                          clientId={selectedClient.client_phone}
+                          onViewNote={(noteId) => setSelectedProgressNoteId(noteId)}
+                        />
+                      </div>
+                    )
+                  )
                 )}
 
                 {/* Documents Tab */}
-                {clientViewTab === 'documents' && (
-                  <div className="text-center py-12">
-                    <p className="text-gray-500 text-lg">Goal Tracking view coming soon...</p>
-                  </div>
+                {clientViewTab === 'documents' && clientSessionType.hasPaidSessions && (
+                  <GoalTrackingTab 
+                    clientId={selectedClient.client_phone}
+                    clientName={selectedClient.client_name}
+                  />
                 )}
               </div>
             </div>
@@ -2202,6 +2477,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           renderMyAppointments()
         ) : activeView === 'notifications' ? (
           <Notifications userRole="therapist" userId={user.id} />
+        ) : activeView === 'settings' ? (
+          <EditProfile user={user} onBack={() => setActiveView('dashboard')} />
+        ) : activeView === 'changePassword' ? (
+          <ChangePassword user={user} onBack={() => setActiveView('dashboard')} />
         ) : showCalendarView ? (
           <div className="p-8">
             <div className="flex items-center gap-4 mb-6">
@@ -2281,9 +2560,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <>
             {/* Header */}
             <div className="flex justify-between items-start mb-8">
-              <div>
-                <h1 className="text-3xl font-bold mb-1">Therapist Dashboard</h1>
-                <p className="text-gray-600">Welcome Back, {user.username}!</p>
+              <div className="flex items-center gap-4">
+                <div>
+                  <h1 className="text-3xl font-bold mb-1">Therapist Dashboard</h1>
+                  <p className="text-gray-600">Welcome Back, {user.username}!</p>
+                </div>
               </div>
               <div className="flex items-center gap-4">
                 <button
@@ -2379,9 +2660,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-4 gap-4 mb-8">
-              {stats.map((stat, index) => (
+            {/* Stats Grid - Row 1 */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              {stats.slice(0, 3).map((stat, index) => (
                 <div 
                   key={index} 
                   className={`bg-white rounded-lg p-6 border ${
@@ -2399,11 +2680,44 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 </div>
               ))}
             </div>
+            
+            {/* Stats Grid - Row 2 */}
+            <div className="grid grid-cols-3 gap-4 mb-8">
+              {stats.slice(3).map((stat, index) => (
+                <div 
+                  key={index + 3} 
+                  className={`bg-white rounded-lg p-6 border ${
+                    stat.clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+                  }`}
+                  onClick={() => {
+                    if (stat.clickable) {
+                      setActiveView('appointments');
+                      setActiveAppointmentTab('pending_notes');
+                    }
+                  }}
+                >
+                  <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
+                  <div className="text-3xl font-bold">{stat.value}</div>
+                </div>
+              ))}
+              <div className="bg-white rounded-lg p-6 border">
+                <div className="text-sm text-gray-600 mb-2">Active Clients</div>
+                <div className="text-3xl font-bold" style={{ color: '#000000' }}>
+                  {clients.filter(client => getClientStatus(client) === 'active').length}
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-6 border">
+                <div className="text-sm text-gray-600 mb-2">Inactive Clients</div>
+                <div className="text-3xl font-bold" style={{ color: '#000000' }}>
+                  {clients.filter(client => getClientStatus(client) === 'inactive').length}
+                </div>
+              </div>
+            </div>
 
-            {/* Upcoming Bookings */}
+            {/* Upcoming Sessions */}
             <div className="bg-white rounded-lg border">
               <div className="p-6 border-b">
-                <h2 className="text-xl font-bold">Upcoming Bookings</h2>
+                <h2 className="text-xl font-bold">Upcoming Sessions</h2>
               </div>
 
               <div className="overflow-x-auto max-h-80 overflow-y-auto">
@@ -2420,7 +2734,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                     {bookings.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-6 py-20 text-center text-gray-400">
-                          No upcoming bookings
+                          No upcoming sessions
                         </td>
                       </tr>
                     ) : (
@@ -2815,35 +3129,48 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               {/* Section 2: Current Risk Indicators */}
               <div className="space-y-4">
                 <h4 className="text-lg font-semibold text-gray-800">2. Current Risk Indicators</h4>
-                <p className="text-sm text-gray-600 mb-4">Y – Yes, risk present. N – No, no risk. U – Unknown, it is not possible to rate at present.</p>
+                <div className="text-sm text-gray-600 mb-4 space-y-1">
+                  <div><span className="font-bold">Y</span> - Yes, Risk Present</div>
+                  <div><span className="font-bold">N</span> - No Risk Present</div>
+                  <div><span className="font-bold">U</span> - Unknown</div>
+                </div>
                 
                 <div className="space-y-4">
                   {[
-                    { key: 'emotionalDysregulation', label: 'a. Severe emotional dysregulation' },
-                    { key: 'physicalHarmIdeas', label: 'b. Physical harm to others or ideas of harming others' },
-                    { key: 'drugAlcoholAbuse', label: 'c. Drug/Alcohol Abuse' },
-                    { key: 'suicidalAttempt', label: 'd. Suicidal Attempt or plan to commit Suicide' },
-                    { key: 'selfHarm', label: 'e. Deliberate Self Harm or ideas of self harm / suicidal ideation' },
-                    { key: 'delusionsHallucinations', label: 'f. Delusions or hallucinations' },
-                    { key: 'impulsiveness', label: 'g. Impulsiveness' },
-                    { key: 'severeStress', label: 'h. Recent severe stress/life event' },
-                    { key: 'socialIsolation', label: 'i. Social Isolation' },
-                    { key: 'concernByOthers', label: 'j. Concern expressed by others (relatives, carers)' },
-                    { key: 'other', label: 'k. Other (please specify)' }
-                  ].map((item) => (
-                    <div key={item.key} className="border rounded-lg p-4 bg-gray-50">
+                    { key: 'emotionalDysregulation', label: 'Severe emotional dysregulation' },
+                    { key: 'physicalHarmIdeas', label: 'Physical harm to others or ideas of harming others' },
+                    { key: 'drugAlcoholAbuse', label: 'Drug/Alcohol Abuse' },
+                    { key: 'suicidalAttempt', label: 'Suicidal Attempt or plan to commit Suicide' },
+                    { key: 'selfHarm', label: 'Deliberate Self Harm or ideas of self harm / suicidal ideation' },
+                    { key: 'delusionsHallucinations', label: 'Delusions or hallucinations' },
+                    { key: 'impulsiveness', label: 'Impulsiveness' },
+                    { key: 'severeStress', label: 'Recent severe stress/life event' },
+                    { key: 'socialIsolation', label: 'Social Isolation' },
+                    { key: 'concernByOthers', label: 'Concern expressed by others (relatives, carers)' },
+                    { key: 'other', label: 'Other (please specify)' }
+                  ].map((item) => {
+                    const selectedValue = sosRiskIndicators[item.key];
+                    const bgColor = selectedValue === 'Y' ? 'bg-red-50' : 
+                                   selectedValue === 'N' ? 'bg-green-50' : 
+                                   selectedValue === 'U' ? 'bg-gray-100' : 'bg-gray-50';
+                    
+                    return (
+                    <div key={item.key} className={`border rounded-lg p-4 ${bgColor} transition-colors duration-200`}>
                       <div className="flex items-start justify-between">
                         <label className="text-sm font-medium text-gray-700 flex-1 mr-4">
                           {item.label}
                         </label>
                         <div className="flex space-x-4">
                           {['Y', 'N', 'U'].map((option) => (
-                            <label key={option} className="flex items-center space-x-1 cursor-pointer">
+                            <label key={option} className={`flex items-center space-x-1 ${
+                              item.key === 'other' && option === 'U' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                            }`}>
                               <input
                                 type="radio"
                                 name={item.key}
                                 value={option}
                                 checked={sosRiskIndicators[item.key] === option}
+                                disabled={item.key === 'other' && option === 'U'}
                                 onChange={(e) => setSosRiskIndicators(prev => ({
                                   ...prev,
                                   [item.key]: e.target.value as 'Y' | 'N' | 'U'
@@ -2869,7 +3196,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                         </div>
                       )}
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               </div>
 
@@ -2884,7 +3212,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                     value={sosRiskSummary}
                     onChange={(e) => setSosRiskSummary(e.target.value)}
                     rows={6}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-red-300 focus:border-red-300"
                     placeholder="Provide detailed risk assessment summary..."
                     required
                   />

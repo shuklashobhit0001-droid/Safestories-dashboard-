@@ -3,6 +3,11 @@ import { Search, ArrowLeft, User, Mail, Calendar as CalendarIcon, List, Eye, Eye
 import { Loader } from './Loader';
 import { Toast } from './Toast';
 import { TherapistCalendar } from './TherapistCalendar';
+import { CaseHistoryTab } from './CaseHistoryTab';
+import { ProgressNotesTab } from './ProgressNotesTab';
+import { ProgressNoteDetail } from './ProgressNoteDetail';
+import { GoalTrackingTab } from './GoalTrackingTab';
+import { FreeConsultationDetail } from './FreeConsultationDetail';
 
 interface Client {
   invitee_name: string;
@@ -61,13 +66,20 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
   const [appointmentsPage, setAppointmentsPage] = useState(1);
   const appointmentsPerPage = 10;
-  const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents'>('overview');
-  const [clientStats, setClientStats] = useState({ sessions: 0, noShows: 0, cancelled: 0 });
+  const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents' | 'caseHistory'>('overview');
+  const [clientStats, setClientStats] = useState({ bookings: 0, sessionsCompleted: 0, noShows: 0, cancelled: 0 });
   const [isCaseHistoryVisible, setIsCaseHistoryVisible] = useState(false);
   const [showCaseHistoryPasswordModal, setShowCaseHistoryPasswordModal] = useState(false);
   const [caseHistoryPassword, setCaseHistoryPassword] = useState('');
   const [caseHistoryPasswordError, setCaseHistoryPasswordError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedProgressNoteId, setSelectedProgressNoteId] = useState<number | null>(null);
+  const [isFreeConsultationNote, setIsFreeConsultationNote] = useState(false);
+  const [clientSessionType, setClientSessionType] = useState<{ hasPaidSessions: boolean; hasFreeConsultation: boolean }>({ hasPaidSessions: false, hasFreeConsultation: false });
+  
+  // Pagination for assigned clients
+  const [clientsPage, setClientsPage] = useState(1);
+  const clientsPerPage = 8;
 
   // Calendar view state
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
@@ -367,25 +379,32 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   };
 
   const openClientDetails = async (client: any) => {
-    console.log('Opening client details for:', client);
-    
     const normalizedClient = {
       invitee_name: client.invitee_name || client.client_name || 'Unknown',
       invitee_email: client.invitee_email || '',
       invitee_phone: client.invitee_phone || ''
     };
     
-    console.log('Normalized client:', normalizedClient);
     setSelectedClient(normalizedClient);
     
     if (!normalizedClient.invitee_email && !normalizedClient.invitee_phone) {
-      console.log('No email or phone, skipping API call');
       setClientAppointments([]);
       return;
     }
     
     setClientDetailsLoading(true);
     try {
+      // Fetch client session type
+      const sessionTypeRes = await fetch(`/api/client-session-type?client_id=${encodeURIComponent(normalizedClient.invitee_phone)}`);
+      if (sessionTypeRes.ok) {
+        const sessionTypeData = await sessionTypeRes.json();
+        console.log('📊 [AllTherapists] Client Session Type:', sessionTypeData);
+        if (sessionTypeData.success) {
+          setClientSessionType(sessionTypeData.data);
+          console.log('✅ [AllTherapists] Session type set:', sessionTypeData.data);
+        }
+      }
+      
       const params = new URLSearchParams();
       if (normalizedClient.invitee_email) params.append('email', normalizedClient.invitee_email);
       if (normalizedClient.invitee_phone) {
@@ -394,10 +413,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         phones.forEach(phone => params.append('phone', phone.trim()));
       }
       
-      console.log('Fetching with params:', params.toString());
       const response = await fetch(`/api/client-details?${params.toString()}`);
       const data = await response.json();
-      console.log('Client details response:', data);
       
       const appointmentsWithStatus = (data.appointments || []).map((apt: any) => {
         let status = apt.booking_status || 'confirmed';
@@ -420,10 +437,16 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       setClientAppointments(appointmentsWithStatus);
       
       // Calculate stats
-      const sessions = appointmentsWithStatus.length;
+      const bookings = appointmentsWithStatus.length; // Total appointments
+      const sessionsCompleted = appointmentsWithStatus.filter((apt: any) => {
+        const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+        const isPast = sessionDate < new Date();
+        const isNotCancelledOrNoShow = apt.booking_status !== 'cancelled' && apt.booking_status !== 'no_show';
+        return isPast && isNotCancelledOrNoShow;
+      }).length; // Only past sessions (completed + pending notes), excluding cancelled/no_show
       const noShows = appointmentsWithStatus.filter((apt: any) => apt.booking_status === 'no_show').length;
       const cancelled = appointmentsWithStatus.filter((apt: any) => apt.booking_status === 'cancelled').length;
-      setClientStats({ sessions, noShows, cancelled });
+      setClientStats({ bookings, sessionsCompleted, noShows, cancelled });
       
       // Update selectedClient with emergency contact and demographic data from the most recent appointment
       if (data.appointments && data.appointments.length > 0) {
@@ -577,9 +600,12 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     }
   };
 
-  const getClientStatus = (client: Client) => {
+  const getClientStatus = (client: Client, appointmentsToCheck?: Appointment[]) => {
+    // Use clientAppointments if viewing a specific client, otherwise use all appointments
+    const appointmentsData = appointmentsToCheck || appointments;
+    
     // If no appointments data, return inactive
-    if (!appointments || appointments.length === 0) {
+    if (!appointmentsData || appointmentsData.length === 0) {
       return 'inactive';
     }
     
@@ -587,18 +613,23 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
     // Check if client has any appointments in the last 30 days
-    const hasRecentAppointment = appointments.some(apt => {
+    const hasRecentAppointment = appointmentsData.some(apt => {
       // Match by email or phone (normalize for comparison)
       const clientEmail = client.invitee_email?.toLowerCase().trim();
       const aptEmail = apt.invitee_email?.toLowerCase().trim();
-      const clientPhones = client.invitee_phone?.split(', ').map(p => p.replace(/[\s\-\(\)\+]/g, ''));
+      
+      // Handle multiple phone numbers (comma-separated) or single phone
+      const clientPhones = client.invitee_phone 
+        ? client.invitee_phone.split(',').map(p => p.trim().replace(/[\s\-\(\)\+]/g, ''))
+        : [];
       const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
       
       const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
-      const phoneMatch = clientPhones && aptPhone && clientPhones.some(phone => phone === aptPhone);
+      const phoneMatch = aptPhone && clientPhones.some(phone => phone === aptPhone);
       
       if (emailMatch || phoneMatch) {
-        const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+        // Use booking_start_at (standardized field from API)
+        const aptDate = apt.booking_start_at ? new Date(apt.booking_start_at) : new Date();
         const isRecent = aptDate >= thirtyDaysAgo;
         const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
         return isRecent && isNotCancelled;
@@ -620,7 +651,17 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
           >
             <ArrowLeft size={24} />
           </button>
-          <h1 className="text-3xl font-bold">{selectedClient.invitee_name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold">{selectedClient.invitee_name}</h1>
+            <span 
+              className="px-3 py-1 rounded-full text-sm font-medium text-white"
+              style={{ 
+                backgroundColor: getClientStatus(selectedClient, clientAppointments) === 'active' ? '#21615D' : '#B91C1C'
+              }}
+            >
+              {getClientStatus(selectedClient, clientAppointments) === 'active' ? 'Active' : 'Inactive'}
+            </span>
+          </div>
         </div>
 
         {/* Two Column Layout - Left side fixed, Right side with tabs */}
@@ -658,47 +699,59 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               </div>
             </div>
 
-            {/* Case History */}
+            {/* Case History / Pre-therapy Notes */}
             <div>
               <div className="flex justify-between items-center mb-3">
-                <h3 className="text-sm font-semibold text-gray-600">Case History:</h3>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={handleCaseHistoryView}
-                    className="p-1.5 hover:bg-gray-200 rounded transition-colors" 
-                    title={isCaseHistoryVisible ? "Hide Case History" : "View Case History"}
-                  >
-                    {isCaseHistoryVisible ? (
-                      <Eye size={16} className="text-gray-600" />
-                    ) : (
-                      <EyeOff size={16} className="text-gray-600" />
-                    )}
-                  </button>
-                  <button 
-                    disabled={!isCaseHistoryVisible}
-                    className={`p-1.5 rounded transition-colors ${
-                      isCaseHistoryVisible 
-                        ? 'hover:bg-gray-200 cursor-pointer' 
-                        : 'cursor-not-allowed opacity-40'
-                    }`}
-                    title={isCaseHistoryVisible ? "Edit Case History" : "View case history first to edit"}
-                  >
-                    <Edit size={16} className="text-gray-600" />
-                  </button>
-                </div>
+                <h3 className="text-sm font-semibold text-gray-600">
+                  {clientSessionType.hasPaidSessions ? 'Case History:' : 'Pre-therapy Notes:'}
+                </h3>
+                {clientSessionType.hasPaidSessions && (
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleCaseHistoryView}
+                      className="p-1.5 hover:bg-gray-200 rounded transition-colors" 
+                      title={isCaseHistoryVisible ? "Hide Case History" : "View Case History"}
+                    >
+                      {isCaseHistoryVisible ? (
+                        <Eye size={16} className="text-gray-600" />
+                      ) : (
+                        <EyeOff size={16} className="text-gray-600" />
+                      )}
+                    </button>
+                    <button 
+                      disabled={!isCaseHistoryVisible}
+                      className={`p-1.5 rounded transition-colors ${
+                        isCaseHistoryVisible 
+                          ? 'hover:bg-gray-200 cursor-pointer' 
+                          : 'cursor-not-allowed opacity-40'
+                      }`}
+                      title={isCaseHistoryVisible ? "Edit Case History" : "View case history first to edit"}
+                    >
+                      <Edit size={16} className="text-gray-600" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="border rounded-lg p-4 bg-gray-50 min-h-[100px]">
-                {isCaseHistoryVisible ? (
-                  selectedClient.clinical_profile ? (
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedClient.clinical_profile}</p>
+                {clientSessionType.hasPaidSessions ? (
+                  // Show case history for paid sessions
+                  isCaseHistoryVisible ? (
+                    selectedClient.clinical_profile ? (
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedClient.clinical_profile}</p>
+                    ) : (
+                      <button className="text-teal-600 text-sm hover:text-teal-700 flex items-center gap-2">
+                        <span>+ add case history</span>
+                      </button>
+                    )
                   ) : (
-                    <button className="text-teal-600 text-sm hover:text-teal-700 flex items-center gap-2">
-                      <span>+ add case history</span>
-                    </button>
+                    <div className="flex items-center justify-center h-20">
+                      <p className="text-gray-400 text-sm">Case history is hidden. Click the eye icon to view.</p>
+                    </div>
                   )
                 ) : (
+                  // Show message for free consultation only
                   <div className="flex items-center justify-center h-20">
-                    <p className="text-gray-400 text-sm">Case history is hidden. Click the eye icon to view.</p>
+                    <p className="text-gray-400 text-sm">Pre-therapy notes will appear after consultation form is filled</p>
                   </div>
                 )}
               </div>
@@ -709,23 +762,45 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
           <div className="col-span-8 space-y-6">
             {/* Navigation Tabs */}
             <div className="flex gap-8 border-b">
-              {[
-                { id: 'overview' as const, label: 'Overview' },
-                { id: 'sessions' as const, label: 'Progress notes' },
-                { id: 'documents' as const, label: 'Goal Tracking' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setClientViewTab(tab.id)}
-                  className={`pb-3 font-medium text-sm ${
-                    clientViewTab === tab.id
-                      ? 'text-teal-700 border-b-2 border-teal-700'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+              {clientSessionType.hasPaidSessions ? (
+                // Show all tabs for paid sessions
+                [
+                  { id: 'overview' as const, label: 'Overview' },
+                  { id: 'caseHistory' as const, label: 'Case History' },
+                  { id: 'sessions' as const, label: 'Progress Notes' },
+                  { id: 'documents' as const, label: 'Goal Tracking' }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setClientViewTab(tab.id)}
+                    className={`pb-3 font-medium text-sm ${
+                      clientViewTab === tab.id
+                        ? 'text-teal-700 border-b-2 border-teal-700'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))
+              ) : (
+                // Show only Overview and Pre-therapy Notes for free consultation only
+                [
+                  { id: 'overview' as const, label: 'Overview' },
+                  { id: 'caseHistory' as const, label: 'Pre-therapy Notes' }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setClientViewTab(tab.id)}
+                    className={`pb-3 font-medium text-sm ${
+                      clientViewTab === tab.id
+                        ? 'text-teal-700 border-b-2 border-teal-700'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))
+              )}
             </div>
 
             {/* Date Filter */}
@@ -833,9 +908,16 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white border rounded-lg p-4">
-                    <p className="text-sm text-gray-600 mb-1">Sessions</p>
-                    <p className="text-3xl font-bold text-gray-900">{clientStats.sessions}</p>
+                    <p className="text-sm text-gray-600 mb-1">Bookings</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.bookings}</p>
                   </div>
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Sessions Completed</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.sessionsCompleted}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white border rounded-lg p-4">
                     <p className="text-sm text-gray-600 mb-1">Next Session</p>
                     <p className="text-lg font-bold text-gray-900">
@@ -859,15 +941,15 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                       })()}
                     </p>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white border rounded-lg p-4">
                     <p className="text-sm text-gray-600 mb-1">Cancellation</p>
                     <p className="text-3xl font-bold text-gray-900">{clientStats.cancelled}</p>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white border rounded-lg p-4">
-                    <p className="text-sm text-gray-600 mb-1">NoShow</p>
+                    <p className="text-sm text-gray-600 mb-1">No Show</p>
                     <p className="text-3xl font-bold text-gray-900">{clientStats.noShows}</p>
                   </div>
                 </div>
@@ -875,55 +957,56 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 <div>
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <User size={20} className="text-gray-700" />
-                    Appointments
+                    Bookings
                   </h3>
 
                   <div className="flex gap-6 mb-4">
                     {[
                       { id: 'upcoming', label: 'Upcoming' },
-                      { id: 'all', label: 'All Appointments' },
+                      { id: 'all', label: 'All' },
                       { id: 'completed', label: 'Completed' },
-                      { id: 'pending_notes', label: 'Pending Notes' },
+                      { id: 'pending_notes', label: 'Pending Session Notes' },
                       { id: 'cancelled', label: 'Cancelled' },
                       { id: 'no_show', label: 'No Show' },
-                    ].map((tab) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setClientAppointmentTab(tab.id)}
-                        className={`pb-2 font-medium ${
-                          clientAppointmentTab === tab.id
-                            ? 'text-teal-700 border-b-2 border-teal-700'
-                            : 'text-gray-400'
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
+                    ].map((tab) => {
+                      const count = clientAppointments.filter(apt => {
+                        if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
+                          return false;
+                        }
+                        if (clientDateFilter.start && clientDateFilter.end) {
+                          const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                          const startDate = new Date(clientDateFilter.start);
+                          const endDate = new Date(clientDateFilter.end + 'T23:59:59');
+                          if (aptDate < startDate || aptDate > endDate) return false;
+                        }
+                        if (tab.id === 'all') return true;
+                        if (tab.id === 'upcoming') {
+                          const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+                          return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                        }
+                        return apt.booking_status === tab.id;
+                      }).length;
+                      
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => setClientAppointmentTab(tab.id)}
+                          className={`pb-2 font-medium whitespace-nowrap ${
+                            clientAppointmentTab === tab.id
+                              ? 'text-teal-700 border-b-2 border-teal-700'
+                              : 'text-gray-400'
+                          }`}
+                        >
+                          {tab.label} ({count})
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {clientDetailsLoading ? (
                     <div className="p-8 text-center"><Loader /></div>
                   ) : (
                     <div>
-                      <h3 className="text-lg font-semibold mb-3">
-                        Appointments ({clientAppointments.filter(apt => {
-                          if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
-                            return false;
-                          }
-                          if (clientDateFilter.start && clientDateFilter.end) {
-                            const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                            const startDate = new Date(clientDateFilter.start);
-                            const endDate = new Date(clientDateFilter.end + 'T23:59:59');
-                            if (aptDate < startDate || aptDate > endDate) return false;
-                          }
-                          if (clientAppointmentTab === 'all') return true;
-                          if (clientAppointmentTab === 'upcoming') {
-                            const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
-                          }
-                          return apt.booking_status === clientAppointmentTab;
-                        }).length})
-                      </h3>
                       <div className="bg-white border rounded-lg overflow-hidden">
                         <table className="w-full" ref={appointmentActionsRef}>
                           <thead className="bg-gray-50 border-b">
@@ -1050,17 +1133,56 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             )}
 
             {/* Sessions Tab */}
-            {clientViewTab === 'sessions' && (
-              <div className="text-center py-12">
-                <p className="text-gray-500 text-lg">Progress notes view coming soon...</p>
-              </div>
+            {clientViewTab === 'sessions' && clientSessionType.hasPaidSessions && (
+              selectedProgressNoteId ? (
+                isFreeConsultationNote ? (
+                  <FreeConsultationDetail 
+                    noteId={selectedProgressNoteId}
+                    onBack={() => {
+                      setSelectedProgressNoteId(null);
+                      setIsFreeConsultationNote(false);
+                    }}
+                  />
+                ) : (
+                  <ProgressNoteDetail 
+                    noteId={selectedProgressNoteId}
+                    onBack={() => {
+                      setSelectedProgressNoteId(null);
+                      setIsFreeConsultationNote(false);
+                    }}
+                  />
+                )
+              ) : (
+                <ProgressNotesTab 
+                  clientId={selectedClient.invitee_phone}
+                  onViewNote={(noteId, isFreeConsult = false) => {
+                    setSelectedProgressNoteId(noteId);
+                    setIsFreeConsultationNote(isFreeConsult);
+                  }}
+                  hasFreeConsultation={clientSessionType.hasFreeConsultation}
+                />
+              )
+            )}
+
+            {/* Case History / Pre-therapy Notes Tab */}
+            {clientViewTab === 'caseHistory' && (
+              clientSessionType.hasPaidSessions ? (
+                <CaseHistoryTab clientId={selectedClient.invitee_phone} />
+              ) : (
+                // Show free consultation notes when only free consultation exists
+                <div className="text-center py-12">
+                  <p className="text-gray-500 text-lg mb-4">Free consultation session booked</p>
+                  <p className="text-gray-400 text-sm">Pre-therapy notes will appear here after the therapist fills the consultation form</p>
+                </div>
+              )
             )}
 
             {/* Documents Tab */}
-            {clientViewTab === 'documents' && (
-              <div className="text-center py-12">
-                <p className="text-gray-500 text-lg">Goal Tracking view coming soon...</p>
-              </div>
+            {clientViewTab === 'documents' && clientSessionType.hasPaidSessions && (
+              <GoalTrackingTab 
+                clientId={selectedClient.invitee_phone}
+                clientName={selectedClient.invitee_name}
+              />
             )}
           </div>
         </div>
@@ -1187,22 +1309,36 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             </div>
           )}
 
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Total Sessions Lifetime</p>
-              <p className="text-3xl font-bold text-teal-700">{selectedTherapist.total_sessions_lifetime}</p>
-            </div>
-            <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
-              <p className="text-sm text-gray-600 mb-1">Sessions This Month</p>
-              <p className="text-3xl font-bold text-teal-700">{selectedTherapist.sessions_this_month}</p>
+              <p className="text-3xl font-bold" style={{ color: '#21615D' }}>{selectedTherapist.total_sessions_lifetime}</p>
             </div>
             <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
-              <p className="text-3xl font-bold text-teal-700">₹{Number(selectedTherapist.total_revenue || 0).toLocaleString()}</p>
+              <p className="text-3xl font-bold" style={{ color: '#21615D' }}>₹{Number(selectedTherapist.total_revenue || 0).toLocaleString()}</p>
+            </div>
+            <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Active Clients</p>
+              <p className="text-3xl font-bold" style={{ color: '#21615D' }}>
+                {clients.filter(client => getClientStatus(client) === 'active').length}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Sessions This Month</p>
+              <p className="text-3xl font-bold" style={{ color: '#21615D' }}>{selectedTherapist.sessions_this_month}</p>
             </div>
             <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Revenue This Month</p>
-              <p className="text-3xl font-bold text-teal-700">₹{Number(selectedTherapist.revenue_this_month || 0).toLocaleString()}</p>
+              <p className="text-3xl font-bold" style={{ color: '#21615D' }}>₹{Number(selectedTherapist.revenue_this_month || 0).toLocaleString()}</p>
+            </div>
+            <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Inactive Clients</p>
+              <p className="text-3xl font-bold" style={{ color: '#21615D' }}>
+                {clients.filter(client => getClientStatus(client) === 'inactive').length}
+              </p>
             </div>
           </div>
         </div>
@@ -1231,102 +1367,140 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                           <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No clients found</td>
                         </tr>
                       ) : (
-                        clients.map((client, index) => {
-                          const phoneNumbers = client.invitee_phone.split(', ');
-                          const hasMultiplePhones = phoneNumbers.length > 1;
+                        (() => {
+                          const startIndex = (clientsPage - 1) * clientsPerPage;
+                          const endIndex = startIndex + clientsPerPage;
+                          const paginatedClients = clients.slice(startIndex, endIndex);
                           
-                          return (
-                            <React.Fragment key={index}>
-                              <tr 
-                                className={`border-b cursor-pointer transition-colors ${
-                                  selectedClientForAction === index ? 'bg-gray-100' : 'hover:bg-gray-50'
-                                }`}
-                                onClick={() => toggleClientActions(index)}
-                              >
-                                <td className="px-4 py-3 text-sm">
-                                  <div className="flex items-center gap-2">
-                                    {hasMultiplePhones && (
+                          return paginatedClients.map((client, index) => {
+                            const actualIndex = startIndex + index;
+                            const phoneNumbers = client.invitee_phone.split(', ');
+                            const hasMultiplePhones = phoneNumbers.length > 1;
+                            
+                            return (
+                              <React.Fragment key={actualIndex}>
+                                <tr 
+                                  className={`border-b cursor-pointer transition-colors ${
+                                    selectedClientForAction === actualIndex ? 'bg-gray-100' : 'hover:bg-gray-50'
+                                  }`}
+                                  onClick={() => toggleClientActions(actualIndex)}
+                                >
+                                  <td className="px-4 py-3 text-sm">
+                                    <div className="flex items-center gap-2">
+                                      {hasMultiplePhones && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleClientRow(actualIndex);
+                                          }}
+                                          className="text-gray-500 hover:text-gray-700"
+                                        >
+                                          {expandedClientRows.has(actualIndex) ? '▼' : '▶'}
+                                        </button>
+                                      )}
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          toggleClientRow(index);
+                                          openClientDetails(client);
                                         }}
-                                        className="text-gray-500 hover:text-gray-700"
+                                        className="text-teal-700 hover:underline font-medium text-left"
                                       >
-                                        {expandedClientRows.has(index) ? '▼' : '▶'}
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        openClientDetails(client);
-                                      }}
-                                      className="text-teal-700 hover:underline font-medium text-left"
-                                    >
-                                      {client.invitee_name}
-                                    </button>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
-                                <td className="px-4 py-3 text-sm text-gray-600">{phoneNumbers[0]}</td>
-                                <td className="px-4 py-3 text-sm">
-                                  {(() => {
-                                    const status = getClientStatus(client);
-                                    return (
-                                      <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${
-                                        status === 'active' ? '' : ''
-                                      }`} style={{
-                                        backgroundColor: status === 'active' ? '#21615D' : '#B91C1C'
-                                      }}>
-                                        {status === 'active' ? 'Active' : 'Inactive'}
-                                      </span>
-                                    );
-                                  })()}
-                                </td>
-                              </tr>
-                              {selectedClientForAction === index && (
-                                <tr className="bg-gray-50 border-b">
-                                  <td colSpan={4} className="px-4 py-4">
-                                    <div className="flex gap-3 justify-center">
-                                      <button
-                                        onClick={() => handleSendClientReminder(client)}
-                                        className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                                        Send Booking Link
+                                        {client.invitee_name}
                                       </button>
                                     </div>
                                   </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{phoneNumbers[0]}</td>
+                                  <td className="px-4 py-3 text-sm">
+                                    {(() => {
+                                      const status = getClientStatus(client);
+                                      return (
+                                        <span className={`px-3 py-1 rounded-full text-xs font-medium text-white`} style={{
+                                          backgroundColor: status === 'active' ? '#21615D' : '#B91C1C'
+                                        }}>
+                                          {status === 'active' ? 'Active' : 'Inactive'}
+                                        </span>
+                                      );
+                                    })()}
+                                  </td>
                                 </tr>
-                              )}
-                              {expandedClientRows.has(index) && hasMultiplePhones && (
-                                phoneNumbers.slice(1).map((phone, pIndex) => (
-                                  <tr key={`${index}-${pIndex}`} className="bg-gray-50 border-b">
-                                    <td className="px-4 py-3 text-sm pl-12 text-gray-600">{client.invitee_name}</td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">{phone}</td>
-                                    <td className="px-4 py-3 text-sm">
-                                      {(() => {
-                                        const status = getClientStatus(client);
-                                        return (
-                                          <span className={`px-3 py-1 rounded-full text-xs font-medium text-white`} style={{
-                                            backgroundColor: status === 'active' ? '#21615D' : '#B91C1C'
-                                          }}>
-                                            {status === 'active' ? 'Active' : 'Inactive'}
-                                          </span>
-                                        );
-                                      })()}
+                                {selectedClientForAction === actualIndex && (
+                                  <tr className="bg-gray-50 border-b">
+                                    <td colSpan={4} className="px-4 py-4">
+                                      <div className="flex gap-3 justify-center">
+                                        <button
+                                          onClick={() => handleSendClientReminder(client)}
+                                          className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                          Send Booking Link
+                                        </button>
+                                      </div>
                                     </td>
                                   </tr>
-                                ))
-                              )}
-                            </React.Fragment>
-                          );
-                        })
+                                )}
+                                {expandedClientRows.has(actualIndex) && hasMultiplePhones && (
+                                  phoneNumbers.slice(1).map((phone, pIndex) => (
+                                    <tr key={`${actualIndex}-${pIndex}`} className="bg-gray-50 border-b">
+                                      <td className="px-4 py-3 text-sm pl-12 text-gray-600">{client.invitee_name}</td>
+                                      <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
+                                      <td className="px-4 py-3 text-sm text-gray-600">{phone}</td>
+                                      <td className="px-4 py-3 text-sm">
+                                        {(() => {
+                                          const status = getClientStatus(client);
+                                          return (
+                                            <span className={`px-3 py-1 rounded-full text-xs font-medium text-white`} style={{
+                                              backgroundColor: status === 'active' ? '#21615D' : '#B91C1C'
+                                            }}>
+                                              {status === 'active' ? 'Active' : 'Inactive'}
+                                            </span>
+                                          );
+                                        })()}
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </React.Fragment>
+                            );
+                          });
+                        })()
                       )}
                     </tbody>
                   </table>
                 </div>
+                
+                {/* Pagination */}
+                {clients.length > clientsPerPage && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+                    <div className="text-sm text-gray-600">
+                      Showing {((clientsPage - 1) * clientsPerPage) + 1}-{Math.min(clientsPage * clientsPerPage, clients.length)} of {clients.length} results
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setClientsPage(prev => Math.max(1, prev - 1))}
+                        disabled={clientsPage === 1}
+                        className={`px-3 py-1 rounded ${
+                          clientsPage === 1
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-white border hover:bg-gray-50'
+                        }`}
+                      >
+                        ←
+                      </button>
+                      <button
+                        onClick={() => setClientsPage(prev => Math.min(Math.ceil(clients.length / clientsPerPage), prev + 1))}
+                        disabled={clientsPage >= Math.ceil(clients.length / clientsPerPage)}
+                        className={`px-3 py-1 rounded ${
+                          clientsPage >= Math.ceil(clients.length / clientsPerPage)
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-white border hover:bg-gray-50'
+                        }`}
+                      >
+                        →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
