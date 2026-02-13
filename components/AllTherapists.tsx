@@ -419,12 +419,18 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       const appointmentsWithStatus = (data.appointments || []).map((apt: any) => {
         let status = apt.booking_status || 'confirmed';
         const now = new Date();
+        
+        // Parse the session date - booking_start_at_raw is in IST format
         const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
+        
+        // Also check booking_end_at to determine if session has ended
+        const sessionEndDate = apt.booking_end_at_raw ? new Date(apt.booking_end_at_raw) : sessionDate;
         
         if (status !== 'cancelled' && status !== 'no_show' && status !== 'no show') {
           if (apt.has_session_notes) {
             status = 'completed';
-          } else if (sessionDate < now) {
+          } else if (sessionEndDate < now) {
+            // Session has ended (use end time, not start time)
             status = 'pending_notes';
           } else {
             status = 'scheduled';
