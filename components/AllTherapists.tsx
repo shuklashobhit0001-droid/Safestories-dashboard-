@@ -417,27 +417,65 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       const data = await response.json();
       
       const appointmentsWithStatus = (data.appointments || []).map((apt: any) => {
-        // Server already calculated the status, just use it
+        // Use the same logic as Appointments component
+        let status = apt.booking_status || 'confirmed';
+        
+        // Calculate status using the same logic as Appointments.tsx
+        if (status === 'cancelled' || status === 'canceled') {
+          status = 'cancelled';
+        } else if (status === 'no_show' || status === 'no show') {
+          status = 'no_show';
+        } else if (apt.has_session_notes) {
+          status = 'completed';
+        } else {
+          // Parse booking_invitee_time to check if session ended
+          if (apt.booking_invitee_time) {
+            const timeMatch = apt.booking_invitee_time.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
+            if (timeMatch) {
+              const [, dateStr, , endTimeStr] = timeMatch;
+              const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+              if (endDateTime < new Date() && !apt.has_session_notes) {
+                status = 'pending_notes';
+              } else {
+                status = 'scheduled';
+              }
+            } else {
+              status = 'scheduled';
+            }
+          } else {
+            status = 'scheduled';
+          }
+        }
+        
         console.log('📅 Appointment:', apt.booking_resource_name);
-        console.log('   Status from server:', apt.booking_status);
-        console.log('   Is past (server):', apt.is_past);
+        console.log('   Time string:', apt.booking_invitee_time);
+        console.log('   Calculated status:', status);
         console.log('   Has notes:', apt.has_session_notes);
         console.log('');
         
         return {
           ...apt,
-          // Use the status calculated by the server
-          booking_status: apt.booking_status
+          booking_status: status
         };
       });
       
       setClientAppointments(appointmentsWithStatus);
       
-      // Calculate stats
+      // Calculate stats (same logic as Appointments component)
       const bookings = appointmentsWithStatus.length; // Total appointments
       const sessionsCompleted = appointmentsWithStatus.filter((apt: any) => {
+        // Check if session has ended (not just started)
+        let hasEnded = false;
+        if (apt.booking_invitee_time) {
+          const timeMatch = apt.booking_invitee_time.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
+          if (timeMatch) {
+            const [, dateStr, , endTimeStr] = timeMatch;
+            const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+            hasEnded = endDateTime < new Date();
+          }
+        }
         const isNotCancelledOrNoShow = apt.booking_status !== 'cancelled' && apt.booking_status !== 'no_show';
-        return apt.is_past && isNotCancelledOrNoShow;
+        return hasEnded && isNotCancelledOrNoShow;
       }).length; // Only past sessions (completed + pending notes), excluding cancelled/no_show
       const noShows = appointmentsWithStatus.filter((apt: any) => apt.booking_status === 'no_show').length;
       const cancelled = appointmentsWithStatus.filter((apt: any) => apt.booking_status === 'cancelled').length;
@@ -919,8 +957,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                       {(() => {
                         const upcoming = clientAppointments
                           .filter(apt => {
-                            const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                            // Use same logic as Appointments component - only 'scheduled' sessions are upcoming
+                            return apt.booking_status === 'scheduled';
                           })
                           .sort((a, b) => {
                             const dateA = a.booking_start_at_raw ? new Date(a.booking_start_at_raw) : new Date();
@@ -976,8 +1014,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                         }
                         if (tab.id === 'all') return true;
                         if (tab.id === 'upcoming') {
-                          const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                          return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                          // Use server-calculated status - only 'scheduled' sessions are upcoming
+                          return apt.booking_status === 'scheduled';
                         }
                         return apt.booking_status === tab.id;
                       }).length;
@@ -1025,8 +1063,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                               }
                               if (clientAppointmentTab === 'all') return true;
                               if (clientAppointmentTab === 'upcoming') {
-                                const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                                return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                                // Use server-calculated status - only 'scheduled' sessions are upcoming
+                                return apt.booking_status === 'scheduled';
                               }
                               return apt.booking_status === clientAppointmentTab;
                             }).length === 0 ? (
@@ -1046,8 +1084,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                 }
                                 if (clientAppointmentTab === 'all') return true;
                                 if (clientAppointmentTab === 'upcoming') {
-                                  const sessionDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date();
-                                  return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                                  // Use server-calculated status - only 'scheduled' sessions are upcoming
+                                  return apt.booking_status === 'scheduled';
                                 }
                                 return apt.booking_status === clientAppointmentTab;
                               }).map((apt, index) => (
