@@ -439,7 +439,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                 className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3"
               >
                 <Eye size={18} className="text-gray-600" />
-                <span className="text-sm font-medium">Change/Forgot Password</span>
+                <span className="text-sm font-medium">
+                  {import.meta.env.VITE_VERCEL !== '1' ? 'Change/Forgot Password' : 'Change Password'}
+                </span>
               </button>
             </div>
           )}

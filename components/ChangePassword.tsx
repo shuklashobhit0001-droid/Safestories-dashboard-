@@ -185,8 +185,12 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
         <span>Back</span>
       </button>
 
-      <h1 className="text-3xl font-bold mb-1">Change/Forgot Password</h1>
-      <p className="text-gray-600 mb-8">Update or recover your account password</p>
+      <h1 className="text-3xl font-bold mb-1">
+        {import.meta.env.VITE_VERCEL !== '1' ? 'Change/Forgot Password' : 'Change Password'}
+      </h1>
+      <p className="text-gray-600 mb-8">
+        {import.meta.env.VITE_VERCEL !== '1' ? 'Update or recover your account password' : 'Update your account password'}
+      </p>
 
       {/* Tabs */}
       <div className="flex gap-4 mb-6 border-b">
@@ -205,16 +209,25 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
         </button>
         <button
           onClick={() => {
-            setActiveTab('forgot');
-            setPasswordError('');
+            // Only allow tab switch in local (not on Vercel)
+            if (import.meta.env.VITE_VERCEL !== '1') {
+              setActiveTab('forgot');
+              setPasswordError('');
+            }
           }}
-          className={`pb-3 px-4 font-medium ${
+          disabled={import.meta.env.VITE_VERCEL === '1'}
+          className={`pb-3 px-4 font-medium flex items-center gap-2 ${
             activeTab === 'forgot'
               ? 'text-teal-700 border-b-2 border-teal-700'
+              : import.meta.env.VITE_VERCEL === '1'
+              ? 'text-gray-400 cursor-not-allowed opacity-60'
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
           Forgot Password
+          {import.meta.env.VITE_VERCEL === '1' && (
+            <span className="text-red-500 text-xs">✕</span>
+          )}
         </button>
       </div>
 
