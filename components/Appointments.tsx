@@ -23,7 +23,7 @@ interface Appointment {
   booking_status?: string;
 }
 
-export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onCreateBooking?: () => void }> = ({ onClientClick, onCreateBooking }) => {
+export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onCreateBooking?: () => void; initialTab?: string }> = ({ onClientClick, onCreateBooking, initialTab }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +33,7 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState('scheduled');
+  const [activeTab, setActiveTab] = useState(initialTab || 'scheduled');
   const itemsPerPage = 10;
   const appointmentActionsRef = React.useRef<HTMLTableElement>(null);
 

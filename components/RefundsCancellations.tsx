@@ -22,8 +22,8 @@ interface Payment {
   payment_amount: number;
 }
 
-export const RefundsCancellations: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('all_payments');
+export const RefundsCancellations: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
+  const [activeTab, setActiveTab] = useState(initialTab || 'all_payments');
   const [searchQuery, setSearchQuery] = useState('');
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);

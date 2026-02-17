@@ -35,6 +35,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   });
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [profilePictureUrl, setProfilePictureUrl] = useState<string>('');
+  const [appointmentTab, setAppointmentTab] = useState<string>('scheduled');
+  const [refundTab, setRefundTab] = useState<string>('all_payments');
 
   useEffect(() => {
     localStorage.setItem('adminActiveView', activeView);
@@ -86,16 +88,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const monthOptions = generateMonthOptions();
 
   const [stats, setStats] = useState([
-    { title: 'Revenue', value: '₹0', lastMonth: '₹0' },
-    { title: 'Refunded', value: '₹0', lastMonth: '₹0' },
-    { title: 'Bookings', value: '0', lastMonth: '0' },
-    { title: 'Sessions Completed', value: '0', lastMonth: '0' },
-    { title: 'Free Consultations', value: '0', lastMonth: '0' },
-    { title: 'Cancelled', value: '0', lastMonth: '0' },
-    { title: 'Refunds', value: '0', lastMonth: '0' },
-    { title: 'No Show', value: '0', lastMonth: '0' },
+    { title: 'Revenue', value: '₹0', lastMonth: '₹0', clickable: false },
+    { title: 'Refunded', value: '₹0', lastMonth: '₹0', clickable: false },
+    { title: 'Bookings', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'all' },
+    { title: 'Sessions Completed', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'completed' },
+    { title: 'Free Consultations', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'free_consultation' },
+    { title: 'Cancelled', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'cancelled' },
+    { title: 'Refunds', value: '0', lastMonth: '0', clickable: true, targetView: 'refunds', targetTab: 'Pending' },
+    { title: 'No Show', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'no_show' },
   ]);
   const [bookings, setBookings] = useState<any[]>([]);
+
+  const formatClientName = (name: string): string => {
+    if (!name) return name;
+    return name
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
   const [allBookings, setAllBookings] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalBookings, setTotalBookings] = useState(0);
@@ -282,14 +292,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       const statsData = await statsRes.json();
       
       setStats([
-        { title: 'Revenue', value: `₹${Number(statsData.revenue || 0).toLocaleString('en-IN')}`, lastMonth: '₹0' },
-        { title: 'Refunded', value: `₹${Number(statsData.refundedAmount || 0).toLocaleString('en-IN')}`, lastMonth: '₹0' },
-        { title: 'Bookings', value: (statsData.bookings || 0).toString(), lastMonth: '0' },
-        { title: 'Sessions Completed', value: (statsData.sessionsCompleted || 0).toString(), lastMonth: '0' },
-        { title: 'Free Consultations', value: (statsData.freeConsultations || 0).toString(), lastMonth: '0' },
-        { title: 'Cancelled', value: (statsData.cancelled || 0).toString(), lastMonth: '0' },
-        { title: 'Refunds', value: (statsData.refunds || 0).toString(), lastMonth: '0' },
-        { title: 'No Show', value: (statsData.noShows || 0).toString(), lastMonth: '0' },
+        { title: 'Revenue', value: `₹${Number(statsData.revenue || 0).toLocaleString('en-IN')}`, lastMonth: '₹0', clickable: false },
+        { title: 'Refunded', value: `₹${Number(statsData.refundedAmount || 0).toLocaleString('en-IN')}`, lastMonth: '₹0', clickable: false },
+        { title: 'Bookings', value: (statsData.bookings || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'all' },
+        { title: 'Sessions Completed', value: (statsData.sessionsCompleted || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'completed' },
+        { title: 'Free Consultations', value: (statsData.freeConsultations || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'free_consultation' },
+        { title: 'Cancelled', value: (statsData.cancelled || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'cancelled' },
+        { title: 'Refunds', value: (statsData.refunds || 0).toString(), lastMonth: '0', clickable: true, targetView: 'refunds', targetTab: 'Pending' },
+        { title: 'No Show', value: (statsData.noShows || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'no_show' },
       ]);
 
       // Fetch all bookings (with a high limit to get total count)
@@ -510,13 +520,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             }}
           />
         ) : activeView === 'appointments' ? (
-          <Appointments onClientClick={(client) => {
-            setSelectedClientForView(client);
-            setClientViewSource('appointments');
-            setActiveView('therapists');
-          }} onCreateBooking={() => setActiveView('createBooking')} />
+          <Appointments 
+            initialTab={appointmentTab}
+            onClientClick={(client) => {
+              setSelectedClientForView(client);
+              setClientViewSource('appointments');
+              setActiveView('therapists');
+            }} 
+            onCreateBooking={() => setActiveView('createBooking')} 
+          />
         ) : activeView === 'refunds' ? (
-          <RefundsCancellations />
+          <RefundsCancellations initialTab={refundTab} />
         ) : activeView === 'audit' ? (
           <AuditLogs />
         ) : activeView === 'notifications' ? (
@@ -627,7 +641,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           {/* Stats Grid */}
           <div className="grid grid-cols-4 gap-4 mb-8">
             {stats.map((stat, index) => (
-              <div key={index} className="bg-white rounded-lg p-6 border">
+              <div 
+                key={index} 
+                className={`bg-white rounded-lg p-6 border ${
+                  stat.clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+                }`}
+                onClick={() => {
+                  if (stat.clickable) {
+                    resetAllStates();
+                    setActiveView(stat.targetView);
+                    if (stat.targetView === 'appointments' && stat.targetTab) {
+                      setAppointmentTab(stat.targetTab);
+                    } else if (stat.targetView === 'refunds' && stat.targetTab) {
+                      setRefundTab(stat.targetTab);
+                    }
+                  }
+                }}
+              >
                 <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
                 <div className="text-3xl font-bold">{stat.value}</div>
               </div>
@@ -681,7 +711,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                               }}
                               className="text-teal-700 hover:underline font-medium"
                             >
-                              {booking.client_name}
+                              {formatClientName(booking.client_name)}
                             </button>
                           </td>
                           <td className="px-6 py-4">{booking.therapy_type}</td>
@@ -793,7 +823,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-xl font-bold mb-4">Sending Manual Reminder</h3>
-            <p className="text-gray-600 mb-4">This will send a reminder message to {selectedBooking.client_name} on Whatsapp</p>
+            <p className="text-gray-600 mb-4">This will send a reminder message to {formatClientName(selectedBooking.client_name)} on Whatsapp</p>
             <div className="flex gap-3">
               <button
                 onClick={sendWhatsAppNotification}

@@ -52,10 +52,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const monthOptions = generateMonthOptions();
 
   const [stats, setStats] = useState([
-    { title: 'Sessions', value: '0', lastMonth: '0' },
-    { title: 'No-shows', value: '0', lastMonth: '0' },
-    { title: 'Cancelled', value: '0', lastMonth: '0' },
-    { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true },
+    { title: 'Bookings', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'all' },
+    { title: 'Sessions Completed', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'completed' },
+    { title: 'No-shows', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'no_show' },
+    { title: 'Cancelled', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'cancelled' },
+    { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'pending_notes' },
   ]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -69,7 +70,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [appointmentCurrentPage, setAppointmentCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const appointmentsPerPage = 10;
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [sosConfirmText, setSosConfirmText] = useState('');
@@ -146,6 +149,15 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     }
     return email;
   };
+
+  const formatClientName = (name: string): string => {
+    if (!name) return name;
+    return name
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [additionalNoteText, setAdditionalNoteText] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState<any[]>([]);
@@ -525,10 +537,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         const data = await response.json();
         
         setStats([
-          { title: 'Sessions', value: (data.stats.sessions || 0).toString(), lastMonth: '0' },
-          { title: 'No-shows', value: (data.stats.noShows || 0).toString(), lastMonth: '0' },
-          { title: 'Cancelled', value: (data.stats.cancelled || 0).toString(), lastMonth: '0' },
-          { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true },
+          { title: 'Bookings', value: (data.stats.bookings || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'all' },
+          { title: 'Sessions Completed', value: (data.stats.sessionsCompleted || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'completed' },
+          { title: 'No-shows', value: (data.stats.noShows || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'no_show' },
+          { title: 'Cancelled', value: (data.stats.cancelled || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'cancelled' },
+          { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'pending_notes' },
         ]);
         
         setBookings(data.upcomingBookings || []);
@@ -547,7 +560,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           
           // Count pending notes
           const pendingNotesCount = appointmentsData.appointments.filter((apt: any) => {
-            if (apt.booking_status === 'cancelled' || apt.booking_status === 'no_show') return false;
+            if (apt.booking_status === 'cancelled' || apt.booking_status === 'canceled') return false;
+            if (apt.booking_status === 'no_show' || apt.booking_status === 'no show') return false;
             if (apt.has_session_notes) return false;
             if (apt.session_timings) {
               const timeMatch = apt.session_timings.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
@@ -560,20 +574,25 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             return false;
           }).length;
           
+          console.log('📝 [Dashboard] Pending notes count:', pendingNotesCount);
+          console.log('📝 [Dashboard] Total appointments:', appointmentsData.appointments.length);
+          
           setStats([
-            { title: 'Sessions', value: (data.stats.sessions || 0).toString(), lastMonth: '0' },
-            { title: 'No-shows', value: (data.stats.noShows || 0).toString(), lastMonth: '0' },
-            { title: 'Cancelled', value: (data.stats.cancelled || 0).toString(), lastMonth: '0' },
-            { title: 'Pending Session Notes', value: pendingNotesCount.toString(), lastMonth: '0', clickable: true },
+            { title: 'Bookings', value: (data.stats.bookings || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'all' },
+            { title: 'Sessions Completed', value: (data.stats.sessionsCompleted || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'completed' },
+            { title: 'No-shows', value: (data.stats.noShows || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'no_show' },
+            { title: 'Cancelled', value: (data.stats.cancelled || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'cancelled' },
+            { title: 'Pending Session Notes', value: pendingNotesCount.toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'pending_notes' },
           ]);
         }
       } else {
         // Fallback to empty data
         setStats([
-          { title: 'Sessions', value: '0', lastMonth: '0' },
-          { title: 'No-shows', value: '0', lastMonth: '0' },
-          { title: 'Cancelled', value: '0', lastMonth: '0' },
-          { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true },
+          { title: 'Bookings', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'all' },
+          { title: 'Sessions Completed', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'completed' },
+          { title: 'No-shows', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'no_show' },
+          { title: 'Cancelled', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'cancelled' },
+          { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'pending_notes' },
         ]);
         setBookings([]);
       }
@@ -581,10 +600,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       console.error('Error fetching therapist data:', error);
       // Fallback to empty data
       setStats([
-        { title: 'Sessions', value: '0', lastMonth: '0' },
-        { title: 'No-shows', value: '0', lastMonth: '0' },
-        { title: 'Cancelled', value: '0', lastMonth: '0' },
-        { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true },
+        { title: 'Bookings', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'all' },
+        { title: 'Sessions Completed', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'completed' },
+        { title: 'No-shows', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'no_show' },
+        { title: 'Cancelled', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'cancelled' },
+        { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'pending_notes' },
       ]);
       setBookings([]);
     } finally {
@@ -1271,7 +1291,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                       await fetchClientDetails(client);
                       setSelectedClient(client);
                     }}>
-                      <td className="px-6 py-4 text-sm">{client.client_name}</td>
+                      <td className="px-6 py-4 text-sm">{formatClientName(client.client_name)}</td>
                       <td className="px-6 py-4 text-sm">{client.client_phone}</td>
                       <td className="px-6 py-4 text-sm">{client.client_email}</td>
                       <td className="px-6 py-4 text-sm">{client.total_sessions}</td>
@@ -1430,6 +1450,20 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     return 'scheduled';
   };
 
+  // Add this useEffect to log pending notes count when appointments change
+  useEffect(() => {
+    if (appointments.length > 0) {
+      const pendingFromGetStatus = appointments.filter(apt => getAppointmentStatus(apt) === 'pending_notes').length;
+      console.log('📋 [My Bookings] Pending notes from getAppointmentStatus:', pendingFromGetStatus);
+      console.log('📋 [My Bookings] Total appointments:', appointments.length);
+    }
+  }, [appointments]);
+
+  // Reset appointment page when tab or search term changes
+  useEffect(() => {
+    setAppointmentCurrentPage(1);
+  }, [activeAppointmentTab, appointmentSearchTerm]);
+
   const renderMyAppointments = () => (
     <div className="p-8">
       {appointmentsLoading ? (
@@ -1500,20 +1534,33 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                     No bookings found
                   </td>
                 </tr>
-              ) : (
-                appointments
-                  .filter(appointment => {
-                    const matchesSearch = appointmentSearchTerm === '' || 
-                      appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                      appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-                      (user.full_name || user.username).toLowerCase().includes(appointmentSearchTerm.toLowerCase());
-                    
-                    if (!matchesSearch) return false;
-                    if (activeAppointmentTab === 'all') return true;
-                    
-                    return getAppointmentStatus(appointment) === activeAppointmentTab;
-                  })
-                  .map((appointment, index, filteredArray) => (
+              ) : (() => {
+                // Filter appointments first
+                const filteredAppointments = appointments.filter(appointment => {
+                  const matchesSearch = appointmentSearchTerm === '' || 
+                    appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                    appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                    (user.full_name || user.username).toLowerCase().includes(appointmentSearchTerm.toLowerCase());
+                  
+                  if (!matchesSearch) return false;
+                  if (activeAppointmentTab === 'all') return true;
+                  
+                  return getAppointmentStatus(appointment) === activeAppointmentTab;
+                });
+
+                // Calculate pagination
+                const totalFiltered = filteredAppointments.length;
+                const startIndex = (appointmentCurrentPage - 1) * appointmentsPerPage;
+                const endIndex = startIndex + appointmentsPerPage;
+                const paginatedAppointments = filteredAppointments.slice(startIndex, endIndex);
+
+                return paginatedAppointments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center text-gray-400 py-8">
+                      No bookings found
+                    </td>
+                  </tr>
+                ) : paginatedAppointments.map((appointment, index) => (
                     <React.Fragment key={index}>
                       <tr 
                         className={`border-b cursor-pointer transition-colors ${
@@ -1528,7 +1575,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                             className="text-teal-700 hover:underline cursor-pointer"
                             onClick={() => handleViewClientFromAppointment(appointment)}
                           >
-                            {appointment.client_name}
+                            {formatClientName(appointment.client_name)}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm">{appointment.contact_info}</td>
@@ -1616,42 +1663,53 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                         </tr>
                       )}
                     </React.Fragment>
-                  ))
-              )}
+                  ));
+              })()}
             </tbody>
           </table>
         </div>
 
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {appointments.filter(appointment => {
-            const matchesSearch = appointmentSearchTerm === '' || 
-              appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-              appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-              'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase());
-            if (!matchesSearch) return false;
-            if (activeAppointmentTab === 'all') return true;
-            return getAppointmentStatus(appointment) === activeAppointmentTab;
-          }).length} of {appointments.filter(appointment => {
-            const matchesSearch = appointmentSearchTerm === '' || 
-              appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-              appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-              'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase());
-            if (!matchesSearch) return false;
-            if (activeAppointmentTab === 'all') return true;
-            return getAppointmentStatus(appointment) === activeAppointmentTab;
-          }).length} booking{appointments.filter(appointment => {
-            const matchesSearch = appointmentSearchTerm === '' || 
-              appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-              appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
-              'Ishika Mahajan'.toLowerCase().includes(appointmentSearchTerm.toLowerCase());
-            if (!matchesSearch) return false;
-            if (activeAppointmentTab === 'all') return true;
-            return getAppointmentStatus(appointment) === activeAppointmentTab;
-          }).length !== 1 ? 's' : ''}</span>
-          <div className="flex gap-2">
-            <button className="p-2 border rounded hover:bg-gray-50">←</button>
-            <button className="p-2 border rounded hover:bg-gray-50">→</button>
-          </div>
+          {(() => {
+            const filteredAppointments = appointments.filter(appointment => {
+              const matchesSearch = appointmentSearchTerm === '' || 
+                appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
+                (user.full_name || user.username).toLowerCase().includes(appointmentSearchTerm.toLowerCase());
+              if (!matchesSearch) return false;
+              if (activeAppointmentTab === 'all') return true;
+              return getAppointmentStatus(appointment) === activeAppointmentTab;
+            });
+            
+            const totalFiltered = filteredAppointments.length;
+            const startIndex = (appointmentCurrentPage - 1) * appointmentsPerPage;
+            const endIndex = Math.min(startIndex + appointmentsPerPage, totalFiltered);
+            const totalPages = Math.ceil(totalFiltered / appointmentsPerPage);
+            
+            return (
+              <>
+                <span className="text-sm text-gray-600">
+                  Showing {totalFiltered === 0 ? 0 : startIndex + 1}-{endIndex} of {totalFiltered} booking{totalFiltered !== 1 ? 's' : ''}
+                </span>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setAppointmentCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={appointmentCurrentPage === 1}
+                    className={`p-2 border rounded ${appointmentCurrentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                  >
+                    ←
+                  </button>
+                  <button 
+                    onClick={() => setAppointmentCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={appointmentCurrentPage >= totalPages}
+                    className={`p-2 border rounded ${appointmentCurrentPage >= totalPages ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                  >
+                    →
+                  </button>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
       </>
@@ -1789,7 +1847,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               }} className="text-2xl hover:text-gray-600">
                 ←
               </button>
-              <h1 className="text-2xl font-bold">{selectedClient?.client_name}</h1>
+              <h1 className="text-2xl font-bold">{formatClientName(selectedClient?.client_name)}</h1>
             </div>
 
             <div className="flex gap-8 mb-6 border-b">
@@ -1992,7 +2050,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 <ArrowLeft size={24} />
               </button>
               <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold">{selectedClient.client_name}</h1>
+                <h1 className="text-3xl font-bold">{formatClientName(selectedClient.client_name)}</h1>
                 <span 
                   className="px-3 py-1 rounded-full text-sm font-medium text-white"
                   style={{ 
@@ -2737,8 +2795,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   }`}
                   onClick={() => {
                     if (stat.clickable) {
-                      setActiveView('appointments');
-                      setActiveAppointmentTab('pending_notes');
+                      resetAllStates();
+                      setActiveView(stat.targetView);
+                      if (stat.targetTab) {
+                        setActiveAppointmentTab(stat.targetTab);
+                      }
                     }
                   }}
                 >
@@ -2758,8 +2819,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   }`}
                   onClick={() => {
                     if (stat.clickable) {
-                      setActiveView('appointments');
-                      setActiveAppointmentTab('pending_notes');
+                      resetAllStates();
+                      setActiveView(stat.targetView);
+                      if (stat.targetTab) {
+                        setActiveAppointmentTab(stat.targetTab);
+                      }
                     }
                   }}
                 >
@@ -2818,7 +2882,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                                 className="text-teal-700 hover:underline cursor-pointer"
                                 onClick={() => handleViewClientFromBooking(booking)}
                               >
-                                {booking.client_name}
+                                {formatClientName(booking.client_name)}
                               </span>
                             </td>
                             <td className="px-6 py-4">{booking.therapy_type}</td>
@@ -2919,7 +2983,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                                   className="text-teal-700 hover:underline cursor-pointer"
                                   onClick={() => handleViewClientFromAppointment(appointment)}
                                 >
-                                  {appointment.client_name}
+                                  {formatClientName(appointment.client_name)}
                                 </span>
                               </td>
                               <td className="px-6 py-4">{appointment.session_name}</td>
@@ -3128,7 +3192,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               
               {selectedSOSBooking && (
                 <div className="bg-gray-50 p-3 rounded text-sm">
-                  <p><strong>Client:</strong> {selectedSOSBooking.client_name}</p>
+                  <p><strong>Client:</strong> {formatClientName(selectedSOSBooking.client_name)}</p>
                   <p><strong>Session:</strong> {selectedSOSBooking.session_name || selectedSOSBooking.therapy_type}</p>
                 </div>
               )}
@@ -3347,7 +3411,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-xl font-bold mb-4">Sending Manual Reminder</h3>
-            <p className="text-gray-600 mb-4">This will send a reminder message to {selectedReminderAppointment.client_name} on Whatsapp</p>
+            <p className="text-gray-600 mb-4">This will send a reminder message to {formatClientName(selectedReminderAppointment.client_name)} on Whatsapp</p>
             <div className="flex gap-3">
               <button
                 onClick={sendWhatsAppNotification}

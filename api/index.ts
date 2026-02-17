@@ -1271,21 +1271,48 @@ app.get('/api/therapist-stats', async (req, res) => {
 
     const hasDateFilter = start && end;
 
+    console.log('🔍 [Therapist Stats] Therapist:', therapist.name);
+    console.log('🔍 [Therapist Stats] First name for query:', therapistFirstName);
+    console.log('🔍 [Therapist Stats] Has date filter:', hasDateFilter, start, end);
+
     // Calculate last month date range
     const now = new Date();
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
     // Get stats from bookings table with date filter using therapist name
-    const sessions = hasDateFilter
+    // Bookings - count everything for this therapist
+    const bookings = hasDateFilter
       ? await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3) AND booking_start_at BETWEEN $4 AND $5',
-          [`%${therapistFirstName}%`, 'confirmed', 'rescheduled', start, `${end} 23:59:59`]
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_start_at BETWEEN $2 AND $3',
+          [`%${therapistFirstName}%`, start, `${end} 23:59:59`]
         )
       : await pool.query(
-          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1 AND booking_status IN ($2, $3)',
-          [`%${therapistFirstName}%`, 'confirmed', 'rescheduled']
+          'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1',
+          [`%${therapistFirstName}%`]
         );
+
+    console.log('📊 [Therapist Stats] Bookings count:', bookings.rows[0].total);
+
+    // Sessions Completed - count ALL completed sessions where session date has passed
+    const sessionsCompleted = hasDateFilter
+      ? await pool.query(
+          `SELECT COUNT(*) as total FROM bookings 
+           WHERE booking_host_name ILIKE $1
+           AND booking_start_at < NOW()
+           AND booking_status NOT IN ($2, $3, $4, $5)
+           AND booking_start_at BETWEEN $6 AND $7`,
+          [`%${therapistFirstName}%`, 'cancelled', 'canceled', 'no_show', 'no show', start, `${end} 23:59:59`]
+        )
+      : await pool.query(
+          `SELECT COUNT(*) as total FROM bookings 
+           WHERE booking_host_name ILIKE $1
+           AND booking_start_at < NOW()
+           AND booking_status NOT IN ($2, $3, $4, $5)`,
+          [`%${therapistFirstName}%`, 'cancelled', 'canceled', 'no_show', 'no show']
+        );
+
+    console.log('📊 [Therapist Stats] Sessions completed count:', sessionsCompleted.rows[0].total);
 
     const noShows = hasDateFilter
       ? await pool.query(
@@ -1345,7 +1372,8 @@ app.get('/api/therapist-stats', async (req, res) => {
         specialization: therapist.specialization
       },
       stats: {
-        sessions: parseInt(sessions.rows[0].total) || 0,
+        bookings: parseInt(bookings.rows[0].total) || 0,
+        sessionsCompleted: parseInt(sessionsCompleted.rows[0].total) || 0,
         noShows: parseInt(noShows.rows[0].total) || 0,
         cancelled: parseInt(cancelled.rows[0].total) || 0,
         lastMonthSessions: parseInt(lastMonthSessions.rows[0].total) || 0,

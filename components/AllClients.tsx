@@ -40,6 +40,14 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
+  const formatClientName = (name: string): string => {
+    if (!name) return name;
+    return name
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   useEffect(() => {
     fetch('/api/clients')
       .then(res => res.json())
@@ -105,7 +113,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const exportToCSV = () => {
     const headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Bookings', 'Assigned Therapist'];
     const rows = filteredClients.map(client => [
-      client.invitee_name,
+      formatClientName(client.invitee_name),
       client.invitee_phone,
       client.invitee_email,
       client.session_count,
@@ -343,7 +351,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                               }}
                               className="text-teal-700 hover:underline font-medium"
                             >
-                              {client.invitee_name}
+                              {formatClientName(client.invitee_name)}
                             </button>
                           </span>
                         </div>
