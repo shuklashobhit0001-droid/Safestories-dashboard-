@@ -377,7 +377,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             }}
           >
             <Calendar size={20} className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'} />
-            <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>Appointments</span>
+            <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>Bookings</span>
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 

@@ -39,7 +39,7 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
 
   const tabs = [
     { id: 'scheduled', label: 'Upcoming' },
-    { id: 'all', label: 'All Appointments' },
+    { id: 'all', label: 'All Bookings' },
     { id: 'completed', label: 'Completed' },
     { id: 'free_consultation', label: 'Free Consultation' },
     { id: 'pending_notes', label: 'Pending Session Notes' },
@@ -260,7 +260,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h1 className="text-3xl font-bold mb-1">Appointments</h1>
+          <h1 className="text-3xl font-bold mb-1">Bookings</h1>
           <p className="text-gray-600">View Recently Book Session, Send Invite and more...</p>
         </div>
       </div>
@@ -334,7 +334,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
               ) : filteredAppointments.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center text-gray-400 py-8">
-                    No appointments found
+                    No bookings found
                   </td>
                 </tr>
               ) : (
@@ -431,7 +431,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
           </table>
         </div>
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredAppointments.length)} of {filteredAppointments.length} appointment{filteredAppointments.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredAppointments.length)} of {filteredAppointments.length} booking{filteredAppointments.length !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
             <button 
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}

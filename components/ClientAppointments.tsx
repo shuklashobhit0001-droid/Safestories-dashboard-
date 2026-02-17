@@ -9,7 +9,7 @@ export const ClientAppointments: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-start mb-8">
         <div>
-          <h1 className="text-3xl font-bold mb-1">My Appointments</h1>
+          <h1 className="text-3xl font-bold mb-1">My Bookings</h1>
           <p className="text-gray-600">View Recently Book Session, and more...</p>
         </div>
         <button className="bg-gray-500 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:bg-gray-600">
@@ -29,7 +29,7 @@ export const ClientAppointments: React.FC = () => {
                 : 'text-gray-500'
             }`}
           >
-            All Appointments
+            All Bookings
           </button>
           <button
             onClick={() => setActiveTab('upcoming')}
@@ -68,7 +68,7 @@ export const ClientAppointments: React.FC = () => {
             <tbody>
               <tr>
                 <td colSpan={5} className="px-6 py-20 text-center text-gray-400">
-                  No appointments found
+                  No bookings found
                 </td>
               </tr>
             </tbody>

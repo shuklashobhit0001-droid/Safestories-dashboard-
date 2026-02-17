@@ -20,7 +20,7 @@ interface NotificationsProps {
 export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [filter, setFilter] = useState<'all' | 'new_bookings' | 'sos_alerts' | 'client_transfers'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const notificationsPerPage = 10;
 
@@ -77,9 +77,27 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
     }
   };
 
-  const filteredNotifications = filter === 'unread' 
-    ? notifications.filter(n => !n.is_read)
-    : notifications;
+  // Filter notifications based on selected category
+  const filteredNotifications = (() => {
+    switch (filter) {
+      case 'new_bookings':
+        return notifications.filter(n => 
+          n.notification_type === 'new_booking' || 
+          n.notification_type === 'new_booking_request'
+        );
+      case 'sos_alerts':
+        return notifications.filter(n => n.notification_type === 'sos_ticket');
+      case 'client_transfers':
+        return notifications.filter(n => 
+          n.notification_type === 'client_transfer' || 
+          n.notification_type === 'client_transfer_in' || 
+          n.notification_type === 'client_transfer_out'
+        );
+      case 'all':
+      default:
+        return notifications;
+    }
+  })();
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
@@ -158,15 +176,31 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
             filter === 'all' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'
           }`}
         >
-          All ({notifications.length})
+          All
         </button>
         <button
-          onClick={() => setFilter('unread')}
+          onClick={() => setFilter('new_bookings')}
           className={`px-4 py-2 rounded-lg text-sm ${
-            filter === 'unread' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'
+            filter === 'new_bookings' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'
           }`}
         >
-          Unread ({unreadCount})
+          New Bookings
+        </button>
+        <button
+          onClick={() => setFilter('sos_alerts')}
+          className={`px-4 py-2 rounded-lg text-sm ${
+            filter === 'sos_alerts' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'
+          }`}
+        >
+          SOS Alerts
+        </button>
+        <button
+          onClick={() => setFilter('client_transfers')}
+          className={`px-4 py-2 rounded-lg text-sm ${
+            filter === 'client_transfers' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'
+          }`}
+        >
+          Client Transfers
         </button>
       </div>
 
@@ -176,7 +210,10 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
         <div className="bg-white rounded-lg border p-12 text-center">
           <Bell size={48} className="mx-auto text-gray-300 mb-4" />
           <p className="text-gray-400 text-lg">
-            {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+            {filter === 'new_bookings' ? 'No new booking notifications' : 
+             filter === 'sos_alerts' ? 'No SOS alert notifications' :
+             filter === 'client_transfers' ? 'No client transfer notifications' :
+             'No notifications yet'}
           </p>
         </div>
       ) : (

@@ -51,7 +51,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onLogout, user
             onClick={() => setActiveView('appointments')}
           >
             <Calendar size={20} className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'} />
-            <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>My Appointments</span>
+            <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>My Bookings</span>
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
