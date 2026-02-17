@@ -239,7 +239,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   const appointmentTabs = [
     { id: 'scheduled', label: 'Upcoming' },
-    { id: 'all', label: 'All Appointments' },
+    { id: 'all', label: 'All Bookings' },
     { id: 'completed', label: 'Completed' },
     { id: 'pending_notes', label: 'Pending Session Notes' },
     { id: 'cancelled', label: 'Cancelled' },
@@ -420,14 +420,31 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       setClientDetailLoading(true);
       
       // Fetch client session type
-      const sessionTypeRes = await fetch(`/api/client-session-type?client_id=${encodeURIComponent(client.client_phone)}`);
-      if (sessionTypeRes.ok) {
-        const sessionTypeData = await sessionTypeRes.json();
-        console.log('📊 Client Session Type:', sessionTypeData);
-        if (sessionTypeData.success) {
-          setClientSessionType(sessionTypeData.data);
-          console.log('✅ Session type set:', sessionTypeData.data);
+      try {
+        console.log('🔍 [TherapistDashboard] Fetching session type for phone:', client.client_phone);
+        const apiUrl = `/api/client-session-type?client_id=${encodeURIComponent(client.client_phone)}`;
+        console.log('🔗 [TherapistDashboard] API URL:', apiUrl);
+        const sessionTypeRes = await fetch(apiUrl);
+        if (sessionTypeRes.ok) {
+          const sessionTypeData = await sessionTypeRes.json();
+          console.log('📊 [TherapistDashboard] Client Session Type:', sessionTypeData);
+          if (sessionTypeData.success) {
+            setClientSessionType(sessionTypeData.data);
+            console.log('✅ [TherapistDashboard] Session type set:', sessionTypeData.data);
+          } else {
+            console.error('❌ [TherapistDashboard] Session type API returned success: false');
+            // Default to showing paid session UI if API fails
+            setClientSessionType({ hasPaidSessions: true, hasFreeConsultation: false });
+          }
+        } else {
+          console.error('❌ [TherapistDashboard] Session type API failed:', sessionTypeRes.status);
+          // Default to showing paid session UI if API fails
+          setClientSessionType({ hasPaidSessions: true, hasFreeConsultation: false });
         }
+      } catch (sessionTypeError) {
+        console.error('❌ [TherapistDashboard] Session type API error:', sessionTypeError);
+        // Default to showing paid session UI if API call throws error
+        setClientSessionType({ hasPaidSessions: true, hasFreeConsultation: false });
       }
       
       const response = await fetch(`/api/client-appointments?client_phone=${encodeURIComponent(client.client_phone)}&therapist_id=${user.id}`);
@@ -889,10 +906,58 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       assessmentId = dbResult.assessment_id;
       console.log('✅ SOS assessment saved to database with ID:', assessmentId);
       
-      // 2. Send to webhook with database ID (non-critical - don't fail if this fails)
+      // Generate secure access token for documentation link
+      console.log('📋 Selected booking data:', selectedSOSBooking);
+      
+      // Extract email and phone from booking
+      let clientEmail = '';
+      let clientPhone = '';
+      
+      // Try to get from contact_info field
+      if (selectedSOSBooking?.contact_info) {
+        const parts = selectedSOSBooking.contact_info.split(',');
+        clientPhone = parts[0]?.trim() || '';
+        clientEmail = parts[1]?.trim() || '';
+      }
+      
+      // Fallback: try to get from booking data directly
+      if (!clientEmail && selectedSOSBooking?.invitee_email) {
+        clientEmail = selectedSOSBooking.invitee_email;
+      }
+      if (!clientPhone && selectedSOSBooking?.invitee_phone) {
+        clientPhone = selectedSOSBooking.invitee_phone;
+      }
+      
+      console.log('📧 Client email:', clientEmail);
+      console.log('📱 Client phone:', clientPhone);
+      
+      const tokenResponse = await fetch('/api/generate-sos-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sos_assessment_id: assessmentId,
+          client_email: clientEmail,
+          client_phone: clientPhone,
+          client_name: selectedSOSBooking?.client_name,
+          expires_in_days: 7
+        })
+      });
+      
+      let documentationLink = '';
+      if (tokenResponse.ok) {
+        const tokenResult = await tokenResponse.json();
+        documentationLink = `${window.location.origin}/sos-view/${tokenResult.token}`;
+        console.log('✅ Documentation link generated:', documentationLink);
+      } else {
+        const errorData = await tokenResponse.json();
+        console.error('❌ Token generation failed:', errorData);
+      }
+      
+      // 2. Send to webhook with database ID and documentation link (non-critical - don't fail if this fails)
       try {
         const webhookData = {
           database_id: assessmentId,
+          documentation_link: documentationLink,
           therapist_id: user?.therapist_id,
           therapist_name: user?.username,
           client_name: selectedSOSBooking?.client_name,
@@ -1373,7 +1438,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       <>
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h1 className="text-3xl font-bold mb-1">My Appointments</h1>
+          <h1 className="text-3xl font-bold mb-1">My Bookings</h1>
           <p className="text-gray-600">View Recently Book Session, Send invite and more...</p>
         </div>
       </div>
@@ -1401,7 +1466,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
-            placeholder="Search appointments by session, client or therapist name..."
+            placeholder="Search bookings by session, client or therapist name..."
             value={appointmentSearchTerm}
             onChange={(e) => setAppointmentSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
@@ -1432,7 +1497,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               ) : appointments.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center text-gray-400 py-8">
-                    No appointments found
+                    No bookings found
                   </td>
                 </tr>
               ) : (
@@ -1574,7 +1639,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             if (!matchesSearch) return false;
             if (activeAppointmentTab === 'all') return true;
             return getAppointmentStatus(appointment) === activeAppointmentTab;
-          }).length} appointment{appointments.filter(appointment => {
+          }).length} booking{appointments.filter(appointment => {
             const matchesSearch = appointmentSearchTerm === '' || 
               appointment.session_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
               appointment.client_name.toLowerCase().includes(appointmentSearchTerm.toLowerCase()) ||
@@ -1634,7 +1699,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             }}
           >
             <Calendar size={20} className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'} />
-            <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>My Appointments</span>
+            <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>My Bookings</span>
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
@@ -2294,7 +2359,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                         return getAppointmentStatus(apt) === activeAppointmentTab;
                       }).length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
+                          <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No bookings found</td>
                         </tr>
                       ) : (
                         clientAppointments.filter(apt => {

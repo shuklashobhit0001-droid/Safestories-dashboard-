@@ -7,9 +7,19 @@ import { Dashboard } from './components/Dashboard';
 import { TherapistDashboard } from './components/TherapistDashboard';
 import { ClientDashboard } from './components/ClientDashboard';
 import { MaintenancePage } from './components/MaintenancePage';
+import { SOSDocumentationView } from './components/SOSDocumentationView';
 import { Monitor } from 'lucide-react';
 
 const App: React.FC = () => {
+  // Check if this is an SOS documentation view (public route)
+  const path = window.location.pathname;
+  const sosViewMatch = path.match(/^\/sos-view\/(.+)$/);
+  
+  if (sosViewMatch) {
+    const token = sosViewMatch[1];
+    return <SOSDocumentationView token={token} />;
+  }
+
   // Show maintenance page only on Vercel (production)
   const isVercel = import.meta.env.VITE_VERCEL === '1';
   

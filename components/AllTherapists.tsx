@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ArrowLeft, User, Mail, Calendar as CalendarIcon, List, Eye, EyeOff, Edit } from 'lucide-react';
+import { Search, ArrowLeft, User, Mail, Calendar as CalendarIcon, List, Eye, EyeOff, Edit, X, Upload } from 'lucide-react';
 import { Loader } from './Loader';
 import { Toast } from './Toast';
 import { TherapistCalendar } from './TherapistCalendar';
@@ -8,6 +8,9 @@ import { ProgressNotesTab } from './ProgressNotesTab';
 import { ProgressNoteDetail } from './ProgressNoteDetail';
 import { GoalTrackingTab } from './GoalTrackingTab';
 import { FreeConsultationDetail } from './FreeConsultationDetail';
+import { ViewTherapistModal } from './ViewTherapistModal';
+import { EditTherapistForm } from './EditTherapistForm';
+import { ConfirmModal } from './ConfirmModal';
 
 interface Client {
   invitee_name: string;
@@ -76,6 +79,14 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [selectedProgressNoteId, setSelectedProgressNoteId] = useState<number | null>(null);
   const [isFreeConsultationNote, setIsFreeConsultationNote] = useState(false);
   const [clientSessionType, setClientSessionType] = useState<{ hasPaidSessions: boolean; hasFreeConsultation: boolean }>({ hasPaidSessions: false, hasFreeConsultation: false });
+  
+  // View and Edit therapist states
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditMode, setShowEditMode] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [editedTherapist, setEditedTherapist] = useState<any>(null);
+  const [editProfilePicture, setEditProfilePicture] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
   
   // Pagination for assigned clients
   const [clientsPage, setClientsPage] = useState(1);
@@ -300,8 +311,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         therapy: cleanTherapyType(therapyType)
       };
 
-      console.log('Sending booking link via API:', webhookData);
-
       // Use our backend API endpoint instead of direct webhook call
       const response = await fetch('/api/send-booking-link', {
         method: 'POST',
@@ -395,14 +404,27 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     setClientDetailsLoading(true);
     try {
       // Fetch client session type
-      const sessionTypeRes = await fetch(`/api/client-session-type?client_id=${encodeURIComponent(normalizedClient.invitee_phone)}`);
-      if (sessionTypeRes.ok) {
-        const sessionTypeData = await sessionTypeRes.json();
-        console.log('📊 [AllTherapists] Client Session Type:', sessionTypeData);
-        if (sessionTypeData.success) {
-          setClientSessionType(sessionTypeData.data);
-          console.log('✅ [AllTherapists] Session type set:', sessionTypeData.data);
+      try {
+        const apiUrl = `/api/client-session-type?client_id=${encodeURIComponent(normalizedClient.invitee_phone)}`;
+        const sessionTypeRes = await fetch(apiUrl);
+        if (sessionTypeRes.ok) {
+          const sessionTypeData = await sessionTypeRes.json();
+          if (sessionTypeData.success) {
+            setClientSessionType(sessionTypeData.data);
+          } else {
+            console.error('❌ [AllTherapists] Session type API returned success: false');
+            // Default to showing paid session UI if API fails
+            setClientSessionType({ hasPaidSessions: true, hasFreeConsultation: false });
+          }
+        } else {
+          console.error('❌ [AllTherapists] Session type API failed:', sessionTypeRes.status);
+          // Default to showing paid session UI if API fails
+          setClientSessionType({ hasPaidSessions: true, hasFreeConsultation: false });
         }
+      } catch (sessionTypeError) {
+        console.error('❌ [AllTherapists] Session type API error:', sessionTypeError);
+        // Default to showing paid session UI if API call throws error
+        setClientSessionType({ hasPaidSessions: true, hasFreeConsultation: false });
       }
       
       const params = new URLSearchParams();
@@ -446,12 +468,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             status = 'scheduled';
           }
         }
-        
-        console.log('📅 Appointment:', apt.booking_resource_name);
-        console.log('   Time string:', apt.booking_invitee_time);
-        console.log('   Calculated status:', status);
-        console.log('   Has notes:', apt.has_session_notes);
-        console.log('');
         
         return {
           ...apt,
@@ -671,6 +687,82 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     });
     
     return hasRecentAppointment ? 'active' : 'inactive';
+  };
+
+  // Handler for saving edited therapist
+  const handleSaveTherapist = async (updatedTherapist: any, profilePicture: File | null) => {
+    setShowConfirmModal(true);
+  };
+
+  const confirmSaveTherapist = async () => {
+    setSaving(true);
+    setShowConfirmModal(false);
+
+    try {
+      let profilePictureUrl = editedTherapist.profile_picture_url;
+
+      // Upload profile picture if changed
+      if (editProfilePicture) {
+        const formData = new FormData();
+        formData.append('file', editProfilePicture);
+        formData.append('folder', 'profile-pictures');
+
+        const uploadResponse = await fetch('/api/upload-file', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload profile picture');
+        }
+
+        const uploadData = await uploadResponse.json();
+        if (uploadData.success) {
+          profilePictureUrl = uploadData.url;
+        }
+      }
+
+      // Update therapist profile
+      const response = await fetch('/api/therapist-profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          therapist_id: selectedTherapist.therapist_id,
+          name: editedTherapist.name,
+          email: editedTherapist.email,
+          phone: editedTherapist.phone_number,
+          specializations: editedTherapist.specializations,
+          profilePictureUrl
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setToast({ message: 'Therapist profile updated successfully!', type: 'success' });
+        
+        // Update local state
+        setSelectedTherapist({
+          ...selectedTherapist,
+          ...editedTherapist,
+          profile_picture_url: profilePictureUrl,
+          specialization: editedTherapist.specializations
+        });
+        
+        // Refresh therapists list
+        fetchTherapists();
+        
+        setShowEditMode(false);
+        setEditProfilePicture(null);
+      } else {
+        setToast({ message: data.error || 'Failed to update profile', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setToast({ message: 'An error occurred while updating profile', type: 'error' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (selectedClient) {
@@ -1069,7 +1161,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                               return apt.booking_status === clientAppointmentTab;
                             }).length === 0 ? (
                               <tr>
-                                <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
+                                <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No bookings found</td>
                               </tr>
                             ) : (
                               clientAppointments.filter(apt => {
@@ -1305,6 +1397,26 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     );
   }
 
+  // Edit Mode - Full Screen (check this BEFORE selectedTherapist)
+  if (showEditMode && selectedTherapist) {
+    return (
+      <EditTherapistForm
+        therapist={editedTherapist}
+        onSave={(updated, picture) => {
+          setEditedTherapist(updated);
+          setEditProfilePicture(picture);
+          handleSaveTherapist(updated, picture);
+        }}
+        onCancel={() => {
+          setShowEditMode(false);
+          setEditedTherapist(null);
+          setEditProfilePicture(null);
+        }}
+        saving={saving}
+      />
+    );
+  }
+
   if (selectedTherapist) {
     return (
       <div className="p-8 h-full flex flex-col">
@@ -1316,9 +1428,35 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
           >
             <ArrowLeft size={24} />
           </button>
-          <div className="flex items-center gap-3">
-            <User size={24} className="text-teal-700" />
-            <h1 className="text-3xl font-bold">{selectedTherapist.name}</h1>
+          <div className="flex items-center justify-between flex-1">
+            <div className="flex items-center gap-3">
+              <User size={24} className="text-teal-700" />
+              <h1 className="text-3xl font-bold">{selectedTherapist.name}</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setShowViewModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+              >
+                <Eye size={18} />
+                <span className="font-medium">View</span>
+              </button>
+              <button
+                onClick={() => {
+                  setEditedTherapist({
+                    ...selectedTherapist,
+                    specializations: selectedTherapist.specialization
+                  });
+                  setShowEditMode(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg transition-colors"
+              >
+                <Edit size={18} />
+                <span className="font-medium">Edit</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1537,9 +1675,9 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               </div>
             </div>
 
-            {/* Recent Appointments */}
+            {/* Recent Bookings */}
             <div>
-              <h3 className="text-lg font-semibold mb-3">Recent Appointments</h3>
+              <h3 className="text-lg font-semibold mb-3">Recent Bookings</h3>
               <div className="mb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -1579,7 +1717,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                         if (filteredAppointments.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No appointments found</td>
+                              <td colSpan={3} className="text-center py-4 text-gray-400 text-sm">No bookings found</td>
                             </tr>
                           );
                         }
@@ -1644,6 +1782,35 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               </div>
             </div>
           </div>
+        )}
+
+        {/* View Modal */}
+        {showViewModal && (
+          <ViewTherapistModal
+            therapist={selectedTherapist}
+            onClose={() => setShowViewModal(false)}
+          />
+        )}
+
+        {/* Confirmation Modal */}
+        {showConfirmModal && (
+          <ConfirmModal
+            title="Confirm Changes"
+            message="Do you want to save these changes to the therapist profile?"
+            onConfirm={confirmSaveTherapist}
+            onCancel={() => setShowConfirmModal(false)}
+            confirmText="Save Changes"
+            cancelText="Cancel"
+          />
+        )}
+
+        {/* Toast */}
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+          />
         )}
       </div>
     );

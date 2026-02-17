@@ -32,7 +32,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<'clients' | 'leads'>('clients');
+  const [activeTab, setActiveTab] = useState<'clients' | 'pretherapy' | 'leads'>('clients');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const itemsPerPage = 10;
   const [adminUser] = useState(() => {
@@ -83,11 +83,18 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     
     if (!matchesSearch) return false;
     
-    // Filter by tab
-    if (activeTab === 'leads') {
+    const isSafestories = (client.booking_host_name || '').toLowerCase().trim() === 'safestories';
+    
+    // Filter by tab - each client appears in only one tab
+    if (activeTab === 'pretherapy') {
+      // Pre-Therapy: clients with Safestories as therapist (any booking count)
+      return isSafestories;
+    } else if (activeTab === 'leads') {
+      // Leads: clients with 0 bookings (any therapist)
       return client.session_count === 0;
     } else {
-      return client.session_count > 0;
+      // All Clients: clients with bookings AND therapist is NOT Safestories
+      return client.session_count > 0 && !isSafestories;
     }
   });
 
@@ -96,7 +103,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const paginatedClients = filteredClients.slice(startIndex, startIndex + itemsPerPage);
 
   const exportToCSV = () => {
-    const headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Sessions', 'Assigned Therapist'];
+    const headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Bookings', 'Assigned Therapist'];
     const rows = filteredClients.map(client => [
       client.invitee_name,
       client.invitee_phone,
@@ -224,6 +231,19 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         </button>
         <button
           onClick={() => {
+            setActiveTab('pretherapy');
+            setCurrentPage(1);
+          }}
+          className={`pb-2 font-medium ${
+            activeTab === 'pretherapy'
+              ? 'text-teal-700 border-b-2 border-teal-700'
+              : 'text-gray-400'
+          }`}
+        >
+          Pre-Therapy
+        </button>
+        <button
+          onClick={() => {
             setActiveTab('leads');
             setCurrentPage(1);
           }}
@@ -269,12 +289,12 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Sessions</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
                 {activeTab === 'leads' && (
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Booking Link Sent</th>
                 )}
-                {activeTab === 'clients' && (
+                {(activeTab === 'clients' || activeTab === 'pretherapy') && (
                   <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
                 )}
               </tr>
@@ -288,8 +308,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === 'clients' ? 5 : 5} className="text-center text-gray-400 py-8">
-                    No {activeTab === 'clients' ? 'clients' : 'leads'} found
+                  <td colSpan={activeTab === 'clients' || activeTab === 'pretherapy' ? 5 : 5} className="text-center text-gray-400 py-8">
+                    No {activeTab === 'clients' ? 'clients' : activeTab === 'pretherapy' ? 'pre-therapy clients' : 'leads'} found
                   </td>
                 </tr>
               ) : (
@@ -341,7 +361,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                           {formatBookingLinkDate(client.booking_link_sent_at)}
                         </td>
                       )}
-                      {activeTab === 'clients' && (
+                      {(activeTab === 'clients' || activeTab === 'pretherapy') && (
                         <td className="px-6 py-4 text-sm">
                           <div className="flex gap-4 justify-center">
                             <button
@@ -377,7 +397,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{therapist.session_count}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{therapist.booking_host_name}</td>
-                          {activeTab === 'clients' && <td></td>}
+                          {(activeTab === 'clients' || activeTab === 'pretherapy') && <td></td>}
                         </tr>
                       ))
                     )}

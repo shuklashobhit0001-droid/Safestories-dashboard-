@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/sos-documentation", "destination": "/api/sos-documentation" },
     { "source": "/api/:path*", "destination": "/api/index" }
   ],
   "headers": [

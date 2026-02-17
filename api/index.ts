@@ -985,6 +985,8 @@ app.get('/api/therapists', async (req, res) => {
         t.name,
         t.specialization,
         t.contact_info,
+        t.profile_picture_url,
+        t.phone_number,
         COUNT(DISTINCT b.booking_id) as total_sessions_lifetime,
         COUNT(DISTINCT CASE 
           WHEN EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
@@ -1003,7 +1005,7 @@ app.get('/api/therapists', async (req, res) => {
         TRIM(b.booking_host_name) ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
         OR TRIM(b.booking_host_name) ILIKE t.name
       )
-      GROUP BY t.therapist_id, t.name, t.specialization, t.contact_info
+      GROUP BY t.therapist_id, t.name, t.specialization, t.contact_info, t.profile_picture_url, t.phone_number
       ORDER BY t.name ASC
     `);
 
