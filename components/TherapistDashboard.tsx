@@ -625,7 +625,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
 
   const copyAppointmentDetails = async (apt: any) => {
-    const details = `${apt.session_name || apt.therapy_type}\n${apt.session_timings}\nClient: ${apt.client_name}\nContact: ${apt.contact_info || 'N/A'}\nMode: ${apt.mode}`;
+    const details = `${apt.session_name || apt.therapy_type}\n${apt.session_timings}\nClient: ${formatClientName(apt.client_name)}\nContact: ${apt.contact_info || 'N/A'}\nMode: ${apt.mode}`;
     navigator.clipboard.writeText(details).then(async () => {
       await fetch('/api/audit-logs', {
         method: 'POST',
@@ -1054,7 +1054,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           body: JSON.stringify({
             notification_type: 'sos_ticket',
             title: 'SOS Risk Assessment Submitted',
-            message: `${user?.username} submitted SOS risk assessment for client ${selectedSOSBooking?.client_name} (Severity Level: ${sosRiskSeverity})`,
+            message: `${user?.username} submitted SOS risk assessment for client ${formatClientName(selectedSOSBooking?.client_name)} (Severity Level: ${sosRiskSeverity})`,
             related_id: selectedSOSBooking?.booking_id
           })
         });

@@ -48,6 +48,14 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [clientDetailsLoading, setClientDetailsLoading] = useState(false);
+
+  const formatClientName = (name: string): string => {
+    if (!name) return name;
+    return name
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
   const [clients, setClients] = useState<Client[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expandedClientRows, setExpandedClientRows] = useState<Set<number>>(new Set());
@@ -777,7 +785,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             <ArrowLeft size={24} />
           </button>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold">{selectedClient.invitee_name}</h1>
+            <h1 className="text-3xl font-bold">{formatClientName(selectedClient.invitee_name)}</h1>
             <span 
               className="px-3 py-1 rounded-full text-sm font-medium text-white"
               style={{ 
@@ -1372,7 +1380,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <h3 className="text-xl font-bold mb-4">Sending Manual Reminder</h3>
-              <p className="text-gray-600 mb-4">This will send a reminder message to {selectedClient?.invitee_name} on Whatsapp</p>
+              <p className="text-gray-600 mb-4">This will send a reminder message to {formatClientName(selectedClient?.invitee_name)} on Whatsapp</p>
               <div className="flex gap-3">
                 <button
                   onClick={sendWhatsAppNotification}
@@ -1576,7 +1584,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                         }}
                                         className="text-teal-700 hover:underline font-medium text-left"
                                       >
-                                        {client.invitee_name}
+                                        {formatClientName(client.invitee_name)}
                                       </button>
                                     </div>
                                   </td>
@@ -1613,7 +1621,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                 {expandedClientRows.has(actualIndex) && hasMultiplePhones && (
                                   phoneNumbers.slice(1).map((phone, pIndex) => (
                                     <tr key={`${actualIndex}-${pIndex}`} className="bg-gray-50 border-b">
-                                      <td className="px-4 py-3 text-sm pl-12 text-gray-600">{client.invitee_name}</td>
+                                      <td className="px-4 py-3 text-sm pl-12 text-gray-600">{formatClientName(client.invitee_name)}</td>
                                       <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
                                       <td className="px-4 py-3 text-sm text-gray-600">{phone}</td>
                                       <td className="px-4 py-3 text-sm">
@@ -1724,7 +1732,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                         
                         return paginatedAppointments.map((apt, index) => (
                           <tr key={index} className="border-b hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm">{apt.invitee_name}</td>
+                            <td className="px-4 py-3 text-sm">{formatClientName(apt.invitee_name)}</td>
                             <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_resource_name.replace(/ with .+$/, '')}</td>
                             <td className="px-4 py-3 text-sm text-gray-600">{apt.booking_invitee_time}</td>
                           </tr>
