@@ -74,7 +74,6 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/verify-password', async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log('🔐 Password verification attempt:', { username });
 
     const result = await pool.query(
       'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND password = $2',
@@ -82,10 +81,8 @@ app.post('/api/verify-password', async (req, res) => {
     );
 
     if (result.rows.length > 0) {
-      console.log('✅ Password verified for:', username);
       res.json({ success: true });
     } else {
-      console.log('❌ Password verification failed for:', username);
       res.json({ success: false });
     }
   } catch (error) {
@@ -98,7 +95,6 @@ app.post('/api/verify-password', async (req, res) => {
 app.post('/api/change-password', async (req, res) => {
   try {
     const { userId, newPassword } = req.body;
-    console.log('🔐 Password change attempt for user ID:', userId);
 
     if (!userId || !newPassword) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
@@ -114,10 +110,8 @@ app.post('/api/change-password', async (req, res) => {
     );
 
     if (result.rows.length > 0) {
-      console.log('✅ Password changed successfully for:', result.rows[0].username);
       res.json({ success: true, message: 'Password changed successfully' });
     } else {
-      console.log('❌ User not found:', userId);
       res.status(404).json({ success: false, error: 'User not found' });
     }
   } catch (error) {
@@ -430,8 +424,6 @@ app.post('/api/forgot-password/send-otp', async (req, res) => {
     const { email } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress;
 
-    console.log('🔐 Password reset OTP request for:', email);
-
     // Validate email
     if (!email || !email.includes('@')) {
       return res.status(400).json({ success: false, error: 'Valid email is required' });
@@ -464,7 +456,6 @@ app.post('/api/forgot-password/send-otp', async (req, res) => {
 
     const attemptCount = parseInt(attemptsResult.rows[0].count);
     if (attemptCount >= 3) {
-      console.log('❌ Rate limit exceeded for:', email);
       return res.status(429).json({ 
         success: false, 
         error: 'Too many requests. Please try again in an hour.' 
@@ -494,7 +485,6 @@ app.post('/api/forgot-password/send-otp', async (req, res) => {
     // Send email
     try {
       await sendPasswordResetOTP(email, user.full_name || user.username, otp, expiresAt);
-      console.log('✅ Password reset OTP sent to:', email);
       
       res.json({ 
         success: true, 
@@ -520,8 +510,6 @@ app.post('/api/forgot-password/verify-otp', async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    console.log('🔐 OTP verification attempt for:', email);
-
     // Validate input
     if (!email || !otp) {
       return res.status(400).json({ success: false, error: 'Email and OTP are required' });
@@ -536,7 +524,6 @@ app.post('/api/forgot-password/verify-otp', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      console.log('❌ Invalid OTP for:', email);
       return res.status(400).json({ success: false, error: 'Invalid OTP' });
     }
 
@@ -554,8 +541,6 @@ app.post('/api/forgot-password/verify-otp', async (req, res) => {
       [resetRecord.id]
     );
 
-    console.log('✅ OTP verified for:', email);
-    
     res.json({ 
       success: true, 
       message: 'OTP verified successfully',
@@ -572,8 +557,6 @@ app.post('/api/forgot-password/verify-otp', async (req, res) => {
 app.post('/api/forgot-password/reset', async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
-
-    console.log('🔐 Password reset attempt for:', email);
 
     // Validate input
     if (!email || !otp || !newPassword) {
@@ -603,7 +586,6 @@ app.post('/api/forgot-password/reset', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      console.log('❌ Invalid or unverified OTP for:', email);
       return res.status(400).json({ success: false, error: 'Invalid or unverified OTP' });
     }
 
@@ -638,8 +620,6 @@ app.post('/api/forgot-password/reset', async (req, res) => {
       [resetRecord.user_id, resetRecord.id]
     );
 
-    console.log('✅ Password reset successful for:', email);
-    
     res.json({ 
       success: true, 
       message: 'Password reset successfully. You can now login with your new password.' 
@@ -938,13 +918,34 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_invitee_time
           FROM bookings
           WHERE booking_status NOT IN ($1, $2, $3, $4)
-            AND booking_start_at + INTERVAL '50 minutes' >= NOW()
-          ORDER BY booking_start_at ASC
-          LIMIT $5`,
-          ['cancelled', 'canceled', 'no_show', 'no show', limitNum]
+          ORDER BY booking_start_at ASC`,
+          ['cancelled', 'canceled', 'no_show', 'no show']
         );
 
-    const bookings = result.rows.map(row => ({
+    // Filter upcoming sessions based on booking_invitee_time
+    const nowUTC = new Date();
+    const upcomingBookings = result.rows.filter(row => {
+      const timeMatch = row.booking_invitee_time.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
+      
+      if (timeMatch) {
+        const dateStr = row.booking_invitee_time.match(/(\w+,\s+\w+\s+\d+,\s+\d+)/)?.[1];
+        const endTimeStr = timeMatch[2];
+        
+        if (dateStr) {
+          // Parse timezone from booking_invitee_time
+          const timezoneMatch = row.booking_invitee_time.match(/\(([^)]+)\)/);
+          const timezone = timezoneMatch ? timezoneMatch[1] : 'GMT+0530';
+          
+          const endIST = new Date(`${dateStr} ${endTimeStr} ${timezone}`);
+          
+          // Session is upcoming if end time hasn't passed
+          return endIST > nowUTC;
+        }
+      }
+      return false;
+    }).slice(0, limitNum);
+
+    const bookings = upcomingBookings.map(row => ({
       ...row,
       booking_start_at: convertToIST(row.booking_invitee_time) || 'N/A',
       mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet'
@@ -1027,7 +1028,6 @@ app.get('/api/clients', async (req, res) => {
       if (phone) phoneToKey.set(phone, key);
       
       if (!clientMap.has(key)) {
-        console.log('📝 [API/clients] Creating new client entry for key:', key, 'with phone:', row.invitee_phone);
         clientMap.set(key, {
           invitee_name: row.invitee_name,
           invitee_phone: row.invitee_phone,
@@ -1061,7 +1061,6 @@ app.get('/api/clients', async (req, res) => {
       
       // Update to most recent phone number and therapist
       if (new Date(row.latest_booking_date) > new Date(client.created_at)) {
-        console.log('📞 [API/clients] Updating phone from', client.invitee_phone, 'to', row.invitee_phone, 'for', row.invitee_name);
         client.invitee_phone = row.invitee_phone;
         if (parseInt(row.session_count) > 0) {
           client.booking_host_name = row.booking_host_name;
@@ -1559,10 +1558,6 @@ app.get('/api/therapist-stats', async (req, res) => {
 
     const hasDateFilter = start && end;
 
-    console.log('🔍 [Therapist Stats] Therapist:', therapist.name);
-    console.log('🔍 [Therapist Stats] First name for query:', therapistFirstName);
-    console.log('🔍 [Therapist Stats] Has date filter:', hasDateFilter, start, end);
-
     // Calculate last month date range
     const now = new Date();
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -1579,8 +1574,6 @@ app.get('/api/therapist-stats', async (req, res) => {
           'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1',
           [`%${therapistFirstName}%`]
         );
-
-    console.log('📊 [Therapist Stats] Bookings count:', bookings.rows[0].total);
 
     // Sessions Completed - count ALL completed sessions where session date has passed
     const sessionsCompleted = hasDateFilter
@@ -1599,8 +1592,6 @@ app.get('/api/therapist-stats', async (req, res) => {
            AND booking_status NOT IN ($2, $3, $4, $5)`,
           [`%${therapistFirstName}%`, 'cancelled', 'canceled', 'no_show', 'no show']
         );
-
-    console.log('📊 [Therapist Stats] Sessions completed count:', sessionsCompleted.rows[0].total);
 
     const noShows = hasDateFilter
       ? await pool.query(
@@ -1648,11 +1639,32 @@ app.get('/api/therapist-stats', async (req, res) => {
         booking_start_at as booking_date
       FROM bookings
       WHERE booking_host_name ILIKE $1
-        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
         AND booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show')
       ORDER BY booking_start_at ASC
-      LIMIT 10
     `, [`%${therapistFirstName}%`]);
+
+    // Filter upcoming sessions based on booking_invitee_time
+    const nowUTC = new Date();
+    const upcomingBookings = upcomingResult.rows.filter(row => {
+      const timeMatch = row.session_timings.match(/at\s+(\d+:\d+\s+[AP]M)\s+-\s+(\d+:\d+\s+[AP]M)/);
+      
+      if (timeMatch) {
+        const dateStr = row.session_timings.match(/(\w+,\s+\w+\s+\d+,\s+\d+)/)?.[1];
+        const endTimeStr = timeMatch[2];
+        
+        if (dateStr) {
+          // Parse timezone from booking_invitee_time
+          const timezoneMatch = row.session_timings.match(/\(([^)]+)\)/);
+          const timezone = timezoneMatch ? timezoneMatch[1] : 'GMT+0530';
+          
+          const endIST = new Date(`${dateStr} ${endTimeStr} ${timezone}`);
+          
+          // Session is upcoming if end time hasn't passed
+          return endIST > nowUTC;
+        }
+      }
+      return false;
+    }).slice(0, 10);
 
     res.json({
       therapist: {
@@ -1668,7 +1680,7 @@ app.get('/api/therapist-stats', async (req, res) => {
         lastMonthNoShows: parseInt(lastMonthNoShows.rows[0].total) || 0,
         lastMonthCancelled: parseInt(lastMonthCancelled.rows[0].total) || 0
       },
-      upcomingBookings: upcomingResult.rows.map(booking => ({
+      upcomingBookings: upcomingBookings.map(booking => ({
         booking_id: booking.booking_id,
         client_name: booking.client_name,
         therapy_type: booking.session_name,
@@ -1980,7 +1992,6 @@ app.get('/api/client-appointments', async (req, res) => {
 
 // Transfer client endpoint
 app.post('/api/transfer-client', async (req, res) => {
-  console.log('Transfer client API called');
   
   try {
     const {
@@ -1993,8 +2004,6 @@ app.post('/api/transfer-client', async (req, res) => {
       transferredByAdminName,
       reason
     } = req.body;
-
-    console.log('Transfer data:', { clientName, fromTherapistName, toTherapistId });
 
     // Get new therapist details
     const therapistResult = await pool.query(
@@ -2026,8 +2035,6 @@ app.post('/api/transfer-client', async (req, res) => {
       [newTherapist.name, toTherapistId, clientEmail || '', clientPhone || '', fromTherapistName]
     );
     
-    console.log(`Updated ${updateResult.rowCount} bookings for client transfer`);
-
     // Insert transfer record
     await pool.query(
       `INSERT INTO client_transfer_history 
@@ -2056,8 +2063,6 @@ app.post('/api/transfer-client', async (req, res) => {
        `Transferred ${clientName} from ${fromTherapistName} to ${newTherapist.name}`, clientName, getCurrentISTTimestamp()]
     );
 
-    console.log('Database insert successful');
-
     // Trigger n8n webhook
     const webhookData = {
       clientName,
@@ -2072,15 +2077,12 @@ app.post('/api/transfer-client', async (req, res) => {
       timestamp: new Date().toISOString()
     };
     const webhookUrl = `https://n8n.srv1169280.hstgr.cloud/webhook/efc4396f-401b-4d46-bfdb-e990a3ac3846?${new URLSearchParams(webhookData as any).toString()}`;
-    console.log('Calling webhook:', webhookUrl);
     
     try {
       const webhookResponse = await fetch(webhookUrl, {
         method: 'GET'
       });
-      console.log('Webhook status:', webhookResponse.status);
       const webhookResponseData = await webhookResponse.text();
-      console.log('Webhook response:', webhookResponseData);
     } catch (webhookError) {
       console.error('Webhook error:', webhookError);
     }
@@ -2117,7 +2119,6 @@ app.post('/api/transfer-client', async (req, res) => {
 
 
 
-    console.log('Sending success response');
     res.json({ success: true, message: 'Client transferred successfully' });
   } catch (error) {
     console.error('Error transferring client:', error);
@@ -2161,7 +2162,6 @@ app.post('/api/audit-logs', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
       [therapist_id, therapist_name, action_type, action_description, client_name, ip_address, getCurrentISTTimestamp()]
     );
-    console.log('✅ Manual audit log created:', action_type, therapist_name);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Error creating audit log:', error);
@@ -2181,7 +2181,6 @@ app.post('/api/logout', async (req, res) => {
            VALUES ($1, $2, $3, $4, $5, true)`,
           [user.therapist_id, user.username, 'logout', `${user.username} logged out`, getCurrentISTTimestamp()]
         );
-        console.log('✅ Audit log created for logout:', user.username, user.therapist_id);
       } catch (auditError) {
         console.error('❌ Failed to create audit log for logout:', auditError);
       }
@@ -2716,13 +2715,9 @@ app.post('/api/send-booking-link', async (req, res) => {
       therapy
     };
 
-    console.log('📤 Sending booking link webhook:', webhookData);
-
     try {
       // Send to n8n webhook
       const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/f1ee71f4-65e3-4246-baea-372e822faed7';
-      console.log('🔗 Webhook URL:', webhookUrl);
-      console.log('📦 Webhook payload:', JSON.stringify(webhookData, null, 2));
       
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -2733,14 +2728,9 @@ app.post('/api/send-booking-link', async (req, res) => {
         body: JSON.stringify(webhookData)
       });
 
-      console.log('📊 Response status:', response.status);
-      console.log('📊 Response headers:', Object.fromEntries(response.headers.entries()));
-      
       const responseText = await response.text();
-      console.log('📊 Response body:', responseText);
 
       if (response.ok) {
-        console.log('✅ Booking link webhook sent successfully');
         res.status(200).json({ success: true, message: 'Booking link sent successfully' });
       } else {
         console.error('❌ Webhook failed:', response.status, response.statusText);
@@ -2901,8 +2891,6 @@ app.post('/api/generate-sos-token', async (req, res) => {
   try {
     const { sos_assessment_id, client_email, client_phone, client_name, expires_in_days = 7 } = req.body;
 
-    console.log('📋 Token generation request:', { sos_assessment_id, client_email, client_phone, client_name });
-
     if (!sos_assessment_id) {
       return res.status(400).json({ error: 'Missing sos_assessment_id', received: req.body });
     }
@@ -2938,8 +2926,6 @@ app.post('/api/generate-sos-token', async (req, res) => {
       client_name,
       expiresAt
     ]);
-
-    console.log(`✅ SOS access token generated: ${token}`);
 
     res.status(201).json({
       success: true,
@@ -3110,8 +3096,6 @@ app.post('/api/session-documentation', async (req, res) => {
   try {
     const { session_type, client_id, client_name, booking_id, case_history, progress_notes, therapy_goals } = req.body;
 
-    console.log('📝 Received session documentation:', { session_type, client_id, booking_id });
-
     // If First Session - store case history
     if (session_type === 'First Session' && case_history) {
       await pool.query(`
@@ -3143,7 +3127,6 @@ app.post('/api/session-documentation', async (req, res) => {
         case_history.medical_history, case_history.medications,
         case_history.previous_mental_health, case_history.insight_level
       ]);
-      console.log('✅ Case history stored');
     }
 
     // If Follow-up Session - store progress notes
@@ -3176,7 +3159,6 @@ app.post('/api/session-documentation', async (req, res) => {
         progress_notes.future_interventions, progress_notes.session_frequency,
         progress_notes.therapist_name, progress_notes.therapist_signature, progress_notes.signature_date
       ]);
-      console.log('✅ Progress notes stored');
     }
 
     // Always store/update therapy goals
@@ -3260,16 +3242,47 @@ app.get('/api/progress-notes', async (req, res) => {
       return res.status(400).json({ error: 'client_id is required' });
     }
 
-    const result = await pool.query(
+    // Fetch from client_progress_notes (new system)
+    const progressNotesResult = await pool.query(
       `SELECT id, session_number, session_date, session_mode, risk_level,
-              client_report, techniques_used, created_at
+              client_report, techniques_used, created_at, 'progress_note' as note_type
        FROM client_progress_notes 
        WHERE client_id = $1 
        ORDER BY session_date DESC`,
       [client_id]
     );
 
-    res.json({ success: true, data: result.rows });
+    // Fetch from client_session_notes (old system)
+    // client_id is actually the phone number, so use it directly to match bookings
+    const sessionNotesResult = await pool.query(
+      `SELECT DISTINCT csn.note_id as id, csn.session_timing, csn.created_at, 
+              csn.client_name, csn.concerns_discussed, csn.somatic_cues, csn.interventions_used,
+              'session_note' as note_type, csn.booking_id
+       FROM client_session_notes csn
+       INNER JOIN bookings b ON csn.booking_id::text = b.booking_id::text
+       WHERE b.invitee_phone = $1 OR b.invitee_email = $1
+       ORDER BY csn.created_at DESC`,
+      [client_id]
+    );
+
+    // Merge both results
+    const allNotes = [
+      ...progressNotesResult.rows.map(note => ({
+        ...note,
+        session_date: note.session_date || note.created_at,
+        note_type: 'progress_note'
+      })),
+      ...sessionNotesResult.rows.map(note => ({
+        ...note,
+        session_date: note.created_at, // Use created_at as session_date for old notes
+        note_type: 'session_note'
+      }))
+    ];
+
+    // Sort by date descending
+    allNotes.sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime());
+
+    res.json({ success: true, data: allNotes });
   } catch (error) {
     console.error('Error fetching progress notes:', error);
     res.status(500).json({ error: 'Failed to fetch progress notes' });
@@ -3418,8 +3431,6 @@ app.post('/api/paperform-webhook/free-consultation', async (req, res) => {
   try {
     const { submission_id, booking_id, data } = req.body;
 
-    console.log('📝 Received free consultation form submission:', { submission_id, booking_id });
-
     // Verify booking_id exists and get session_type
     const docForm = await pool.query(
       'SELECT session_type FROM client_doc_form WHERE booking_id = $1',
@@ -3482,8 +3493,6 @@ app.post('/api/paperform-webhook/free-consultation', async (req, res) => {
       data.suicidal_thoughts_details,
       data.other_notes
     ]);
-
-    console.log('✅ Free consultation notes stored');
 
     // Update client_doc_form status
     await pool.query(`
