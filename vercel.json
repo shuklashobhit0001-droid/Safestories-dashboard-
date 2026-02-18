@@ -1,7 +1,9 @@
 {
   "rewrites": [
     { "source": "/api/sos-documentation", "destination": "/api/sos-documentation" },
-    { "source": "/api/:path*", "destination": "/api/index" }
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/sos-view/:token", "destination": "/index.html" },
+    { "source": "/((?!api).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
