@@ -2531,9 +2531,11 @@ app.post('/api/generate-sos-token', async (req, res) => {
 // Get booking details by booking_id
 app.get('/api/bookings', async (req, res) => {
   try {
-    const { booking_id } = req.query;
+    const booking_id = Array.isArray(req.query.booking_id) 
+      ? req.query.booking_id[0] 
+      : req.query.booking_id;
 
-    if (!booking_id) {
+    if (!booking_id || typeof booking_id !== 'string') {
       return res.status(400).json({ error: 'booking_id is required' });
     }
 
@@ -2547,7 +2549,6 @@ app.get('/api/bookings', async (req, res) => {
         booking_start_at,
         booking_end_at,
         booking_status,
-        mode,
         invitee_questions_and_answers
       FROM bookings
       WHERE booking_id = $1
