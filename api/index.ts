@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
+import { randomUUID } from 'crypto';
 import pool from './lib/db.js';
 import { convertToIST } from './lib/timezone.js';
 import { startDashboardApiBookingSync } from './lib/dashboardApiBookingSync.js';
@@ -2462,6 +2463,68 @@ app.get('/api/client-session-type', async (req, res) => {
   } catch (error) {
     console.error('Error checking client session type:', error);
     res.status(500).json({ error: 'Failed to check client session type' });
+  }
+});
+
+// Generate SOS Access Token
+app.post('/api/generate-sos-token', async (req, res) => {
+  try {
+    const { sos_assessment_id, client_email, client_phone, client_name, expires_in_days = 7 } = req.body;
+
+    console.log('📋 Token generation request:', { sos_assessment_id, client_email, client_phone, client_name });
+
+    // Validate required fields
+    if (!sos_assessment_id) {
+      return res.status(400).json({ error: 'Missing sos_assessment_id', received: req.body });
+    }
+    
+    if (!client_email) {
+      return res.status(400).json({ error: 'Missing client_email', received: req.body });
+    }
+    
+    if (!client_phone) {
+      return res.status(400).json({ error: 'Missing client_phone', received: req.body });
+    }
+
+    // Generate unique token (UUID)
+    const token = randomUUID();
+
+    // Calculate expiration date
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expires_in_days);
+
+    // Insert token into database
+    const insertQuery = `
+      INSERT INTO sos_access_tokens (
+        token, sos_assessment_id, client_email, client_phone, client_name, expires_at
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `;
+
+    const result = await pool.query(insertQuery, [
+      token,
+      sos_assessment_id,
+      client_email,
+      client_phone,
+      client_name,
+      expiresAt
+    ]);
+
+    console.log(`✅ SOS access token generated: ${token}`);
+
+    return res.status(201).json({
+      success: true,
+      token: token,
+      expires_at: expiresAt,
+      message: 'SOS access token generated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error generating SOS token:', error);
+    return res.status(500).json({ 
+      error: 'Failed to generate SOS token',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

@@ -111,13 +111,23 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
     setResettingPassword(true);
 
     try {
-      // TODO: Implement send OTP API
-      // For now, simulate success
-      setToast({ message: 'OTP sent to your email!', type: 'success' });
-      setResetStep('otp');
+      const response = await fetch('/api/forgot-password/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setToast({ message: 'OTP sent to your email!', type: 'success' });
+        setResetStep('otp');
+      } else {
+        setPasswordError(data.error || 'Failed to send OTP');
+      }
     } catch (error) {
       console.error('Error:', error);
-      setPasswordError('Failed to send OTP');
+      setPasswordError('Failed to send OTP. Please try again.');
     } finally {
       setResettingPassword(false);
     }
@@ -129,13 +139,23 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
     setResettingPassword(true);
 
     try {
-      // TODO: Implement verify OTP API
-      // For now, simulate success
-      setToast({ message: 'OTP verified successfully!', type: 'success' });
-      setResetStep('password');
+      const response = await fetch('/api/forgot-password/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail, otp: resetOtp })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setToast({ message: 'OTP verified successfully!', type: 'success' });
+        setResetStep('password');
+      } else {
+        setPasswordError(data.error || 'Invalid OTP');
+      }
     } catch (error) {
       console.error('Error:', error);
-      setPasswordError('Invalid OTP');
+      setPasswordError('Failed to verify OTP. Please try again.');
     } finally {
       setResettingPassword(false);
     }
@@ -158,18 +178,35 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
     setResettingPassword(true);
 
     try {
-      // TODO: Implement reset password API
-      // For now, simulate success
-      setToast({ message: 'Password reset successfully!', type: 'success' });
-      setResetEmail('');
-      setResetOtp('');
-      setResetNewPassword('');
-      setResetConfirmPassword('');
-      setResetStep('email');
-      setActiveTab('change');
+      const response = await fetch('/api/forgot-password/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: resetEmail,
+          otp: resetOtp,
+          newPassword: resetNewPassword 
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setToast({ message: 'Password reset successfully! You can now login with your new password.', type: 'success' });
+        // Reset form and switch to change password tab after 2 seconds
+        setTimeout(() => {
+          setResetEmail('');
+          setResetOtp('');
+          setResetNewPassword('');
+          setResetConfirmPassword('');
+          setResetStep('email');
+          setActiveTab('change');
+        }, 2000);
+      } else {
+        setPasswordError(data.error || 'Failed to reset password');
+      }
     } catch (error) {
       console.error('Error:', error);
-      setPasswordError('Failed to reset password');
+      setPasswordError('Failed to reset password. Please try again.');
     } finally {
       setResettingPassword(false);
     }
@@ -185,12 +222,8 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
         <span>Back</span>
       </button>
 
-      <h1 className="text-3xl font-bold mb-1">
-        {import.meta.env.MODE === 'development' ? 'Change/Forgot Password' : 'Change Password'}
-      </h1>
-      <p className="text-gray-600 mb-8">
-        {import.meta.env.MODE === 'development' ? 'Update or recover your account password' : 'Update your account password'}
-      </p>
+      <h1 className="text-3xl font-bold mb-1">Change/Forgot Password</h1>
+      <p className="text-gray-600 mb-8">Update or recover your account password</p>
 
       {/* Tabs */}
       <div className="flex gap-4 mb-6 border-b">
@@ -209,25 +242,16 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
         </button>
         <button
           onClick={() => {
-            // Only allow tab switch in local (not in production)
-            if (import.meta.env.MODE === 'development') {
-              setActiveTab('forgot');
-              setPasswordError('');
-            }
+            setActiveTab('forgot');
+            setPasswordError('');
           }}
-          disabled={import.meta.env.MODE !== 'development'}
-          className={`pb-3 px-4 font-medium flex items-center gap-2 ${
+          className={`pb-3 px-4 font-medium ${
             activeTab === 'forgot'
               ? 'text-teal-700 border-b-2 border-teal-700'
-              : import.meta.env.MODE !== 'development'
-              ? 'text-gray-400 cursor-not-allowed opacity-60'
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
           Forgot Password
-          {import.meta.env.MODE !== 'development' && (
-            <span className="text-red-500 text-xs">✕</span>
-          )}
         </button>
       </div>
 
@@ -258,7 +282,7 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
                   onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
                 >
-                  {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showCurrentPassword ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
               </div>
             </div>
@@ -281,7 +305,7 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
                   onClick={() => setShowNewPassword(!showNewPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
                 >
-                  {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showNewPassword ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-1">
@@ -307,7 +331,7 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
                 >
-                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showConfirmPassword ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
               </div>
             </div>
@@ -426,7 +450,7 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
                       onClick={() => setShowResetNewPassword(!showResetNewPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
                     >
-                      {showResetNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      {showResetNewPassword ? <Eye size={18} /> : <EyeOff size={18} />}
                     </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
@@ -450,7 +474,7 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
                       onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
                     >
-                      {showResetConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      {showResetConfirmPassword ? <Eye size={18} /> : <EyeOff size={18} />}
                     </button>
                   </div>
                 </div>

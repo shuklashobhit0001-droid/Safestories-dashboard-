@@ -15,6 +15,7 @@ import { Loader } from './Loader';
 import { Toast } from './Toast';
 import { ChangePassword } from './ChangePassword';
 import { AdminEditProfile } from './AdminEditProfile';
+import { useUrlState } from '../hooks/useUrlState';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -22,9 +23,11 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
-  const [activeView, setActiveView] = useState(() => {
-    return localStorage.getItem('adminActiveView') || 'dashboard';
-  });
+  // Use URL state for view and tabs
+  const [activeView, setActiveView] = useUrlState<string>('view', 'dashboard', 'adminActiveView');
+  const [appointmentTab, setAppointmentTab] = useUrlState<string>('tab', 'scheduled', undefined);
+  const [refundTab, setRefundTab] = useUrlState<string>('refundTab', 'all_payments', undefined);
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedClientForView, setSelectedClientForView] = useState<any>(() => {
     const saved = localStorage.getItem('selectedClientForView');
@@ -35,11 +38,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   });
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [profilePictureUrl, setProfilePictureUrl] = useState<string>('');
-  const [appointmentTab, setAppointmentTab] = useState<string>('scheduled');
-  const [refundTab, setRefundTab] = useState<string>('all_payments');
 
   useEffect(() => {
-    localStorage.setItem('adminActiveView', activeView);
     if (activeView !== 'therapists') {
       setSelectedClientForView(null);
       setClientViewSource('');
@@ -449,9 +449,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                 className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3"
               >
                 <Eye size={18} className="text-gray-600" />
-                <span className="text-sm font-medium">
-                  {import.meta.env.MODE === 'development' ? 'Change/Forgot Password' : 'Change Password'}
-                </span>
+                <span className="text-sm font-medium">Change/Forgot Password</span>
               </button>
             </div>
           )}

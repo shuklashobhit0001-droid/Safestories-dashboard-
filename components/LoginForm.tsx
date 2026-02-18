@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Input } from './Input';
 import { Button } from './Button';
-import { User, KeyRound, Mail } from 'lucide-react';
+import { User, KeyRound, Mail, Eye, EyeOff } from 'lucide-react';
 import { CompleteProfileModal } from './CompleteProfileModal';
 
 interface LoginFormProps {
@@ -9,7 +9,7 @@ interface LoginFormProps {
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
-  const [loginMode, setLoginMode] = useState<'normal' | 'otp'>('normal');
+  const [loginMode, setLoginMode] = useState<'normal' | 'otp' | 'forgot'>('normal');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
@@ -18,6 +18,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [prefilledData, setPrefilledData] = useState<any>(null);
+
+  // Forgot password states
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetOtp, setResetOtp] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [resetStep, setResetStep] = useState<'email' | 'otp' | 'password'>('email');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleNormalLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,13 +91,146 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     alert('Profile created successfully! Please login with your email and password.');
   };
 
+  const validatePassword = (pwd: string): boolean => {
+    if (pwd.length < 8) return false;
+    if (!/[A-Z]/.test(pwd)) return false;
+    if (!/[a-z]/.test(pwd)) return false;
+    if (!/[0-9]/.test(pwd)) return false;
+    return true;
+  };
+
+  const handleSendResetOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/forgot-password/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccessMessage('OTP sent to your email!');
+        setResetStep('otp');
+      } else {
+        setError(data.error || 'Failed to send OTP');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setError('Failed to send OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyResetOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/forgot-password/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail, otp: resetOtp })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccessMessage('OTP verified successfully!');
+        setResetStep('password');
+      } else {
+        setError(data.error || 'Invalid OTP');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setError('Failed to verify OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+
+    if (!validatePassword(resetNewPassword)) {
+      setError('Password must be at least 8 characters with uppercase, lowercase, and number');
+      return;
+    }
+
+    if (resetNewPassword !== resetConfirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/forgot-password/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: resetEmail,
+          otp: resetOtp,
+          newPassword: resetNewPassword 
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccessMessage('Password reset successfully! You can now login.');
+        // Reset form and switch back to normal login after 2 seconds
+        setTimeout(() => {
+          setResetEmail('');
+          setResetOtp('');
+          setResetNewPassword('');
+          setResetConfirmPassword('');
+          setResetStep('email');
+          setLoginMode('normal');
+          setSuccessMessage('');
+        }, 2000);
+      } else {
+        setError(data.error || 'Failed to reset password');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setError('Failed to reset password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
-      <form onSubmit={loginMode === 'normal' ? handleNormalLogin : handleOTPLogin} className="w-full">
+      <form onSubmit={
+        loginMode === 'normal' ? handleNormalLogin : 
+        loginMode === 'otp' ? handleOTPLogin :
+        resetStep === 'email' ? handleSendResetOtp :
+        resetStep === 'otp' ? handleVerifyResetOtp :
+        handleResetPassword
+      } className="w-full">
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-black mb-2">Welcome Back</h1>
+          <h1 className="text-3xl font-bold text-black mb-2">
+            {loginMode === 'normal' ? 'Welcome Back' : 
+             loginMode === 'otp' ? 'First Time Login' : 
+             'Reset Password'}
+          </h1>
           <p className="text-gray-500 text-sm font-medium">
-            {loginMode === 'normal' ? 'Sign in to access your dashboard' : 'First time login with OTP'}
+            {loginMode === 'normal' ? 'Sign in to access your dashboard' : 
+             loginMode === 'otp' ? 'First time login with OTP' :
+             resetStep === 'email' ? 'Enter your email to receive OTP' :
+             resetStep === 'otp' ? 'Enter the OTP sent to your email' :
+             'Create a new password'}
           </p>
         </div>
 
@@ -111,7 +254,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </>
-          ) : (
+          ) : loginMode === 'otp' ? (
             <>
               <Input 
                 label="Email" 
@@ -131,6 +274,94 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                 maxLength={6}
               />
             </>
+          ) : (
+            <>
+              {resetStep === 'email' && (
+                <div>
+                  <label className="block text-sm font-semibold mb-1.5 text-gray-700">
+                    Email Address<span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    placeholder="your.email@example.com"
+                    required
+                  />
+                </div>
+              )}
+
+              {resetStep === 'otp' && (
+                <div>
+                  <label className="block text-sm font-semibold mb-1.5 text-gray-700">
+                    OTP<span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={resetOtp}
+                    onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-center text-2xl tracking-widest"
+                    placeholder="000000"
+                    maxLength={6}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter the 6-digit OTP sent to {resetEmail}
+                  </p>
+                </div>
+              )}
+
+              {resetStep === 'password' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1.5 text-gray-700">
+                      New Password<span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showResetNewPassword ? 'text' : 'password'}
+                        value={resetNewPassword}
+                        onChange={(e) => setResetNewPassword(e.target.value)}
+                        className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 pr-10"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowResetNewPassword(!showResetNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                      >
+                        {showResetNewPassword ? <Eye size={18} /> : <EyeOff size={18} />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      At least 8 characters with uppercase, lowercase, and number
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1.5 text-gray-700">
+                      Confirm New Password<span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showResetConfirmPassword ? 'text' : 'password'}
+                        value={resetConfirmPassword}
+                        onChange={(e) => setResetConfirmPassword(e.target.value)}
+                        className="w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 pr-10"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                      >
+                        {showResetConfirmPassword ? <Eye size={18} /> : <EyeOff size={18} />}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
           )}
         </div>
 
@@ -140,30 +371,67 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
           </div>
         )}
 
+        {successMessage && (
+          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm">
+            {successMessage}
+          </div>
+        )}
+
         <div className="flex justify-between items-center mt-2 mb-8">
           <button
             type="button"
             onClick={() => {
-              setLoginMode(loginMode === 'normal' ? 'otp' : 'normal');
+              if (loginMode === 'forgot') {
+                setLoginMode('normal');
+                setResetStep('email');
+                setResetEmail('');
+                setResetOtp('');
+                setResetNewPassword('');
+                setResetConfirmPassword('');
+              } else {
+                setLoginMode(loginMode === 'normal' ? 'otp' : 'normal');
+              }
               setError('');
+              setSuccessMessage('');
             }}
             className="text-sm font-bold text-teal-700 hover:text-teal-800 transition-colors"
           >
-            {loginMode === 'normal' ? 'First Time Login?' : 'Back to Normal Login'}
+            {loginMode === 'forgot' ? 'Back to Login' :
+             loginMode === 'normal' ? 'First Time Login?' : 'Back to Normal Login'}
           </button>
           
           {loginMode === 'normal' && (
-            <a 
-              href="#" 
+            <button
+              type="button"
+              onClick={() => {
+                setLoginMode('forgot');
+                setError('');
+                setSuccessMessage('');
+              }}
               className="text-sm font-bold text-teal-700 hover:text-teal-800 transition-colors"
             >
               Forgot Your Password?
-            </a>
+            </button>
           )}
         </div>
 
+        {loginMode === 'forgot' && resetStep === 'otp' && (
+          <button
+            type="button"
+            onClick={() => setResetStep('email')}
+            className="w-full mb-4 border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 font-medium text-lg"
+          >
+            Back
+          </button>
+        )}
+
         <Button type="submit" fullWidth className="text-lg" disabled={loading}>
-          {loading ? 'Please wait...' : (loginMode === 'normal' ? 'Log In' : 'Verify OTP')}
+          {loading ? 'Please wait...' : 
+           loginMode === 'normal' ? 'Log In' : 
+           loginMode === 'otp' ? 'Verify OTP' :
+           resetStep === 'email' ? 'Send OTP' :
+           resetStep === 'otp' ? 'Verify OTP' :
+           'Reset Password'}
         </Button>
       </form>
 

@@ -12,6 +12,7 @@ import { ProgressNotesTab } from './ProgressNotesTab';
 import { ProgressNoteDetail } from './ProgressNoteDetail';
 import { GoalTrackingTab } from './GoalTrackingTab';
 import { FreeConsultationDetail } from './FreeConsultationDetail';
+import { useUrlState } from '../hooks/useUrlState';
 
 interface TherapistDashboardProps {
   onLogout: () => void;
@@ -22,16 +23,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   // Force re-render check - v2.0
   console.log('🔄 TherapistDashboard rendered at:', new Date().toISOString());
   
-  const [activeView, setActiveView] = useState(() => {
-    return localStorage.getItem('therapistActiveView') || 'dashboard';
-  });
+  // Use URL state for view and tabs
+  const [activeView, setActiveView] = useUrlState<string>('view', 'dashboard', 'therapistActiveView');
+  const [activeAppointmentTab, setActiveAppointmentTab] = useUrlState<string>('tab', 'scheduled', undefined);
+  
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('All Time');
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
-
-  useEffect(() => {
-    localStorage.setItem('therapistActiveView', activeView);
-  }, [activeView]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -100,7 +98,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [sessionNotesLoading, setSessionNotesLoading] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedReminderAppointment, setSelectedReminderAppointment] = useState<any>(null);
-  const [activeAppointmentTab, setActiveAppointmentTab] = useState('scheduled');
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [clientDetailLoading, setClientDetailLoading] = useState(false);
   const [clientStats, setClientStats] = useState({ bookings: 0, sessionsCompleted: 0, noShows: 0, cancelled: 0 });
@@ -1794,9 +1791,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3"
               >
                 <Eye size={18} className="text-gray-600" />
-                <span className="text-sm font-medium">
-                  {import.meta.env.MODE === 'development' ? 'Change/Forgot Password' : 'Change Password'}
-                </span>
+                <span className="text-sm font-medium">Change/Forgot Password</span>
               </button>
             </div>
           )}

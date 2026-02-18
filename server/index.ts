@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
 import multer from 'multer';
+import { randomUUID } from 'crypto';
 import pool from '../lib/db';
 import { convertToIST } from '../lib/timezone';
 import { startDashboardApiBookingSync } from './dashboardApiBookingSync';
@@ -406,6 +407,251 @@ app.post('/api/update-password', async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to update password' });
   }
 });
+
+// ==================== FORGOT PASSWORD ENDPOINTS ====================
+
+// Import email function at top of file (add this import)
+import { sendPasswordResetOTP } from '../lib/email';
+import crypto from 'crypto';
+
+// Helper function to generate 6-digit OTP
+function generateOTP(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Helper function to generate secure token
+function generateToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// 1. Send OTP for password reset
+app.post('/api/forgot-password/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+
+    console.log('🔐 Password reset OTP request for:', email);
+
+    // Validate email
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, error: 'Valid email is required' });
+    }
+
+    // Check if user exists
+    const userResult = await pool.query(
+      `SELECT id, username, full_name, email FROM users WHERE LOWER(email) = LOWER($1)`,
+      [email]
+    );
+
+    if (userResult.rows.length === 0) {
+      // Don't reveal if email exists (security)
+      return res.json({ 
+        success: true, 
+        message: 'If this email exists, an OTP has been sent',
+        expiresIn: 600 
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Check rate limiting (max 3 requests per hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const attemptsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM password_reset_attempts 
+       WHERE LOWER(email) = LOWER($1) AND attempted_at > $2`,
+      [email, oneHourAgo]
+    );
+
+    const attemptCount = parseInt(attemptsResult.rows[0].count);
+    if (attemptCount >= 3) {
+      console.log('❌ Rate limit exceeded for:', email);
+      return res.status(429).json({ 
+        success: false, 
+        error: 'Too many requests. Please try again in an hour.' 
+      });
+    }
+
+    // Generate OTP and token
+    const otp = generateOTP();
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store in database
+    await pool.query(
+      `INSERT INTO password_reset_tokens 
+       (user_id, email, otp, token, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [user.id, email, otp, token, expiresAt, ipAddress, req.headers['user-agent']]
+    );
+
+    // Log attempt
+    await pool.query(
+      `INSERT INTO password_reset_attempts (email, ip_address, success)
+       VALUES ($1, $2, true)`,
+      [email, ipAddress]
+    );
+
+    // Send email
+    try {
+      await sendPasswordResetOTP(email, user.full_name || user.username, otp, expiresAt);
+      console.log('✅ Password reset OTP sent to:', email);
+      
+      res.json({ 
+        success: true, 
+        message: 'OTP sent to your email',
+        expiresIn: 600 // 10 minutes in seconds
+      });
+    } catch (emailError) {
+      console.error('❌ Failed to send email:', emailError);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to send OTP email. Please try again.' 
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error in send-otp:', error);
+    res.status(500).json({ success: false, error: 'Failed to process request' });
+  }
+});
+
+// 2. Verify OTP
+app.post('/api/forgot-password/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    console.log('🔐 OTP verification attempt for:', email);
+
+    // Validate input
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, error: 'Email and OTP are required' });
+    }
+
+    // Find OTP record
+    const result = await pool.query(
+      `SELECT * FROM password_reset_tokens 
+       WHERE LOWER(email) = LOWER($1) AND otp = $2 AND used = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [email, otp]
+    );
+
+    if (result.rows.length === 0) {
+      console.log('❌ Invalid OTP for:', email);
+      return res.status(400).json({ success: false, error: 'Invalid OTP' });
+    }
+
+    const resetRecord = result.rows[0];
+
+    // Check if expired
+    if (new Date() > new Date(resetRecord.expires_at)) {
+      console.log('❌ Expired OTP for:', email);
+      return res.status(410).json({ success: false, error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Mark as verified (but not used yet)
+    await pool.query(
+      `UPDATE password_reset_tokens SET verified = true WHERE id = $1`,
+      [resetRecord.id]
+    );
+
+    console.log('✅ OTP verified for:', email);
+    
+    res.json({ 
+      success: true, 
+      message: 'OTP verified successfully',
+      resetToken: resetRecord.token 
+    });
+
+  } catch (error) {
+    console.error('❌ Error in verify-otp:', error);
+    res.status(500).json({ success: false, error: 'Failed to verify OTP' });
+  }
+});
+
+// 3. Reset password
+app.post('/api/forgot-password/reset', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    console.log('🔐 Password reset attempt for:', email);
+
+    // Validate input
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Email, OTP, and new password are required' });
+    }
+
+    // Validate password strength
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({ success: false, error: 'Password must contain at least one uppercase letter' });
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      return res.status(400).json({ success: false, error: 'Password must contain at least one lowercase letter' });
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      return res.status(400).json({ success: false, error: 'Password must contain at least one number' });
+    }
+
+    // Find verified OTP record
+    const result = await pool.query(
+      `SELECT * FROM password_reset_tokens 
+       WHERE LOWER(email) = LOWER($1) AND otp = $2 AND verified = true AND used = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [email, otp]
+    );
+
+    if (result.rows.length === 0) {
+      console.log('❌ Invalid or unverified OTP for:', email);
+      return res.status(400).json({ success: false, error: 'Invalid or unverified OTP' });
+    }
+
+    const resetRecord = result.rows[0];
+
+    // Check if expired
+    if (new Date() > new Date(resetRecord.expires_at)) {
+      console.log('❌ Expired OTP for:', email);
+      return res.status(410).json({ success: false, error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Update password
+    const updateResult = await pool.query(
+      `UPDATE users SET password = $1 WHERE id = $2 RETURNING id, username`,
+      [newPassword, resetRecord.user_id]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Mark token as used
+    await pool.query(
+      `UPDATE password_reset_tokens SET used = true WHERE id = $1`,
+      [resetRecord.id]
+    );
+
+    // Invalidate all other reset tokens for this user
+    await pool.query(
+      `UPDATE password_reset_tokens SET used = true 
+       WHERE user_id = $1 AND id != $2 AND used = false`,
+      [resetRecord.user_id, resetRecord.id]
+    );
+
+    console.log('✅ Password reset successful for:', email);
+    
+    res.json({ 
+      success: true, 
+      message: 'Password reset successfully. You can now login with your new password.' 
+    });
+
+  } catch (error) {
+    console.error('❌ Error in reset password:', error);
+    res.status(500).json({ success: false, error: 'Failed to reset password' });
+  }
+});
+
+// ==================== END FORGOT PASSWORD ENDPOINTS ====================
 
 // Get admin profile
 app.get('/api/admin-profile', async (req, res) => {
@@ -2670,7 +2916,6 @@ app.post('/api/generate-sos-token', async (req, res) => {
     }
 
     // Generate unique token (UUID)
-    const { randomUUID } = await import('crypto');
     const token = randomUUID();
 
     // Calculate expiration date
