@@ -935,51 +935,75 @@ app.get('/api/dashboard/bookings', async (req, res) => {
     // Filter upcoming sessions based on booking_invitee_time
     const nowUTC = new Date();
     const upcomingBookings = result.rows.filter(row => {
-      const timeMatch = row.booking_invitee_time.match(/at\s+(\d+):(\d+)\s+([AP]M)\s+-\s+(\d+):(\d+)\s+([AP]M)/);
-      
-      if (timeMatch) {
+      try {
+        const timeMatch = row.booking_invitee_time.match(/at\s+(\d+):(\d+)\s+([AP]M)\s+-\s+(\d+):(\d+)\s+([AP]M)/);
+        
+        if (!timeMatch) {
+          console.log('No time match for:', row.booking_invitee_time);
+          return false;
+        }
+        
         const dateStr = row.booking_invitee_time.match(/(\w+),\s+(\w+)\s+(\d+),\s+(\d+)/);
         
-        if (dateStr) {
-          const month = dateStr[2];
-          const day = parseInt(dateStr[3]);
-          const year = parseInt(dateStr[4]);
-          
-          // Parse end time
-          let endHour = parseInt(timeMatch[4]);
-          const endMinute = parseInt(timeMatch[5]);
-          const endPeriod = timeMatch[6];
-          
-          // Convert to 24-hour format
-          if (endPeriod === 'PM' && endHour !== 12) endHour += 12;
-          if (endPeriod === 'AM' && endHour === 12) endHour = 0;
-          
-          // Parse timezone offset
-          const timezoneMatch = row.booking_invitee_time.match(/GMT([+-])(\d+):(\d+)/);
-          let timezoneOffset = 330; // Default to IST (+5:30)
-          
-          if (timezoneMatch) {
-            const sign = timezoneMatch[1] === '+' ? 1 : -1;
-            const hours = parseInt(timezoneMatch[2]);
-            const minutes = parseInt(timezoneMatch[3]);
-            timezoneOffset = sign * (hours * 60 + minutes);
-          }
-          
-          // Create date in UTC
-          const monthMap: { [key: string]: number } = {
-            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-          };
-          
-          const endDate = new Date(Date.UTC(year, monthMap[month], day, endHour, endMinute));
-          // Adjust for timezone offset (subtract because we want UTC)
-          endDate.setMinutes(endDate.getMinutes() - timezoneOffset);
-          
-          // Session is upcoming if end time hasn't passed
-          return endDate > nowUTC;
+        if (!dateStr) {
+          console.log('No date match for:', row.booking_invitee_time);
+          return false;
         }
+        
+        const month = dateStr[2];
+        const day = parseInt(dateStr[3]);
+        const year = parseInt(dateStr[4]);
+        
+        // Parse end time
+        let endHour = parseInt(timeMatch[4]);
+        const endMinute = parseInt(timeMatch[5]);
+        const endPeriod = timeMatch[6];
+        
+        // Convert to 24-hour format
+        if (endPeriod === 'PM' && endHour !== 12) endHour += 12;
+        if (endPeriod === 'AM' && endHour === 12) endHour = 0;
+        
+        // Parse timezone offset
+        const timezoneMatch = row.booking_invitee_time.match(/GMT([+-])(\d+):(\d+)/);
+        let timezoneOffset = 330; // Default to IST (+5:30)
+        
+        if (timezoneMatch) {
+          const sign = timezoneMatch[1] === '+' ? 1 : -1;
+          const hours = parseInt(timezoneMatch[2]);
+          const minutes = parseInt(timezoneMatch[3]);
+          timezoneOffset = sign * (hours * 60 + minutes);
+        }
+        
+        // Create date in UTC
+        const monthMap: { [key: string]: number } = {
+          'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+          'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+        };
+        
+        const endDate = new Date(Date.UTC(year, monthMap[month], day, endHour, endMinute));
+        // Adjust for timezone offset (subtract because we want UTC)
+        endDate.setMinutes(endDate.getMinutes() - timezoneOffset);
+        
+        const isUpcoming = endDate > nowUTC;
+        
+        // Debug log for Aarohi
+        if (row.client_name && row.client_name.includes('Aarohi')) {
+          console.log('Aarohi debug:', {
+            raw: row.booking_invitee_time,
+            endHour, endMinute, endPeriod,
+            timezoneOffset,
+            endDate: endDate.toISOString(),
+            nowUTC: nowUTC.toISOString(),
+            isUpcoming
+          });
+        }
+        
+        // Session is upcoming if end time hasn't passed
+        return isUpcoming;
+      } catch (error) {
+        console.error('Error parsing booking time:', error, row.booking_invitee_time);
+        return false;
       }
-      return false;
     }).slice(0, limitNum);
 
     const bookings = upcomingBookings.map(row => ({
