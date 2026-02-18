@@ -695,6 +695,11 @@ app.put('/api/admin-profile', async (req, res) => {
 // Get live sessions count
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
+    // Prevent caching of live session data
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const result = await pool.query(`
       SELECT booking_invitee_time
       FROM bookings
@@ -887,6 +892,11 @@ app.get('/api/dashboard/stats', async (req, res) => {
 // Get upcoming bookings
 app.get('/api/dashboard/bookings', async (req, res) => {
   try {
+    // Prevent caching of booking data
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const { start, end, limit = '3' } = req.query;
     const limitNum = parseInt(limit as string) || 3;
     
@@ -1225,6 +1235,11 @@ app.post('/api/booking-requests', async (req, res) => {
 // Get therapists live status
 app.get('/api/therapists-live-status', async (req, res) => {
   try {
+    // Prevent caching of live status data
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const result = await pool.query(`
       SELECT DISTINCT booking_host_name, booking_invitee_time
       FROM bookings
@@ -1528,6 +1543,11 @@ app.get('/api/client-details', async (req, res) => {
 // Get therapist stats
 app.get('/api/therapist-stats', async (req, res) => {
   try {
+    // Prevent caching of stats data
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const { therapist_id, start, end } = req.query;
 
     if (!therapist_id) {
