@@ -2548,8 +2548,7 @@ app.get('/api/bookings', async (req, res) => {
         booking_resource_name,
         booking_start_at,
         booking_end_at,
-        booking_status,
-        invitee_questions_and_answers
+        booking_status
       FROM bookings
       WHERE booking_id = $1
     `;
