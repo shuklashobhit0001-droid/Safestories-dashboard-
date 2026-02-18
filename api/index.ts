@@ -2528,6 +2528,48 @@ app.post('/api/generate-sos-token', async (req, res) => {
   }
 });
 
+// Get booking details by booking_id
+app.get('/api/bookings', async (req, res) => {
+  try {
+    const { booking_id } = req.query;
+
+    if (!booking_id) {
+      return res.status(400).json({ error: 'booking_id is required' });
+    }
+
+    const query = `
+      SELECT 
+        booking_id,
+        invitee_name,
+        invitee_email,
+        invitee_phone,
+        booking_resource_name,
+        booking_start_at,
+        booking_end_at,
+        booking_status,
+        mode,
+        invitee_questions_and_answers
+      FROM bookings
+      WHERE booking_id = $1
+    `;
+
+    const result = await pool.query(query, [booking_id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    return res.status(200).json(result.rows);
+
+  } catch (error) {
+    console.error('Error fetching booking:', error);
+    return res.status(500).json({ 
+      error: 'Failed to fetch booking',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 const PORT = 3002;
 app.listen(PORT, () => {
   console.log(`\n✓ API server running on http://localhost:${PORT}`);
