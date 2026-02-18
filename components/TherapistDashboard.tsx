@@ -926,23 +926,37 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       // Generate secure access token for documentation link
       console.log('📋 Selected booking data:', selectedSOSBooking);
       
-      // Extract email and phone from booking
+      // Fetch full booking details from database to get email and phone
       let clientEmail = '';
       let clientPhone = '';
       
-      // Try to get from contact_info field
-      if (selectedSOSBooking?.contact_info) {
-        const parts = selectedSOSBooking.contact_info.split(',');
-        clientPhone = parts[0]?.trim() || '';
-        clientEmail = parts[1]?.trim() || '';
+      try {
+        const bookingResponse = await fetch(`/api/bookings?booking_id=${selectedSOSBooking?.booking_id}`);
+        if (bookingResponse.ok) {
+          const bookingData = await bookingResponse.json();
+          if (bookingData && bookingData.length > 0) {
+            const booking = bookingData[0];
+            clientEmail = booking.invitee_email || '';
+            clientPhone = booking.invitee_phone || '';
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching booking details:', error);
       }
       
-      // Fallback: try to get from booking data directly
+      // Fallback: try to extract from selectedSOSBooking
       if (!clientEmail && selectedSOSBooking?.invitee_email) {
         clientEmail = selectedSOSBooking.invitee_email;
       }
       if (!clientPhone && selectedSOSBooking?.invitee_phone) {
         clientPhone = selectedSOSBooking.invitee_phone;
+      }
+      
+      // Fallback: try to get from contact_info field
+      if ((!clientEmail || !clientPhone) && selectedSOSBooking?.contact_info) {
+        const parts = selectedSOSBooking.contact_info.split(',');
+        if (!clientPhone) clientPhone = parts[0]?.trim() || '';
+        if (!clientEmail) clientEmail = parts[1]?.trim() || '';
       }
       
       console.log('📧 Client email:', clientEmail);
