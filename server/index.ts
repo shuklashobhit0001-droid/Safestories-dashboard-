@@ -2814,16 +2814,16 @@ app.post('/api/send-booking-link', async (req, res) => {
     const { clientName, email, phone, therapistName, therapy } = req.body;
 
     // Validate required fields
-    if (!clientName || !therapistName) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!clientName) {
+      return res.status(400).json({ error: 'Missing required fields: clientName is required' });
     }
 
     const webhookData = {
       clientName,
       email,
       phone,
-      therapistName,
-      therapy
+      therapistName: therapistName || 'Not Assigned',
+      therapy: therapy || 'Individual Therapy'
     };
 
     try {
