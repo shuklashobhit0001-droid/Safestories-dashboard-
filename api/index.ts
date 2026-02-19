@@ -2454,6 +2454,37 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
   }
 });
 
+// Get client's most recent therapy type
+app.get('/api/client-therapy-type', async (req, res) => {
+  try {
+    const { email, phone } = req.query;
+
+    if (!email && !phone) {
+      return res.status(400).json({ error: 'Email or phone is required' });
+    }
+
+    // Query to get the most recent booking's therapy type
+    const result = await pool.query(
+      `SELECT booking_resource_name as therapy_type
+       FROM bookings
+       WHERE (invitee_email = $1 OR invitee_phone = $2)
+       AND booking_status NOT IN ('cancelled', 'canceled')
+       ORDER BY booking_invitee_time DESC
+       LIMIT 1`,
+      [email, phone]
+    );
+
+    if (result.rows.length > 0) {
+      res.json({ therapy_type: result.rows[0].therapy_type });
+    } else {
+      res.json({ therapy_type: 'Individual Therapy' });
+    }
+  } catch (error) {
+    console.error('Error fetching client therapy type:', error);
+    res.status(500).json({ error: 'Failed to fetch therapy type' });
+  }
+});
+
 // Send booking link webhook
 app.post('/api/send-booking-link', async (req, res) => {
   try {
@@ -2637,6 +2668,133 @@ app.get('/api/bookings', async (req, res) => {
       error: 'Failed to fetch booking',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+});
+
+// Get progress notes list (both new and old format)
+app.get('/api/progress-notes', async (req, res) => {
+  try {
+    const { client_id } = req.query;
+    
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
+    }
+
+    // Fetch from client_progress_notes (new system)
+    const progressNotesResult = await pool.query(
+      `SELECT id, session_number, session_date, session_mode, risk_level,
+              client_report, techniques_used, created_at, 'progress_note' as note_type
+       FROM client_progress_notes 
+       WHERE client_id = $1 
+       ORDER BY session_date DESC`,
+      [client_id]
+    );
+
+    // Fetch from client_session_notes (old system)
+    const sessionNotesResult = await pool.query(
+      `SELECT DISTINCT csn.note_id as id, csn.session_timing, csn.created_at, 
+              csn.client_name, csn.concerns_discussed, csn.somatic_cues, csn.interventions_used,
+              'session_note' as note_type, csn.booking_id
+       FROM client_session_notes csn
+       INNER JOIN bookings b ON csn.booking_id::text = b.booking_id::text
+       WHERE b.invitee_phone = $1 OR b.invitee_email = $1
+       ORDER BY csn.created_at DESC`,
+      [client_id]
+    );
+
+    // Merge both results
+    const allNotes = [
+      ...progressNotesResult.rows.map(note => ({
+        ...note,
+        session_date: note.session_date || note.created_at,
+        note_type: 'progress_note'
+      })),
+      ...sessionNotesResult.rows.map(note => ({
+        ...note,
+        session_date: note.created_at,
+        note_type: 'session_note'
+      }))
+    ];
+
+    // Sort by date descending
+    allNotes.sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime());
+
+    res.json({ success: true, data: allNotes });
+  } catch (error) {
+    console.error('Error fetching progress notes:', error);
+    res.status(500).json({ error: 'Failed to fetch progress notes' });
+  }
+});
+
+// Get single progress note
+app.get('/api/progress-notes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      'SELECT * FROM client_progress_notes WHERE id = $1',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Progress note not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching progress note:', error);
+    res.status(500).json({ error: 'Failed to fetch progress note' });
+  }
+});
+
+// Get free consultation notes list
+app.get('/api/free-consultation-notes', async (req, res) => {
+  try {
+    const { client_id } = req.query;
+
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
+    }
+
+    const result = await pool.query(
+      `SELECT fcn.*, 
+              CONCAT(u.first_name, ' ', u.last_name) as assigned_therapist_name
+       FROM free_consultation_pretherapy_notes fcn
+       LEFT JOIN users u ON fcn.assigned_therapist_id = u.therapist_id
+       WHERE fcn.client_id = $1
+       ORDER BY fcn.session_date DESC`,
+      [client_id]
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching free consultation notes:', error);
+    res.status(500).json({ error: 'Failed to fetch free consultation notes' });
+  }
+});
+
+// Get single free consultation note
+app.get('/api/free-consultation-notes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `SELECT fcn.*, 
+              CONCAT(u.first_name, ' ', u.last_name) as assigned_therapist_name
+       FROM free_consultation_pretherapy_notes fcn
+       LEFT JOIN users u ON fcn.assigned_therapist_id = u.therapist_id
+       WHERE fcn.id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Free consultation note not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching free consultation note:', error);
+    res.status(500).json({ error: 'Failed to fetch free consultation note' });
   }
 });
 
