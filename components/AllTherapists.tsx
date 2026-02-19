@@ -1560,17 +1560,17 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
           <div className="space-y-6">
             {/* Clients List */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold">Assigned Clients ({clients.length})</h3>
-                <div className="relative w-64">
+              <div className="mb-3">
+                <h3 className="text-lg font-semibold mb-3">Assigned Clients ({clients.length})</h3>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                   <input
                     type="text"
                     placeholder="Search clients..."
                     value={assignedClientSearch}
                     onChange={(e) => setAssignedClientSearch(e.target.value)}
-                    className="w-full px-4 py-2 pl-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
-                  <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
                 </div>
               </div>
               <div className="bg-white border rounded-lg overflow-hidden">

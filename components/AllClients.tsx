@@ -132,9 +132,10 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const formatPreTherapyDate = (dateString: string | undefined) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    const day = date.getDate();
-    const month = date.toLocaleString('en-US', { month: 'short' });
-    const year = date.getFullYear();
+    // Use UTC methods to avoid timezone differences between local and Vercel
+    const day = date.getUTCDate();
+    const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+    const year = date.getUTCFullYear();
     return `${day} ${month} ${year}`;
   };
 
