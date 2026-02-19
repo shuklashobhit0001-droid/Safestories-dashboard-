@@ -218,13 +218,11 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, onBack }) => {
         formData.append('file', qualificationFile);
         formData.append('folder', 'qualification-pdfs');
 
-        console.log('📤 Uploading qualification PDF...');
         const uploadResponse = await fetch('/api/upload-file', {
           method: 'POST',
           body: formData
         });
 
-        console.log('📥 Upload response status:', uploadResponse.status);
         
         if (!uploadResponse.ok) {
           const errorText = await uploadResponse.text();
@@ -233,7 +231,6 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, onBack }) => {
         }
 
         const uploadData = await uploadResponse.json();
-        console.log('Upload response:', uploadData);
         
         if (uploadData.success) {
           qualificationPdfUrl = uploadData.url;
@@ -247,13 +244,11 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, onBack }) => {
         formData.append('file', profilePicture);
         formData.append('folder', 'profile-pictures');
 
-        console.log('📤 Uploading profile picture...');
         const uploadResponse = await fetch('/api/upload-file', {
           method: 'POST',
           body: formData
         });
 
-        console.log('📥 Upload response status:', uploadResponse.status);
         
         if (!uploadResponse.ok) {
           const errorText = await uploadResponse.text();
@@ -262,7 +257,6 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, onBack }) => {
         }
 
         const uploadData = await uploadResponse.json();
-        console.log('Upload response:', uploadData);
         
         if (uploadData.success) {
           profilePictureUrl = uploadData.url;

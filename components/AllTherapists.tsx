@@ -464,8 +464,15 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             if (timeMatch) {
               const [, dateStr, , endTimeStr] = timeMatch;
               const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-              if (endDateTime < new Date() && !apt.has_session_notes) {
-                status = 'pending_notes';
+              
+              // Check if the date is valid and if session has ended
+              if (!isNaN(endDateTime.getTime())) {
+                const now = new Date();
+                if (endDateTime < now && !apt.has_session_notes) {
+                  status = 'pending_notes';
+                } else {
+                  status = 'scheduled';
+                }
               } else {
                 status = 'scheduled';
               }
@@ -896,10 +903,9 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             {/* Navigation Tabs */}
             <div className="flex gap-8 border-b">
               {clientSessionType.hasPaidSessions ? (
-                // Show all tabs for paid sessions
+                // Show all tabs for paid sessions (removed Case History tab)
                 [
                   { id: 'overview' as const, label: 'Overview' },
-                  { id: 'caseHistory' as const, label: 'Case History' },
                   { id: 'sessions' as const, label: 'Progress Notes' },
                   { id: 'documents' as const, label: 'Goal Tracking' }
                 ].map((tab) => (
@@ -916,10 +922,9 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                   </button>
                 ))
               ) : (
-                // Show only Overview and Pre-therapy Notes for free consultation only
+                // Show only Overview for free consultation only (removed Pre-therapy Notes tab)
                 [
-                  { id: 'overview' as const, label: 'Overview' },
-                  { id: 'caseHistory' as const, label: 'Pre-therapy Notes' }
+                  { id: 'overview' as const, label: 'Overview' }
                 ].map((tab) => (
                   <button
                     key={tab.id}

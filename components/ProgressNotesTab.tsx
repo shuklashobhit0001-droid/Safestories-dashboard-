@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Search, ChevronRight } from 'lucide-react';
+import { FileText, Search, ChevronRight, ChevronDown } from 'lucide-react';
 
 interface ProgressNotesTabProps {
   clientId: string;
@@ -12,6 +12,7 @@ export const ProgressNotesTab: React.FC<ProgressNotesTabProps> = ({ clientId, on
   const [freeConsultNotes, setFreeConsultNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedSessionNote, setExpandedSessionNote] = useState<number | null>(null);
 
   useEffect(() => {
     fetchProgressNotes();
@@ -22,7 +23,7 @@ export const ProgressNotesTab: React.FC<ProgressNotesTabProps> = ({ clientId, on
 
   const fetchProgressNotes = async () => {
     try {
-      const response = await fetch(`/api/progress-notes?client_id=${clientId}`);
+      const response = await fetch(`/api/progress-notes?client_id=${encodeURIComponent(clientId)}`);
       const data = await response.json();
       if (data.success) {
         setNotes(data.data);
@@ -66,10 +67,20 @@ export const ProgressNotesTab: React.FC<ProgressNotesTabProps> = ({ clientId, on
     }
   };
 
-  const filteredNotes = notes.filter(note =>
-    note.client_report?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    note.techniques_used?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredNotes = notes.filter(note => {
+    const searchLower = searchTerm.toLowerCase();
+    // For progress notes
+    if (note.note_type === 'progress_note') {
+      return note.client_report?.toLowerCase().includes(searchLower) ||
+             note.techniques_used?.toLowerCase().includes(searchLower);
+    }
+    // For session notes
+    if (note.note_type === 'session_note') {
+      return note.concerns_discussed?.toLowerCase().includes(searchLower) ||
+             note.interventions_used?.toLowerCase().includes(searchLower);
+    }
+    return true;
+  });
 
   const filteredFreeConsultNotes = freeConsultNotes.filter(note =>
     note.presenting_concerns?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -164,8 +175,103 @@ export const ProgressNotesTab: React.FC<ProgressNotesTabProps> = ({ clientId, on
                 </div>
               </div>
             );
+          } else if (note.note_type === 'session_note') {
+            // Session Note (from client_session_notes table) - Expandable accordion
+            const isExpanded = expandedSessionNote === note.id;
+            return (
+              <div
+                key={`sn-${note.id}`}
+                className="rounded-lg border-2 transition-all"
+                style={{ 
+                  backgroundColor: '#21615d1a',
+                  borderColor: '#21615D'
+                }}
+              >
+                <div 
+                  className="p-4 cursor-pointer"
+                  onClick={() => setExpandedSessionNote(isExpanded ? null : note.id)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-1">
+                        <span 
+                          className="px-3 py-1 text-white text-xs font-medium rounded-full"
+                          style={{ backgroundColor: '#21615D' }}
+                        >
+                          SESSION NOTE
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          {new Date(note.session_date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </span>
+                      </div>
+                      {note.session_timing && (
+                        <div className="text-xs text-gray-500 mt-2">
+                          {note.session_timing}
+                        </div>
+                      )}
+                    </div>
+                    {isExpanded ? (
+                      <ChevronDown size={20} style={{ color: '#21615D' }} />
+                    ) : (
+                      <ChevronRight size={20} style={{ color: '#21615D' }} />
+                    )}
+                  </div>
+
+                  {!isExpanded && note.concerns_discussed && (
+                    <div>
+                      <span className="text-xs font-medium" style={{ color: '#21615D' }}>Concerns Discussed:</span>
+                      <p className="text-sm text-gray-700 line-clamp-2 mt-0.5">
+                        {note.concerns_discussed}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Expanded Content */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 space-y-4 border-t" style={{ borderColor: '#21615D' }}>
+                    {note.concerns_discussed && (
+                      <div className="pt-4">
+                        <span className="text-xs font-semibold" style={{ color: '#21615D' }}>
+                          Concerns or Themes Discussed:
+                        </span>
+                        <p className="text-sm text-gray-800 mt-2 whitespace-pre-wrap">
+                          {note.concerns_discussed}
+                        </p>
+                      </div>
+                    )}
+
+                    {note.somatic_cues && (
+                      <div>
+                        <span className="text-xs font-semibold" style={{ color: '#21615D' }}>
+                          Somatic Cues (Appearance, Behavior, Energy, Mood):
+                        </span>
+                        <p className="text-sm text-gray-800 mt-2 whitespace-pre-wrap">
+                          {note.somatic_cues}
+                        </p>
+                      </div>
+                    )}
+
+                    {note.interventions_used && (
+                      <div>
+                        <span className="text-xs font-semibold" style={{ color: '#21615D' }}>
+                          Interventions Used:
+                        </span>
+                        <p className="text-sm text-gray-800 mt-2 whitespace-pre-wrap">
+                          {note.interventions_used}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
           } else {
-            // Regular Progress Note
+            // Regular Progress Note (from client_progress_notes table)
             return (
               <div
                 key={`pn-${note.id}`}

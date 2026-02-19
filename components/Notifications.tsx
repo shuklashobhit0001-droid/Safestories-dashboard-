@@ -34,8 +34,6 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
       const response = await fetch(`/api/notifications?user_id=${userId}&user_role=${userRole}`);
       if (response.ok) {
         const data = await response.json();
-        console.log('📥 Received notifications:', data.length);
-        console.log('📅 First notification created_at:', data[0]?.created_at);
         setNotifications(data);
       }
     } catch (error) {

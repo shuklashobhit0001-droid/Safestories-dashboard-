@@ -698,7 +698,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                console.log('Booking object:', booking);
                                 setSelectedClientForView({
                                   invitee_name: booking.client_name,
                                   invitee_email: booking.client_email,

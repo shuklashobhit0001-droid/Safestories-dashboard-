@@ -5,6 +5,11 @@ import { Toast } from './Toast';
 interface SendBookingModalProps {
   isOpen: boolean;
   onClose: () => void;
+  prefilledClient?: {
+    name: string;
+    phone: string;
+    email: string;
+  };
 }
 
 interface Therapy {
@@ -16,7 +21,7 @@ interface Therapist {
   specialization: string;
 }
 
-export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onClose }) => {
+export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onClose, prefilledClient }) => {
   const [clientName, setClientName] = useState('');
   const [countryCode, setCountryCode] = useState('+91');
   const [clientWhatsapp, setClientWhatsapp] = useState('');
@@ -246,6 +251,28 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
       fetchClients();
     }
   }, [isOpen]);
+
+  // Prefill client data when provided
+  useEffect(() => {
+    if (prefilledClient && isOpen) {
+      setClientName(prefilledClient.name);
+      setClientEmail(prefilledClient.email);
+      
+      // Parse phone number to extract country code
+      const phone = prefilledClient.phone || '';
+      if (phone.startsWith('+')) {
+        const code = countryCodes.find(c => phone.startsWith(c.code));
+        if (code) {
+          setCountryCode(code.code);
+          setClientWhatsapp(phone.substring(code.code.length).trim());
+        } else {
+          setClientWhatsapp(phone);
+        }
+      } else {
+        setClientWhatsapp(phone);
+      }
+    }
+  }, [prefilledClient, isOpen]);
 
   useEffect(() => {
     if (clientName.length > 0) {

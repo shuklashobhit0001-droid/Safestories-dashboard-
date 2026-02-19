@@ -65,11 +65,7 @@ export const GoalTrackingTab: React.FC<GoalTrackingTabProps> = ({ clientId, clie
       <div className="text-center py-12">
         <Target size={48} className="mx-auto text-gray-300 mb-4" />
         <p className="text-gray-500 text-lg mb-4">No therapy goals set yet</p>
-        <p className="text-gray-400 text-sm mb-6">Goals will be established during therapy sessions</p>
-        <button className="flex items-center gap-2 mx-auto px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800">
-          <Plus size={18} />
-          <span>Add First Goal</span>
-        </button>
+        <p className="text-gray-400 text-sm">Goals will be established during therapy sessions</p>
       </div>
     );
   }
@@ -79,10 +75,6 @@ export const GoalTrackingTab: React.FC<GoalTrackingTabProps> = ({ clientId, clie
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">Therapy Goals & Progress</h2>
-        <button className="flex items-center gap-2 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800">
-          <Plus size={18} />
-          <span>Add Goal</span>
-        </button>
       </div>
 
       {/* Goals List */}

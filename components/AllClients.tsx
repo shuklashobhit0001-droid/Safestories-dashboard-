@@ -25,6 +25,7 @@ interface Client {
 
 export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCreateBooking?: () => void }> = ({ onClientClick, onCreateBooking }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [prefilledClientData, setPrefilledClientData] = useState<{ name: string; phone: string; email: string } | undefined>(undefined);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -80,6 +81,15 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     return `${day} ${month} ${year}`;
   };
 
+  const formatPreTherapyDate = (dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    const day = date.getDate();
+    const month = date.toLocaleString('en-US', { month: 'short' });
+    const year = date.getFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
   const filteredClients = clients.filter(client => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = (
@@ -111,14 +121,36 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const paginatedClients = filteredClients.slice(startIndex, startIndex + itemsPerPage);
 
   const exportToCSV = () => {
-    const headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Bookings', 'Assigned Therapist'];
-    const rows = filteredClients.map(client => [
-      formatClientName(client.invitee_name),
-      client.invitee_phone,
-      client.invitee_email,
-      client.session_count,
-      client.booking_host_name
-    ]);
+    let headers: string[];
+    let rows: any[][];
+    
+    if (activeTab === 'pretherapy') {
+      headers = ['Client Name', 'Phone No.', 'Email ID', 'Pre-therapy Date'];
+      rows = filteredClients.map(client => [
+        formatClientName(client.invitee_name),
+        client.invitee_phone,
+        client.invitee_email,
+        formatPreTherapyDate(client.latest_booking_date)
+      ]);
+    } else if (activeTab === 'leads') {
+      headers = ['Client Name', 'Phone No.', 'Email ID', 'Assigned Therapist', 'Booking Link Sent'];
+      rows = filteredClients.map(client => [
+        formatClientName(client.invitee_name),
+        client.invitee_phone,
+        client.invitee_email,
+        client.booking_host_name,
+        formatBookingLinkDate(client.booking_link_sent_at)
+      ]);
+    } else {
+      headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Bookings', 'Assigned Therapist'];
+      rows = filteredClients.map(client => [
+        formatClientName(client.invitee_name),
+        client.invitee_phone,
+        client.invitee_email,
+        client.session_count,
+        client.booking_host_name
+      ]);
+    }
     
     const csvContent = [
       headers.join(','),
@@ -212,6 +244,15 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
       });
   };
 
+  const handleAssignTherapist = (client: Client) => {
+    setPrefilledClientData({
+      name: client.invitee_name,
+      phone: client.invitee_phone,
+      email: client.invitee_email
+    });
+    setIsModalOpen(true);
+  };
+
   return (
     <div className="p-8 h-full flex flex-col">
       {/* Header */}
@@ -297,12 +338,19 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                {activeTab === 'clients' && (
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
+                )}
+                {activeTab === 'pretherapy' && (
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Pre-therapy Date</th>
+                )}
+                {activeTab !== 'pretherapy' && (
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                )}
                 {activeTab === 'leads' && (
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Booking Link Sent</th>
                 )}
-                {(activeTab === 'clients' || activeTab === 'pretherapy') && (
+                {(activeTab === 'clients' || activeTab === 'pretherapy' || activeTab === 'leads') && (
                   <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
                 )}
               </tr>
@@ -310,13 +358,13 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === 'clients' ? 5 : 5} className="text-center text-gray-400 py-8">
+                  <td colSpan={activeTab === 'pretherapy' ? 3 : activeTab === 'leads' ? 5 : 5} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === 'clients' || activeTab === 'pretherapy' ? 5 : 5} className="text-center text-gray-400 py-8">
+                  <td colSpan={activeTab === 'pretherapy' ? 3 : activeTab === 'leads' ? 5 : 5} className="text-center text-gray-400 py-8">
                     No {activeTab === 'clients' ? 'clients' : activeTab === 'pretherapy' ? 'pre-therapy clients' : 'leads'} found
                   </td>
                 </tr>
@@ -360,16 +408,23 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                         <div>{client.invitee_phone}</div>
                         <div className="text-gray-500 text-xs">{client.invitee_email}</div>
                       </td>
-                      <td className="px-6 py-4 text-sm">{client.session_count}</td>
-                      <td className="px-6 py-4 text-sm">
-                        {client.booking_host_name}
-                      </td>
+                      {activeTab === 'clients' && (
+                        <td className="px-6 py-4 text-sm">{client.session_count}</td>
+                      )}
+                      {activeTab === 'pretherapy' && (
+                        <td className="px-6 py-4 text-sm">{formatPreTherapyDate(client.latest_booking_date)}</td>
+                      )}
+                      {activeTab !== 'pretherapy' && (
+                        <td className="px-6 py-4 text-sm">
+                          {client.booking_host_name}
+                        </td>
+                      )}
                       {activeTab === 'leads' && (
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {formatBookingLinkDate(client.booking_link_sent_at)}
                         </td>
                       )}
-                      {(activeTab === 'clients' || activeTab === 'pretherapy') && (
+                      {activeTab === 'clients' && (
                         <td className="px-6 py-4 text-sm">
                           <div className="flex gap-4 justify-center">
                             <button
@@ -394,6 +449,32 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                           </div>
                         </td>
                       )}
+                      {activeTab === 'pretherapy' && (
+                        <td className="px-6 py-4 text-sm">
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => handleAssignTherapist(client)}
+                              className="flex items-center gap-1 text-sm font-medium text-teal-600 hover:text-teal-700"
+                            >
+                              <Plus size={16} />
+                              Assign a Therapist
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                      {activeTab === 'leads' && (
+                        <td className="px-6 py-4 text-sm">
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => handleSendBookingLink(client)}
+                              className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                            >
+                              <Send size={16} />
+                              Send Booking Link
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                     {expandedRows.has(index) && client.therapists && client.therapists.length > 1 && (
                       client.therapists.map((therapist, tIndex) => (
@@ -403,8 +484,15 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                             <div>{therapist.invitee_phone}</div>
                             <div className="text-gray-400 text-xs">{client.invitee_email}</div>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{therapist.session_count}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{therapist.booking_host_name}</td>
+                          {activeTab === 'clients' && (
+                            <>
+                              <td className="px-6 py-4 text-sm text-gray-600">{therapist.session_count}</td>
+                              <td className="px-6 py-4 text-sm text-gray-600">{therapist.booking_host_name}</td>
+                            </>
+                          )}
+                          {activeTab === 'pretherapy' && (
+                            <td className="px-6 py-4 text-sm text-gray-600"></td>
+                          )}
                           {(activeTab === 'clients' || activeTab === 'pretherapy') && <td></td>}
                         </tr>
                       ))
@@ -436,7 +524,14 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         </div>
       </div>
       )}
-      <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SendBookingModal 
+        isOpen={isModalOpen} 
+        onClose={() => {
+          setIsModalOpen(false);
+          setPrefilledClientData(undefined);
+        }}
+        prefilledClient={prefilledClientData}
+      />
       <TransferClientModal
         isOpen={isTransferModalOpen}
         onClose={() => setIsTransferModalOpen(false)}

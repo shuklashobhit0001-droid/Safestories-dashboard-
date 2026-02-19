@@ -66,8 +66,6 @@ export default async function handler(req: Request, res: Response) {
       const assessmentId = result.rows[0].id;
       const createdAt = result.rows[0].created_at;
 
-      console.log(`✅ SOS Risk Assessment saved to database with ID: ${assessmentId}`);
-
       res.status(201).json({
         success: true,
         assessment_id: assessmentId,

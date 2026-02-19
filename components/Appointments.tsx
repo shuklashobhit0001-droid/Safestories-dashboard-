@@ -51,7 +51,6 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
     fetch('/api/appointments')
       .then(res => res.json())
       .then(data => {
-        console.log('Appointments data:', data);
         setAppointments(data);
         setLoading(false);
       })
@@ -146,8 +145,6 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
   };
 
   const handleSessionNotesReminder = async (apt: Appointment) => {
-    console.log('Full appointment object:', apt);
-    console.log('Therapist ID:', apt.therapist_id);
     
     if (!isMeetingEnded(apt)) {
       setToast({ message: 'Cannot send reminder before meeting ends', type: 'error' });
@@ -167,8 +164,6 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       sessionName: apt.booking_resource_name,
       sessionTimings: apt.booking_start_at
     };
-
-    console.log('Session notes reminder data:', webhookData);
 
     try {
       const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/fd13ea75-06b4-49e5-8188-75a88a9aaade', {

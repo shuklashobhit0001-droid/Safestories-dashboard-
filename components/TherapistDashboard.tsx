@@ -20,8 +20,6 @@ interface TherapistDashboardProps {
 }
 
 export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout, user }) => {
-  // Force re-render check - v2.0
-  console.log('🔄 TherapistDashboard rendered at:', new Date().toISOString());
   
   // Use URL state for view and tabs
   const [activeView, setActiveView] = useUrlState<string>('view', 'dashboard', 'therapistActiveView');
@@ -108,9 +106,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [showClientCustomCalendar, setShowClientCustomCalendar] = useState(false);
   const [clientStartDate, setClientStartDate] = useState('');
   const [clientEndDate, setClientEndDate] = useState('');
-  const [selectedSessionNote, setSelectedSessionNote] = useState<any>(null);
-  const [sessionNoteTab, setSessionNoteTab] = useState('notes');
-  const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents' | 'caseHistory'>('overview');
+  const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents' | 'caseHistory' | 'progressNotes' | 'goalTracking'>('overview');
   const [isCaseHistoryVisible, setIsCaseHistoryVisible] = useState(false);
   const [showCaseHistoryPasswordModal, setShowCaseHistoryPasswordModal] = useState(false);
   const [caseHistoryPassword, setCaseHistoryPassword] = useState('');
@@ -155,11 +151,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       .join(' ');
   };
 
-  const [showAddNoteModal, setShowAddNoteModal] = useState(false);
-  const [additionalNoteText, setAdditionalNoteText] = useState('');
-  const [additionalNotes, setAdditionalNotes] = useState<any[]>([]);
-  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
-  const [timelineData, setTimelineData] = useState<any[]>([]);
   const [clientAppointmentSearchTerm, setClientAppointmentSearchTerm] = useState('');
 
   // Calendar view state for upcoming bookings
@@ -173,7 +164,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   const resetAllStates = () => {
     setSelectedClient(null);
-    setSelectedSessionNote(null);
     setSelectedAppointmentIndex(null);
     setSelectedBookingIndex(null);
     setExpandedRows(new Set());
@@ -393,8 +383,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       const response = await fetch(`/api/therapist-appointments?therapist_id=${user.id}`);
       if (response.ok) {
         const data = await response.json();
-        console.log('Therapist appointments API response:', data);
-        console.log('First appointment:', JSON.stringify(data.appointments[0], null, 2));
         setAppointments(data.appointments || []);
       }
     } catch (error) {
@@ -411,9 +399,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       const response = await fetch(`/api/therapist-clients?therapist_id=${user.id}`);
       if (response.ok) {
         const data = await response.json();
-        console.log('=== RAW API RESPONSE ===');
-        console.log('Number of clients:', data.clients?.length);
-        console.log('Full data:', JSON.stringify(data, null, 2));
         setClients(data.clients || []);
       }
     } catch (error) {
@@ -430,16 +415,12 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       
       // Fetch client session type
       try {
-        console.log('🔍 [TherapistDashboard] Fetching session type for phone:', client.client_phone);
         const apiUrl = `/api/client-session-type?client_id=${encodeURIComponent(client.client_phone)}`;
-        console.log('🔗 [TherapistDashboard] API URL:', apiUrl);
         const sessionTypeRes = await fetch(apiUrl);
         if (sessionTypeRes.ok) {
           const sessionTypeData = await sessionTypeRes.json();
-          console.log('📊 [TherapistDashboard] Client Session Type:', sessionTypeData);
           if (sessionTypeData.success) {
             setClientSessionType(sessionTypeData.data);
-            console.log('✅ [TherapistDashboard] Session type set:', sessionTypeData.data);
           } else {
             console.error('❌ [TherapistDashboard] Session type API returned success: false');
             // Default to showing paid session UI if API fails
@@ -570,9 +551,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             }
             return false;
           }).length;
-          
-          console.log('📝 [Dashboard] Pending notes count:', pendingNotesCount);
-          console.log('📝 [Dashboard] Total appointments:', appointmentsData.appointments.length);
           
           setStats([
             { title: 'Bookings', value: (data.stats.bookings || 0).toString(), lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'all' },
@@ -737,120 +715,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     setSelectedReminderAppointment(null);
   };
 
-  const fetchTimelineData = async (bookingId: number) => {
-    try {
-      const timeline: any[] = [];
-      
-      // Fetch session notes
-      const sessionNotesRes = await fetch(`/api/session-notes?booking_id=${bookingId}`);
-      if (sessionNotesRes.ok) {
-        const sessionNotes = await sessionNotesRes.json();
-        if (sessionNotes && !sessionNotes.error) {
-          timeline.push({
-            type: 'session_notes',
-            action: 'Session notes added',
-            timestamp: sessionNotes.created_at,
-            data: sessionNotes
-          });
-          if (sessionNotes.updated_at && sessionNotes.updated_at !== sessionNotes.created_at) {
-            timeline.push({
-              type: 'session_notes',
-              action: 'Session notes updated',
-              timestamp: sessionNotes.updated_at,
-              data: sessionNotes
-            });
-          }
-        }
-      }
-      
-      // Fetch additional notes
-      const additionalNotesRes = await fetch(`/api/additional-notes?booking_id=${bookingId}`);
-      if (additionalNotesRes.ok) {
-        const additionalNotes = await additionalNotesRes.json();
-        additionalNotes.forEach((note: any) => {
-          timeline.push({
-            type: 'additional_note',
-            action: 'Additional note added',
-            timestamp: note.created_at,
-            data: note
-          });
-          if (note.updated_at && note.updated_at !== note.created_at) {
-            timeline.push({
-              type: 'additional_note',
-              action: 'Additional note updated',
-              timestamp: note.updated_at,
-              data: note
-            });
-          }
-        });
-      }
-      
-      // Sort by timestamp descending
-      timeline.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      setTimelineData(timeline);
-    } catch (error) {
-      console.error('Error fetching timeline data:', error);
-    }
-  };
-
-  const handleAddNote = () => {
-    setShowAddNoteModal(true);
-    setAdditionalNoteText('');
-    setEditingNoteId(null);
-  };
-
-  const handleEditNote = (note: any) => {
-    setShowAddNoteModal(true);
-    setAdditionalNoteText(note.note_text);
-    setEditingNoteId(note.note_id);
-  };
-
-  const handleSaveAdditionalNote = async () => {
-    if (!additionalNoteText.trim() || !selectedSessionNote) return;
-    
-    try {
-      const response = await fetch('/api/additional-notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          note_id: editingNoteId,
-          booking_id: selectedSessionNote.booking_id,
-          therapist_id: user.therapist_id,
-          therapist_name: user.username,
-          note_text: additionalNoteText
-        })
-      });
-      
-      if (response.ok) {
-        setToast({ message: editingNoteId ? 'Note updated successfully!' : 'Note added successfully!', type: 'success' });
-        setShowAddNoteModal(false);
-        setAdditionalNoteText('');
-        setEditingNoteId(null);
-        
-        // Refresh additional notes and timeline
-        const notesRes = await fetch(`/api/additional-notes?booking_id=${selectedSessionNote.booking_id}`);
-        if (notesRes.ok) {
-          const data = await notesRes.json();
-          setAdditionalNotes(data);
-        }
-        await fetchTimelineData(selectedSessionNote.booking_id);
-      } else {
-        setToast({ message: 'Failed to save note', type: 'error' });
-      }
-    } catch (error) {
-      console.error('Error saving additional note:', error);
-      setToast({ message: 'Failed to save note', type: 'error' });
-    }
-  };
-
   const handleSOSClick = (booking: any) => {
-    console.log('=== SOS BUTTON CLICKED ===');
-    console.log('Booking:', booking);
-    console.log('Session timings:', booking.session_timings);
-    
     // Time validation DISABLED - Allow SOS at any time
-    console.log('✓ Time validation disabled, showing modal');
-    
     setSelectedSOSBooking(booking);
     setShowSOSModal(true);
     setSelectedAppointmentIndex(null);
@@ -921,10 +787,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       
       const dbResult = await dbResponse.json();
       assessmentId = dbResult.assessment_id;
-      console.log('✅ SOS assessment saved to database with ID:', assessmentId);
       
       // Generate secure access token for documentation link
-      console.log('📋 Selected booking data:', selectedSOSBooking);
       
       // Fetch full booking details from database to get email and phone
       let clientEmail = '';
@@ -959,9 +823,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         if (!clientEmail) clientEmail = parts[1]?.trim() || '';
       }
       
-      console.log('📧 Client email:', clientEmail);
-      console.log('📱 Client phone:', clientPhone);
-      
       const tokenResponse = await fetch('/api/generate-sos-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -978,7 +839,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       if (tokenResponse.ok) {
         const tokenResult = await tokenResponse.json();
         documentationLink = `${window.location.origin}/sos-view/${tokenResult.token}`;
-        console.log('✅ Documentation link generated:', documentationLink);
       } else {
         const errorData = await tokenResponse.json();
         console.error('❌ Token generation failed:', errorData);
@@ -1019,8 +879,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             })
           });
         }
-        
-        console.log('✅ Webhook sent successfully');
       } catch (webhookError) {
         console.error('⚠️ Webhook failed (non-critical):', webhookError);
         // Update database to record webhook failure
@@ -1053,7 +911,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             client_name: selectedSOSBooking?.client_name
           })
         });
-        console.log('✅ Audit log created');
       } catch (auditError) {
         console.error('⚠️ Audit log failed (non-critical):', auditError);
       }
@@ -1070,7 +927,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             related_id: selectedSOSBooking?.booking_id
           })
         });
-        console.log('✅ Admin notifications sent');
       } catch (notificationError) {
         console.error('⚠️ Admin notification failed (non-critical):', notificationError);
       }
@@ -1105,7 +961,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleFillSessionNotes = async (appointment: any) => {
-    console.log('Fill session notes for:', appointment);
     setSelectedAppointmentIndex(null);
     
     try {
@@ -1127,43 +982,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleViewSessionNotes = async (appointment: any) => {
-    console.log('View session notes for booking_id:', appointment.booking_id);
-    console.log('Appointment object:', appointment);
     setSessionNotesLoading(true);
     setSelectedAppointmentIndex(null);
     
     // If we're viewing from client details, we already have the selected client
     if (selectedClient) {
-      setSelectedSessionNote(appointment);
-      
-      // Fetch session notes
-      try {
-        const response = await fetch(`/api/session-notes?booking_id=${appointment.booking_id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setSessionNotesData(data);
-        } else {
-          setSessionNotesData({ error: 'Session notes not found for this appointment' });
-        }
-      } catch (error) {
-        console.error('Error fetching session notes:', error);
-        setSessionNotesData({ error: 'Failed to load session notes' });
-      }
-      
-      // Fetch additional notes
-      try {
-        const response = await fetch(`/api/additional-notes?booking_id=${appointment.booking_id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setAdditionalNotes(data);
-        }
-      } catch (error) {
-        console.error('Error fetching additional notes:', error);
-      }
-      
-      // Fetch timeline data
-      await fetchTimelineData(appointment.booking_id);
-      
+      // Just switch to progress notes tab
+      setClientViewTab('sessions');
       setSessionNotesLoading(false);
       return;
     }
@@ -1194,42 +1019,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       setSelectedClient(client);
       // Fetch client details
       await fetchClientDetails(client);
-      // Set selected session note
-      setSelectedSessionNote(appointment);
-      
-      // Fetch session notes
-      try {
-        const response = await fetch(`/api/session-notes?booking_id=${appointment.booking_id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setSessionNotesData(data);
-        } else {
-          setSessionNotesData({ error: 'Session notes not found for this appointment' });
-        }
-      } catch (error) {
-        console.error('Error fetching session notes:', error);
-        setSessionNotesData({ error: 'Failed to load session notes' });
-      }
-      
-      // Fetch additional notes
-      try {
-        const response = await fetch(`/api/additional-notes?booking_id=${appointment.booking_id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setAdditionalNotes(data);
-        }
-      } catch (error) {
-        console.error('Error fetching additional notes:', error);
-      }
-      
-      // Fetch timeline data
-      await fetchTimelineData(appointment.booking_id);
-      
-      setSessionNotesLoading(false);
-    } else {
-      console.error('Client not found for phone:', clientPhone);
-      setSessionNotesLoading(false);
+      // Open Progress Notes tab
+      setClientViewTab('sessions');
     }
+    
+    setSessionNotesLoading(false);
   };
 
   const renderMyClients = () => {
@@ -1298,7 +1092,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               ) : (
                 paginatedClients.map((client, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50 cursor-pointer" onClick={async () => {
-                      console.log('🖱️ Client clicked:', client.client_name);
                       setActiveAppointmentTab('upcoming');
                       await fetchClientDetails(client);
                       setSelectedClient(client);
@@ -1451,11 +1244,21 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     
     // Parse session_timings to check if session ended - handle both IST and GMT formats
     if (apt.session_timings) {
+      // Match format: "Wednesday, Feb 18, 2026 at 12:00 PM - 12:50 PM (GMT+01:00)" or "Wednesday, Feb 18, 2026 at 12:00 PM - 12:50 PM IST"
       const timeMatch = apt.session_timings.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
       if (timeMatch) {
         const [, dateStr, , endTimeStr] = timeMatch;
+        
+        // Create date string in a format that works across browsers
         const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-        if (endDateTime < new Date() && !apt.has_session_notes) return 'pending_notes';
+        
+        // Check if the date is valid and if session has ended
+        if (!isNaN(endDateTime.getTime())) {
+          const now = new Date();
+          if (endDateTime < now && !apt.has_session_notes) {
+            return 'pending_notes';
+          }
+        }
       }
     }
     
@@ -1464,11 +1267,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
   // Add this useEffect to log pending notes count when appointments change
   useEffect(() => {
-    if (appointments.length > 0) {
-      const pendingFromGetStatus = appointments.filter(apt => getAppointmentStatus(apt) === 'pending_notes').length;
-      console.log('📋 [My Bookings] Pending notes from getAppointmentStatus:', pendingFromGetStatus);
-      console.log('📋 [My Bookings] Total appointments:', appointments.length);
-    }
   }, [appointments]);
 
   // Reset appointment page when tab or search term changes
@@ -1847,212 +1645,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto relative">
-        {selectedSessionNote ? (
-          <div className="p-8">
-            <div className="flex items-center gap-4 mb-6">
-              <button onClick={() => {
-                setSelectedSessionNote(null);
-                setSessionNotesData(null);
-                setSessionNoteTab('notes');
-              }} className="text-2xl hover:text-gray-600">
-                ←
-              </button>
-              <h1 className="text-2xl font-bold">{formatClientName(selectedClient?.client_name)}</h1>
-            </div>
-
-            <div className="flex gap-8 mb-6 border-b">
-              <button
-                onClick={() => setSessionNoteTab('notes')}
-                className={`pb-3 font-medium ${
-                  sessionNoteTab === 'notes'
-                    ? 'text-teal-700 border-b-2 border-teal-700'
-                    : 'text-gray-500'
-                }`}
-              >
-                Session Notes
-              </button>
-              <button
-                onClick={() => setSessionNoteTab('timelines')}
-                className={`pb-3 font-medium ${
-                  sessionNoteTab === 'timelines'
-                    ? 'text-teal-700 border-b-2 border-teal-700'
-                    : 'text-gray-500'
-                }`}
-              >
-                Timelines
-              </button>
-            </div>
-
-            <div className="flex gap-6">
-              <div className="flex-1">
-                {sessionNoteTab === 'notes' ? (
-                  sessionNotesLoading ? (
-                    <div className="text-center py-8"><Loader /></div>
-                  ) : sessionNotesData?.error ? (
-                    <div className="bg-white rounded-lg border p-8 text-center">
-                      <p className="text-red-600">{sessionNotesData.error}</p>
-                    </div>
-                  ) : (
-                    <div className="bg-white rounded-lg border p-6">
-                      <div className="mb-6">
-                        <p className="text-sm text-gray-600">
-                          Session Timings: {sessionNotesData?.session_timing || 'N/A'}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-4 gap-4 mb-6">
-                        <div>
-                          <label className="block text-sm text-gray-600 mb-1">Client Age:</label>
-                          <p className="text-sm">{sessionNotesData?.client_age || ''}</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm text-gray-600 mb-1">Gender:</label>
-                          <p className="text-sm">{sessionNotesData?.gender || ''}</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm text-gray-600 mb-1">Occupation:</label>
-                          <p className="text-sm">{sessionNotesData?.occupation || ''}</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm text-gray-600 mb-1">Marital status:</label>
-                          <p className="text-sm">{sessionNotesData?.marital_status || ''}</p>
-                        </div>
-                      </div>
-
-                      <div className="mb-6">
-                        <label className="block text-sm text-gray-600 mb-2">Concerns or themes discussed today?:</label>
-                        <div className="text-sm whitespace-pre-wrap">{sessionNotesData?.concerns_discussed || ''}</div>
-                      </div>
-
-                      <div className="mb-6">
-                        <label className="block text-sm text-gray-600 mb-2">
-                          Somatic Cues: How did the client present today (appearance, behaviour, energy, mood, non-verbal cues)?
-                        </label>
-                        <div className="text-sm whitespace-pre-wrap">{sessionNotesData?.somatic_cues?.join(', ') || ''}</div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-2">Which interventions were used?</label>
-                        <div className="text-sm whitespace-pre-wrap">{sessionNotesData?.interventions_used || ''}</div>
-                      </div>
-                    </div>
-                  )
-                ) : (
-                  <div className="bg-white rounded-lg border p-6">
-                    <h3 className="font-semibold mb-4">Timeline</h3>
-                    {timelineData.length === 0 ? (
-                      <p className="text-gray-400 text-center py-8">No timeline data available</p>
-                    ) : (
-                      <div className="space-y-4">
-                        {timelineData.map((item, index) => {
-                          const now = new Date();
-                          const createdAt = new Date(item.timestamp);
-                          const minutesSinceCreation = Math.abs((now.getTime() - createdAt.getTime()) / (1000 * 60));
-                          const canEdit = minutesSinceCreation <= 5;
-                          
-                          return (
-                            <div key={index} className="border-l-2 border-teal-700 pl-4 pb-4">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <p className="font-medium text-sm">{item.action}</p>
-                                  <p className="text-xs text-gray-500">
-                                    {new Date(item.timestamp).toLocaleString('en-US', {
-                                      month: 'short',
-                                      day: 'numeric',
-                                      year: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
-                                  </p>
-                                </div>
-                                {item.type === 'additional_note' && (
-                                  <button
-                                    onClick={() => {
-                                      if (!canEdit) {
-                                        setToast({ message: 'Notes can only be edited within 5 minutes of creation', type: 'error' });
-                                        setTimeout(() => setToast(null), 3000);
-                                        return;
-                                      }
-                                      handleEditNote(item.data);
-                                    }}
-                                    className={`text-xs ${
-                                      canEdit ? 'text-teal-700 hover:underline' : 'text-gray-400 cursor-not-allowed'
-                                    }`}
-                                  >
-                                    Edit
-                                  </button>
-                                )}
-                              </div>
-                              {item.type === 'additional_note' && (
-                                <p className="text-sm text-gray-600 mt-2">{item.data.note_text}</p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {sessionNoteTab === 'notes' && (
-                <div className="w-80">
-                  <div className="bg-white rounded-lg border p-6">
-                    <h3 className="font-bold mb-4">Additional Notes</h3>
-                    <button onClick={handleAddNote} className="text-teal-700 text-sm hover:underline">+ Add Notes</button>
-                    
-                    {additionalNotes.length > 0 && (
-                      <div className="mt-4 space-y-3">
-                        {additionalNotes.map((note) => {
-                          const now = new Date();
-                          const createdAt = new Date(note.created_at);
-                          // Handle both UTC and IST timestamps by using absolute value
-                          const minutesSinceCreation = Math.abs((now.getTime() - createdAt.getTime()) / (1000 * 60));
-                          const canEdit = minutesSinceCreation <= 5;
-                          
-                          console.log('Additional note edit check:', {
-                            note_id: note.note_id,
-                            now: now.toISOString(),
-                            created_at: note.created_at,
-                            createdAt: createdAt.toISOString(),
-                            minutesSinceCreation,
-                            canEdit
-                          });
-                          
-                          return (
-                            <div key={note.note_id} className="border-l-2 border-gray-300 pl-3 py-2">
-                              <div className="flex justify-between items-start mb-1">
-                                <p className="text-xs text-gray-500">
-                                  {new Date(note.created_at).toLocaleDateString()}
-                                </p>
-                                <button
-                                  onClick={() => {
-                                    if (!canEdit) {
-                                      setToast({ message: 'Notes can only be edited within 5 minutes of creation', type: 'error' });
-                                      setTimeout(() => setToast(null), 3000);
-                                      return;
-                                    }
-                                    handleEditNote(note);
-                                  }}
-                                  className={`text-xs ${
-                                    canEdit ? 'text-teal-700 hover:underline' : 'text-gray-400 cursor-not-allowed'
-                                  }`}
-                                >
-                                  Edit
-                                </button>
-                              </div>
-                              <p className="text-sm text-gray-700">{note.note_text}</p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : selectedClient ? (
+        {selectedClient ? (
           <div className="p-8 h-full overflow-auto">
             {/* Header with Back Button */}
             <div className="flex items-center gap-4 mb-6">
@@ -2171,13 +1764,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 {/* Navigation Tabs */}
                 <div className="flex gap-8 border-b">
                   {(() => {
-                    console.log('🎯 Rendering tabs with clientSessionType:', clientSessionType);
                     return clientSessionType.hasPaidSessions ? (
-                      // Show all tabs for paid sessions
+                      // Show all tabs for paid sessions (removed Case History tab)
                       [
                         { id: 'overview' as const, label: 'Overview' },
-                        { id: 'caseHistory' as const, label: 'Case History' },
-                        { id: 'sessions' as const, label: 'Progress notes' },
+                        { id: 'sessions' as const, label: 'Progress Notes' },
                         { id: 'documents' as const, label: 'Goal Tracking' }
                       ].map((tab) => (
                         <button
@@ -2193,10 +1784,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                         </button>
                       ))
                     ) : (
-                      // Show only Overview and Pre-therapy Notes for free consultation only
+                      // Show only Overview for free consultation only (removed Pre-therapy Notes tab)
                       [
-                        { id: 'overview' as const, label: 'Overview' },
-                        { id: 'caseHistory' as const, label: 'Pre-therapy Notes' }
+                        { id: 'overview' as const, label: 'Overview' }
                       ].map((tab) => (
                         <button
                           key={tab.id}
@@ -2324,8 +1914,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                       {(() => {
                         const upcoming = clientAppointments
                           .filter(apt => {
-                            const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
-                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled';
+                            // Use getAppointmentStatus to properly check if session is upcoming
+                            return getAppointmentStatus(apt) === 'scheduled';
                           })
                           .sort((a, b) => {
                             const dateA = a.booking_date ? new Date(a.booking_date) : new Date();
@@ -2378,8 +1968,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   }
                   if (tab.id === 'all') return true;
                   if (tab.id === 'upcoming') {
-                    const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
-                    return sessionDate >= new Date() && apt.booking_status !== 'cancelled' && !apt.has_session_notes;
+                    // Use getAppointmentStatus to properly check if session is upcoming
+                    const status = getAppointmentStatus(apt);
+                    return status === 'scheduled';
                   }
                   return getAppointmentStatus(apt) === tab.id;
                 }).length;
@@ -2421,8 +2012,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                         }
                         if (activeAppointmentTab === 'all') return true;
                         if (activeAppointmentTab === 'upcoming') {
-                          const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
-                          return sessionDate >= new Date() && apt.booking_status !== 'cancelled' && !apt.has_session_notes;
+                          // Use getAppointmentStatus to properly check if session is upcoming
+                          const status = getAppointmentStatus(apt);
+                          return status === 'scheduled';
                         }
                         return getAppointmentStatus(apt) === activeAppointmentTab;
                       }).length === 0 ? (
@@ -2436,8 +2028,9 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                           }
                           if (activeAppointmentTab === 'all') return true;
                           if (activeAppointmentTab === 'upcoming') {
-                            const sessionDate = apt.booking_date ? new Date(apt.booking_date) : new Date();
-                            return sessionDate >= new Date() && apt.booking_status !== 'cancelled' && !apt.has_session_notes;
+                            // Use getAppointmentStatus to properly check if session is upcoming
+                            const status = getAppointmentStatus(apt);
+                            return status === 'scheduled';
                           }
                           return getAppointmentStatus(apt) === activeAppointmentTab;
                         }).map((apt, index) => (
@@ -3433,38 +3026,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 onClick={() => {
                   setShowReminderModal(false);
                   setSelectedReminderAppointment(null);
-                }}
-                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {showAddNoteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">{editingNoteId ? 'Edit Note' : 'Add Note'}</h3>
-            <textarea
-              value={additionalNoteText}
-              onChange={(e) => setAdditionalNoteText(e.target.value)}
-              placeholder="Type your note here..."
-              className="w-full h-32 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={handleSaveAdditionalNote}
-                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddNoteModal(false);
-                  setAdditionalNoteText('');
-                  setEditingNoteId(null);
                 }}
                 className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
               >

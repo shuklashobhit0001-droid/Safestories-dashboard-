@@ -278,7 +278,6 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
   };
 
   const handleNavigate = (date: Date) => {
-    console.log('Navigating to date:', date, 'Month:', date.getMonth() + 1, 'Year:', date.getFullYear());
     setCurrentDate(date);
   };
 

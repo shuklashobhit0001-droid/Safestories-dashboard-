@@ -45,14 +45,9 @@ export const TransferClientModal: React.FC<TransferClientModalProps> = ({
   };
 
   const handleTransfer = async () => {
-    console.log('handleTransfer called');
-    console.log('client:', client);
-    console.log('selectedTherapist:', selectedTherapist);
-    console.log('confirmText:', confirmText);
     
     if (!client || !selectedTherapist || confirmText !== 'TRANSFER') return;
 
-    console.log('Validation passed, making API call');
     setLoading(true);
     try {
       const response = await fetch('/api/transfer-client', {
@@ -70,9 +65,7 @@ export const TransferClientModal: React.FC<TransferClientModalProps> = ({
         })
       });
 
-      console.log('API response status:', response.status);
       const data = await response.json();
-      console.log('API response data:', data);
 
       if (response.ok) {
         setShowSuccess(true);

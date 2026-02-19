@@ -325,11 +325,9 @@ export const CreateBookingModal: React.FC<CreateBookingModalProps> = ({ isOpen, 
         body: JSON.stringify(payload),
       });
 
-      console.log('Response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Response data:', data);
         setAvailableSlots(data.slots || []);
       } else {
         console.error('Failed to fetch slots, status:', response.status);
@@ -345,7 +343,6 @@ export const CreateBookingModal: React.FC<CreateBookingModalProps> = ({ isOpen, 
 
   const handleSendPaymentLink = () => {
     // Handle payment link sending
-    console.log('Sending payment link...');
     onClose();
   };
 
@@ -496,9 +493,7 @@ export const CreateBookingModal: React.FC<CreateBookingModalProps> = ({ isOpen, 
               </div>
               <button
                 type="button"
-                onMouseDown={() => console.log('MOUSE DOWN!')}
                 onClick={(e) => {
-                  console.log('CLICK EVENT FIRED!');
                   e.preventDefault();
                   e.stopPropagation();
                   handleCheckSlots();

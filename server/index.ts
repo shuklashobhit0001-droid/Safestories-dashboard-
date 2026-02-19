@@ -1112,9 +1112,12 @@ app.get('/api/clients', async (req, res) => {
         }
       }
       
-      // Update latest_booking_date only from active bookings
+      // Update latest_booking_date only from active bookings (except for Safestories pre-therapy)
+      const isSafestories = row.booking_host_name && row.booking_host_name.toLowerCase().trim() === 'safestories';
       const isActiveBooking = row.booking_status && !['cancelled', 'canceled', 'no_show', 'no show'].includes(row.booking_status);
-      if (isActiveBooking || !row.booking_status) {
+      
+      // For Safestories (pre-therapy), include all bookings; for others, only active bookings
+      if (isSafestories || isActiveBooking || !row.booking_status) {
         if (!client.latest_booking_date || new Date(row.latest_booking_date) > new Date(client.latest_booking_date)) {
           client.latest_booking_date = row.latest_booking_date;
         }
@@ -1181,12 +1184,12 @@ app.get('/api/appointments', async (req, res) => {
         b.booking_checkin_url,
         b.therapist_id,
         b.booking_status,
-        CASE WHEN (csn.note_id IS NOT NULL OR cpn.note_id IS NOT NULL OR fcn.note_id IS NOT NULL) THEN true ELSE false END as has_session_notes,
+        CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes,
         (b.booking_start_at < NOW()) as is_past
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
       LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
-      LEFT JOIN free_consultation_notes fcn ON b.booking_id = fcn.booking_id
+      LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
       ORDER BY b.booking_start_at DESC
     `);
 
@@ -1544,12 +1547,12 @@ app.get('/api/client-details', async (req, res) => {
         b.booking_invitee_time,
         b.booking_host_name,
         b.booking_status,
-        CASE WHEN (csn.note_id IS NOT NULL OR cpn.note_id IS NOT NULL OR fcn.note_id IS NOT NULL) THEN true ELSE false END as has_session_notes,
+        CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes,
         (b.booking_end_at < NOW()) as is_past
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
       LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
-      LEFT JOIN free_consultation_notes fcn ON b.booking_id = fcn.booking_id
+      LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -1836,11 +1839,11 @@ app.get('/api/therapist-appointments', async (req, res) => {
         b.booking_start_at as booking_date,
         b.booking_start_at,
         b.booking_status,
-        CASE WHEN (csn.note_id IS NOT NULL OR cpn.note_id IS NOT NULL OR fcn.note_id IS NOT NULL) THEN true ELSE false END as has_session_notes
+        CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
       LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
-      LEFT JOIN free_consultation_notes fcn ON b.booking_id = fcn.booking_id
+      LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
       WHERE b.booking_host_name ILIKE $1
       ORDER BY b.booking_start_at DESC
     `, [`%${therapistFirstName}%`]);
@@ -2036,11 +2039,11 @@ app.get('/api/client-appointments', async (req, res) => {
           b.invitee_occupation,
           b.invitee_marital_status,
           b.clinical_profile,
-          CASE WHEN (csn.note_id IS NOT NULL OR cpn.note_id IS NOT NULL OR fcn.note_id IS NOT NULL) THEN true ELSE false END as has_session_notes
+          CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
         LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
-        LEFT JOIN free_consultation_notes fcn ON b.booking_id = fcn.booking_id
+        LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
         WHERE (${clientEmail ? 'b.invitee_email = $1 OR' : ''} ${phoneConditions})
           AND b.booking_host_name ILIKE $${clientEmail ? allPhones.length + 2 : allPhones.length + 1}
         ORDER BY b.booking_start_at DESC`
@@ -2059,11 +2062,11 @@ app.get('/api/client-appointments', async (req, res) => {
           b.invitee_occupation,
           b.invitee_marital_status,
           b.clinical_profile,
-          CASE WHEN (csn.note_id IS NOT NULL OR cpn.note_id IS NOT NULL OR fcn.note_id IS NOT NULL) THEN true ELSE false END as has_session_notes
+          CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
         LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
-        LEFT JOIN free_consultation_notes fcn ON b.booking_id = fcn.booking_id
+        LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
         WHERE ${clientEmail ? 'b.invitee_email = $1 OR' : ''} ${phoneConditions}
         ORDER BY b.booking_start_at DESC`;
 

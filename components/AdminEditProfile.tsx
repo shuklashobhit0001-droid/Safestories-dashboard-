@@ -181,7 +181,6 @@ export const AdminEditProfile: React.FC<AdminEditProfileProps> = ({ user, onBack
         }
 
         const uploadData = await uploadResponse.json();
-        console.log('Upload response:', uploadData);
         
         if (uploadData.success) {
           profilePictureUrl = uploadData.url;

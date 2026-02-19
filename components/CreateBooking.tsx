@@ -396,7 +396,6 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
   };
 
   const handleSendPaymentLink = async () => {
-    console.log('Sending payment link...');
     
     const payload = {
       therapyName: isFreeConsultation ? 'Free Consultation' : selectedTherapy,
