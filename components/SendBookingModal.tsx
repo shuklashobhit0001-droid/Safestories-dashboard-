@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Send, X } from 'lucide-react';
 import { Toast } from './Toast';
 
@@ -36,6 +36,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
   const [clients, setClients] = useState<any[]>([]);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [filteredClients, setFilteredClients] = useState<any[]>([]);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const countryCodes = [
     { code: '+1', country: 'USA/Canada' },
@@ -289,6 +290,23 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
     }
   }, [clientName, clients]);
 
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowClientDropdown(false);
+      }
+    };
+
+    if (showClientDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showClientDropdown]);
+
   // Filter therapists based on selected therapy
   const filteredTherapists = therapyType
     ? therapists.filter(therapist => 
@@ -426,7 +444,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             {/* Client Name */}
-            <div className="relative">
+            <div className="relative" ref={dropdownRef}>
               <label className="block text-sm font-semibold mb-2">
                 Client Name<span className="text-red-500">*</span>
               </label>
