@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Search, Download, ChevronDown, ChevronRight, ArrowRightLeft, Plus, Send } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { TransferClientModal } from './TransferClientModal';
@@ -17,10 +17,12 @@ interface Client {
   invitee_phone: string;
   invitee_email: string;
   booking_host_name: string;
+  booking_resource_name?: string;
   session_count: number;
   therapists: Therapist[];
   latest_booking_date?: string;
   booking_link_sent_at?: string;
+  last_session_date?: string;
 }
 
 export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCreateBooking?: () => void }> = ({ onClientClick, onCreateBooking }) => {
@@ -36,6 +38,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const [activeTab, setActiveTab] = useState<'clients' | 'pretherapy' | 'leads'>('clients');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const itemsPerPage = 10;
+  const tableRef = useRef<HTMLDivElement>(null);
   const [adminUser] = useState(() => {
     const savedUser = localStorage.getItem('user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -47,6 +50,34 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
+  };
+
+  const formatSessionName = (sessionName: string | undefined, therapistName: string | undefined): string => {
+    if (!sessionName) return 'N/A';
+    
+    // If session name already includes "Session with", return as is
+    if (sessionName.toLowerCase().includes('session with')) {
+      return sessionName;
+    }
+    
+    // If we have a therapist name, append it
+    if (therapistName) {
+      const standardizedTherapist = standardizeTherapistName(therapistName);
+      return `${sessionName} Session with ${standardizedTherapist}`;
+    }
+    
+    return sessionName;
+  };
+
+  const standardizeTherapistName = (name: string | undefined): string => {
+    if (!name) return '';
+    
+    // Standardize Ishika to Ishika Mahajan
+    if (name.toLowerCase().trim() === 'ishika') {
+      return 'Ishika Mahajan';
+    }
+    
+    return name;
   };
 
   useEffect(() => {
@@ -61,6 +92,23 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         setLoading(false);
       });
   }, []);
+
+  // Click outside to close expanded rows
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tableRef.current && !tableRef.current.contains(event.target as Node)) {
+        setExpandedRows(new Set());
+      }
+    };
+
+    if (expandedRows.size > 0) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [expandedRows]);
 
   const toggleRow = (index: number) => {
     const newExpanded = new Set(expandedRows);
@@ -84,6 +132,27 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const formatPreTherapyDate = (dateString: string | undefined) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
+    const day = date.getDate();
+    const month = date.toLocaleString('en-US', { month: 'short' });
+    const year = date.getFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
+    
+    // Handle the format: "Monday, Feb 9, 2026 at 1:00 PM - 1:50 PM (GMT+01:00)"
+    // Extract just the date part before "at"
+    const datePart = dateString.split(' at ')[0];
+    
+    // Parse the date
+    const date = new Date(datePart);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return 'N/A';
+    }
+    
     const day = date.getDate();
     const month = date.toLocaleString('en-US', { month: 'short' });
     const year = date.getFullYear();
@@ -142,13 +211,14 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         formatBookingLinkDate(client.booking_link_sent_at)
       ]);
     } else {
-      headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Bookings', 'Assigned Therapist'];
+      headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Bookings', 'Session Name', 'Assigned Therapist'];
       rows = filteredClients.map(client => [
         formatClientName(client.invitee_name),
         client.invitee_phone,
         client.invitee_email,
         client.session_count,
-        client.booking_host_name
+        formatSessionName(client.booking_resource_name, client.booking_host_name),
+        standardizeTherapistName(client.booking_host_name)
       ]);
     }
     
@@ -331,7 +401,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
       {loading ? (
         <Loader />
       ) : (
-      <div className="bg-white rounded-lg border flex-1 flex flex-col">
+      <div className="bg-white rounded-lg border flex-1 flex flex-col" ref={tableRef}>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
@@ -339,7 +409,11 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
                 {activeTab === 'clients' && (
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
+                  <>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Last Session Booked</th>
+                  </>
                 )}
                 {activeTab === 'pretherapy' && (
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Pre-therapy Date</th>
@@ -350,7 +424,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                 {activeTab === 'leads' && (
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Booking Link Sent</th>
                 )}
-                {(activeTab === 'clients' || activeTab === 'pretherapy' || activeTab === 'leads') && (
+                {(activeTab === 'pretherapy' || activeTab === 'leads') && (
                   <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
                 )}
               </tr>
@@ -358,37 +432,29 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === 'pretherapy' ? 3 : activeTab === 'leads' ? 5 : 5} className="text-center text-gray-400 py-8">
+                  <td colSpan={activeTab === 'pretherapy' ? 4 : activeTab === 'leads' ? 6 : 7} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === 'pretherapy' ? 3 : activeTab === 'leads' ? 5 : 5} className="text-center text-gray-400 py-8">
+                  <td colSpan={activeTab === 'pretherapy' ? 4 : activeTab === 'leads' ? 6 : 7} className="text-center text-gray-400 py-8">
                     No {activeTab === 'clients' ? 'clients' : activeTab === 'pretherapy' ? 'pre-therapy clients' : 'leads'} found
                   </td>
                 </tr>
               ) : (
                 paginatedClients.map((client, index) => (
                   <React.Fragment key={index}>
-                    <tr className="border-b hover:bg-gray-50">
+                    <tr 
+                      className={`border-b hover:bg-gray-50 ${activeTab === 'clients' ? 'cursor-pointer' : ''}`}
+                      onClick={activeTab === 'clients' ? () => toggleRow(index) : undefined}
+                    >
                       <td className="px-6 py-4 text-sm whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          {client.therapists && client.therapists.length > 1 && (
-                            <button
-                              onClick={() => toggleRow(index)}
-                              className="text-gray-500 hover:text-gray-700"
-                            >
-                              {expandedRows.has(index) ? (
-                                <ChevronDown size={16} />
-                              ) : (
-                                <ChevronRight size={16} />
-                              )}
-                            </button>
-                          )}
                           <span>
                             <button
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 if (onClientClick) {
                                   onClientClick({
                                     invitee_name: client.invitee_name,
@@ -409,44 +475,25 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                         <div className="text-gray-500 text-xs">{client.invitee_email}</div>
                       </td>
                       {activeTab === 'clients' && (
-                        <td className="px-6 py-4 text-sm">{client.session_count}</td>
+                        <>
+                          <td className="px-6 py-4 text-sm">{client.session_count}</td>
+                          <td className="px-6 py-4 text-sm">{formatSessionName(client.booking_resource_name, client.booking_host_name)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {client.last_session_date ? formatDate(client.last_session_date) : 'N/A'}
+                          </td>
+                        </>
                       )}
                       {activeTab === 'pretherapy' && (
                         <td className="px-6 py-4 text-sm">{formatPreTherapyDate(client.latest_booking_date)}</td>
                       )}
                       {activeTab !== 'pretherapy' && (
                         <td className="px-6 py-4 text-sm">
-                          {client.booking_host_name}
+                          {standardizeTherapistName(client.booking_host_name)}
                         </td>
                       )}
                       {activeTab === 'leads' && (
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {formatBookingLinkDate(client.booking_link_sent_at)}
-                        </td>
-                      )}
-                      {activeTab === 'clients' && (
-                        <td className="px-6 py-4 text-sm">
-                          <div className="flex gap-4 justify-center">
-                            <button
-                              onClick={() => handleSendBookingLink(client)}
-                              className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-                            >
-                              <Send size={16} />
-                              Send Booking Link
-                            </button>
-                            <button
-                              onClick={() => handleTransferClick(client)}
-                              disabled={isTransferDisabled(client)}
-                              className={`flex items-center gap-1 text-sm font-medium ${
-                                isTransferDisabled(client)
-                                  ? 'text-gray-400 cursor-not-allowed'
-                                  : 'text-orange-600 hover:text-orange-700'
-                              }`}
-                            >
-                              <ArrowRightLeft size={16} />
-                              Transfer
-                            </button>
-                          </div>
                         </td>
                       )}
                       {activeTab === 'pretherapy' && (
@@ -476,6 +523,43 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                         </td>
                       )}
                     </tr>
+                    
+                    {/* Expanded Actions Row - Only for Clients tab */}
+                    {activeTab === 'clients' && expandedRows.has(index) && (
+                      <tr className="bg-gray-50 border-b">
+                        <td colSpan={7} className="px-6 py-4">
+                          <div className="flex gap-4 justify-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSendBookingLink(client);
+                              }}
+                              className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                            >
+                              <Send size={16} />
+                              Send Booking Link
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTransferClick(client);
+                              }}
+                              disabled={isTransferDisabled(client)}
+                              className={`flex items-center gap-1 text-sm font-medium ${
+                                isTransferDisabled(client)
+                                  ? 'text-gray-400 cursor-not-allowed'
+                                  : 'text-orange-600 hover:text-orange-700'
+                              }`}
+                            >
+                              <ArrowRightLeft size={16} />
+                              Transfer
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    
+                    {/* Multi-therapist rows */}
                     {expandedRows.has(index) && client.therapists && client.therapists.length > 1 && (
                       client.therapists.map((therapist, tIndex) => (
                         <tr key={`${index}-${tIndex}`} className="bg-gray-50 border-b">

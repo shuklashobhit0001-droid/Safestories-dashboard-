@@ -75,6 +75,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const clientDropdownRef = React.useRef<HTMLDivElement>(null);
   const [clientAppointmentSearchTerm, setClientAppointmentSearchTerm] = useState('');
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
+  const [assignedClientSearch, setAssignedClientSearch] = useState('');
   const [appointmentsPage, setAppointmentsPage] = useState(1);
   const appointmentsPerPage = 10;
   const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents' | 'caseHistory'>('overview');
@@ -1080,12 +1081,42 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                     </p>
                   </div>
                   <div className="bg-white border rounded-lg p-4">
-                    <p className="text-sm text-gray-600 mb-1">Cancellation</p>
-                    <p className="text-3xl font-bold text-gray-900">{clientStats.cancelled}</p>
+                    <p className="text-sm text-gray-600 mb-1">Last Session</p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {(() => {
+                        const completed = clientAppointments
+                          .filter(apt => {
+                            // Include only completed and pending_notes, exclude cancelled and no_show
+                            return apt.booking_status === 'completed' || apt.booking_status === 'pending_notes';
+                          })
+                          .sort((a, b) => {
+                            const dateA = a.booking_start_at_raw ? new Date(a.booking_start_at_raw) : new Date();
+                            const dateB = b.booking_start_at_raw ? new Date(b.booking_start_at_raw) : new Date();
+                            return dateB.getTime() - dateA.getTime(); // Sort descending to get most recent
+                          })[0];
+                        
+                        if (completed && completed.booking_invitee_time) {
+                          // Parse date from booking_invitee_time to match what's shown in the table
+                          const timeMatch = completed.booking_invitee_time.match(/(\w+, \w+ \d+, \d+) at/);
+                          if (timeMatch) {
+                            const dateStr = timeMatch[1];
+                            const date = new Date(dateStr);
+                            if (!isNaN(date.getTime())) {
+                              return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                            }
+                          }
+                        }
+                        return 'N/A';
+                      })()}
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Cancellation</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.cancelled}</p>
+                  </div>
                   <div className="bg-white border rounded-lg p-4">
                     <p className="text-sm text-gray-600 mb-1">No Show</p>
                     <p className="text-3xl font-bold text-gray-900">{clientStats.noShows}</p>
@@ -1101,11 +1132,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                   <div className="flex gap-6 mb-4">
                     {[
                       { id: 'upcoming', label: 'Upcoming' },
-                      { id: 'all', label: 'All' },
-                      { id: 'completed', label: 'Completed' },
-                      { id: 'pending_notes', label: 'Pending Session Notes' },
-                      { id: 'cancelled', label: 'Cancelled' },
-                      { id: 'no_show', label: 'No Show' },
+                      { id: 'all', label: 'Booking History' },
                     ].map((tab) => {
                       const count = clientAppointments.filter(apt => {
                         if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
@@ -1530,36 +1557,66 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         {detailsLoading ? (
           <Loader />
         ) : (
-          <div className="grid grid-cols-2 gap-6">
+          <div className="space-y-6">
             {/* Clients List */}
             <div>
-              <h3 className="text-lg font-semibold mb-3">Assigned Clients ({clients.length})</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold">Assigned Clients ({clients.length})</h3>
+                <div className="relative w-64">
+                  <input
+                    type="text"
+                    placeholder="Search clients..."
+                    value={assignedClientSearch}
+                    onChange={(e) => setAssignedClientSearch(e.target.value)}
+                    className="w-full px-4 py-2 pl-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                  <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                </div>
+              </div>
               <div className="bg-white border rounded-lg overflow-hidden">
                 <div className="max-h-[480px] overflow-y-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b sticky top-0">
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Email</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Phone</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {clients.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">No clients found</td>
-                        </tr>
-                      ) : (
-                        (() => {
-                          const startIndex = (clientsPage - 1) * clientsPerPage;
-                          const endIndex = startIndex + clientsPerPage;
-                          const paginatedClients = clients.slice(startIndex, endIndex);
-                          
-                          return paginatedClients.map((client, index) => {
+                      {(() => {
+                        const filteredClients = clients.filter(client =>
+                          client.invitee_name?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
+                          client.invitee_email?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
+                          client.invitee_phone?.toLowerCase().includes(assignedClientSearch.toLowerCase())
+                        );
+                        
+                        if (filteredClients.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">
+                                {assignedClientSearch ? 'No clients found matching your search' : 'No clients found'}
+                              </td>
+                            </tr>
+                          );
+                        }
+                        
+                        const startIndex = (clientsPage - 1) * clientsPerPage;
+                        const endIndex = startIndex + clientsPerPage;
+                        const paginatedClients = filteredClients.slice(startIndex, endIndex);
+                        
+                        return paginatedClients.map((client, index) => {
                             const actualIndex = startIndex + index;
                             const phoneNumbers = client.invitee_phone.split(', ');
                             const hasMultiplePhones = phoneNumbers.length > 1;
+                            
+                            // Get session name from appointments
+                            const clientAppointment = appointments.find(apt => 
+                              apt.invitee_email === client.invitee_email || 
+                              phoneNumbers.some(phone => apt.invitee_phone === phone)
+                            );
+                            const sessionName = clientAppointment?.booking_resource_name || 'N/A';
                             
                             return (
                               <React.Fragment key={actualIndex}>
@@ -1593,8 +1650,13 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                       </button>
                                     </div>
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">{phoneNumbers[0]}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    <div>
+                                      <div>{client.invitee_email || 'N/A'}</div>
+                                      <div className="text-gray-500">{phoneNumbers[0]}</div>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{sessionName}</td>
                                   <td className="px-4 py-3 text-sm">
                                     {(() => {
                                       const status = getClientStatus(client);
@@ -1627,8 +1689,13 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                   phoneNumbers.slice(1).map((phone, pIndex) => (
                                     <tr key={`${actualIndex}-${pIndex}`} className="bg-gray-50 border-b">
                                       <td className="px-4 py-3 text-sm pl-12 text-gray-600">{formatClientName(client.invitee_name)}</td>
-                                      <td className="px-4 py-3 text-sm text-gray-600">{client.invitee_email}</td>
-                                      <td className="px-4 py-3 text-sm text-gray-600">{phone}</td>
+                                      <td className="px-4 py-3 text-sm text-gray-600">
+                                        <div>
+                                          <div>{client.invitee_email || 'N/A'}</div>
+                                          <div className="text-gray-500">{phone}</div>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3 text-sm text-gray-600">{sessionName}</td>
                                       <td className="px-4 py-3 text-sm">
                                         {(() => {
                                           const status = getClientStatus(client);
@@ -1647,44 +1714,53 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                               </React.Fragment>
                             );
                           });
-                        })()
-                      )}
+                      })()}
                     </tbody>
                   </table>
                 </div>
                 
                 {/* Pagination */}
-                {clients.length > clientsPerPage && (
-                  <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
-                    <div className="text-sm text-gray-600">
-                      Showing {((clientsPage - 1) * clientsPerPage) + 1}-{Math.min(clientsPage * clientsPerPage, clients.length)} of {clients.length} results
+                {(() => {
+                  const filteredClients = clients.filter(client =>
+                    client.invitee_name?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
+                    client.invitee_email?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
+                    client.invitee_phone?.toLowerCase().includes(assignedClientSearch.toLowerCase())
+                  );
+                  
+                  if (filteredClients.length <= clientsPerPage) return null;
+                  
+                  return (
+                    <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+                      <div className="text-sm text-gray-600">
+                        Showing {((clientsPage - 1) * clientsPerPage) + 1}-{Math.min(clientsPage * clientsPerPage, filteredClients.length)} of {filteredClients.length} results
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setClientsPage(prev => Math.max(1, prev - 1))}
+                          disabled={clientsPage === 1}
+                          className={`px-3 py-1 rounded ${
+                            clientsPage === 1
+                              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                              : 'bg-white border hover:bg-gray-50'
+                          }`}
+                        >
+                          ←
+                        </button>
+                        <button
+                          onClick={() => setClientsPage(prev => Math.min(Math.ceil(filteredClients.length / clientsPerPage), prev + 1))}
+                          disabled={clientsPage >= Math.ceil(filteredClients.length / clientsPerPage)}
+                          className={`px-3 py-1 rounded ${
+                            clientsPage >= Math.ceil(filteredClients.length / clientsPerPage)
+                              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                              : 'bg-white border hover:bg-gray-50'
+                          }`}
+                        >
+                          →
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setClientsPage(prev => Math.max(1, prev - 1))}
-                        disabled={clientsPage === 1}
-                        className={`px-3 py-1 rounded ${
-                          clientsPage === 1
-                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            : 'bg-white border hover:bg-gray-50'
-                        }`}
-                      >
-                        ←
-                      </button>
-                      <button
-                        onClick={() => setClientsPage(prev => Math.min(Math.ceil(clients.length / clientsPerPage), prev + 1))}
-                        disabled={clientsPage >= Math.ceil(clients.length / clientsPerPage)}
-                        className={`px-3 py-1 rounded ${
-                          clientsPage >= Math.ceil(clients.length / clientsPerPage)
-                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            : 'bg-white border hover:bg-gray-50'
-                        }`}
-                      >
-                        →
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
 

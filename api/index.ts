@@ -402,10 +402,12 @@ app.get('/api/clients', async (req, res) => {
         invitee_phone,
         invitee_email,
         booking_host_name,
+        booking_resource_name,
         booking_status,
         1 as session_count,
         invitee_created_at as created_at,
-        booking_start_at as latest_booking_date
+        booking_start_at as latest_booking_date,
+        booking_invitee_time
       FROM bookings
       
       UNION ALL
@@ -415,10 +417,12 @@ app.get('/api/clients', async (req, res) => {
         client_whatsapp as invitee_phone,
         client_email as invitee_email,
         therapist_name as booking_host_name,
+        therapy_type as booking_resource_name,
         NULL as booking_status,
         0 as session_count,
         created_at,
-        created_at as latest_booking_date
+        created_at as latest_booking_date,
+        NULL as booking_invitee_time
       FROM booking_requests
     `);
 
@@ -464,15 +468,38 @@ app.get('/api/clients', async (req, res) => {
           invitee_email: row.invitee_email,
           session_count: 0,
           booking_host_name: row.booking_host_name,
+          booking_resource_name: row.booking_resource_name,
           created_at: row.created_at,
           latest_booking_date: null,
           booking_link_sent_at: null,
+          last_session_date: null,
+          last_session_date_raw: null,
           therapists: []
         });
       }
       
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
+      
+      // Track last session date for past sessions (excluding cancelled and no_show)
+      if (row.booking_status && !['cancelled', 'canceled', 'no_show', 'no show'].includes(row.booking_status)) {
+        // Check if session is in the past
+        const sessionDate = new Date(row.latest_booking_date);
+        const now = new Date();
+        
+        if (sessionDate < now && row.booking_invitee_time) {
+          // Compare using latest_booking_date for accurate comparison
+          if (!client.last_session_date_raw || new Date(row.latest_booking_date) > new Date(client.last_session_date_raw)) {
+            client.last_session_date = row.booking_invitee_time;
+            client.last_session_date_raw = row.latest_booking_date;
+          }
+        }
+      }
+      
+      // Update session name to most recent
+      if (row.booking_resource_name) {
+        client.booking_resource_name = row.booking_resource_name;
+      }
       
       // Track most recent booking_request created_at (only for leads with session_count = 0)
       if (parseInt(row.session_count) === 0 && row.created_at) {
@@ -1499,6 +1526,7 @@ app.get('/api/therapist-appointments', async (req, res) => {
         b.booking_start_at as booking_date,
         b.booking_start_at,
         b.booking_status,
+        b.booking_joining_link,
         CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id

@@ -740,12 +740,13 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
                                     e.stopPropagation();
                                     window.open(event.resource.originalAppointment.booking_joining_link, '_blank');
                                   }}
-                                  className="ml-1 p-1 hover:bg-gray-200 rounded-full transition-colors"
+                                  className="ml-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-medium"
                                   title="Open Google Meet Link"
                                 >
-                                  <svg className="w-3 h-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                   </svg>
+                                  Join Now
                                 </button>
                               )}
                             </div>

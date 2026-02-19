@@ -1932,13 +1932,44 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                     </p>
                   </div>
                   <div className="bg-white border rounded-lg p-4">
-                    <p className="text-sm text-gray-600 mb-1">Cancellation</p>
-                    <p className="text-3xl font-bold text-gray-900">{clientStats.cancelled}</p>
+                    <p className="text-sm text-gray-600 mb-1">Last Session</p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {(() => {
+                        const completed = clientAppointments
+                          .filter(apt => {
+                            const status = getAppointmentStatus(apt);
+                            // Include completed and pending_notes, exclude cancelled and no_show
+                            return status === 'completed' || status === 'pending_notes';
+                          })
+                          .sort((a, b) => {
+                            const dateA = a.booking_date ? new Date(a.booking_date) : new Date();
+                            const dateB = b.booking_date ? new Date(b.booking_date) : new Date();
+                            return dateB.getTime() - dateA.getTime(); // Sort descending to get most recent
+                          })[0];
+                        
+                        if (completed && completed.session_timings) {
+                          // Parse date from session_timings to match what's shown in the table
+                          const timeMatch = completed.session_timings.match(/(\w+, \w+ \d+, \d+) at/);
+                          if (timeMatch) {
+                            const dateStr = timeMatch[1];
+                            const date = new Date(dateStr);
+                            if (!isNaN(date.getTime())) {
+                              return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                            }
+                          }
+                        }
+                        return 'N/A';
+                      })()}
+                    </p>
                   </div>
                 </div>
 
                 {/* Third Stats Row */}
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Cancellation</p>
+                    <p className="text-3xl font-bold text-gray-900">{clientStats.cancelled}</p>
+                  </div>
                   <div className="bg-white border rounded-lg p-4">
                     <p className="text-sm text-gray-600 mb-1">No Show</p>
                     <p className="text-3xl font-bold text-gray-900">{clientStats.noShows}</p>
@@ -1956,11 +1987,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <div className="flex gap-6 mb-4">
               {[
                 { id: 'upcoming', label: 'Upcoming' },
-                { id: 'all', label: 'All' },
-                { id: 'completed', label: 'Completed' },
-                { id: 'pending_notes', label: 'Pending Session Notes' },
-                { id: 'cancelled', label: 'Cancelled' },
-                { id: 'no_show', label: 'No Show' },
+                { id: 'all', label: 'Booking History' },
               ].map((tab) => {
                 const count = clientAppointments.filter(apt => {
                   if (clientAppointmentSearchTerm && !apt.booking_resource_name?.toLowerCase().includes(clientAppointmentSearchTerm.toLowerCase())) {
@@ -2489,7 +2516,26 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                               </span>
                             </td>
                             <td className="px-6 py-4">{booking.therapy_type}</td>
-                            <td className="px-6 py-4">{booking.mode}</td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span>{booking.mode}</span>
+                                {booking.mode === 'Online' && booking.booking_joining_link && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(booking.booking_joining_link, '_blank');
+                                    }}
+                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium flex items-center gap-1"
+                                    title="Open Google Meet Link"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    Join Now
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-6 py-4">{booking.session_timings}</td>
                           </tr>
                           {selectedBookingIndex === index && (
