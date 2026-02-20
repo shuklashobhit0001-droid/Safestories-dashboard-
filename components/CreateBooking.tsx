@@ -35,6 +35,7 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
   const timezoneRef = useRef<HTMLDivElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const dateContainerRef = useRef<HTMLDivElement>(null);
+  const clientDropdownRef = useRef<HTMLDivElement>(null);
   const [clients, setClients] = useState<any[]>([]);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [filteredClients, setFilteredClients] = useState<any[]>([]);
@@ -178,6 +179,9 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
       if (timezoneRef.current && !timezoneRef.current.contains(event.target as Node)) {
         setIsTimezoneDropdownOpen(false);
         setTimezoneSearch('');
+      }
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(event.target as Node)) {
+        setShowClientDropdown(false);
       }
     };
 
@@ -545,7 +549,7 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
 
           {/* Client Details */}
           <div className="grid grid-cols-2 gap-6">
-            <div className="relative">
+            <div className="relative" ref={clientDropdownRef}>
               <label className="block text-sm font-medium mb-2">
                 Client Name<span className="text-red-500">*</span>
               </label>

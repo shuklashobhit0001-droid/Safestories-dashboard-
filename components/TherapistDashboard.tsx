@@ -8,6 +8,7 @@ import { TherapistCalendar } from './TherapistCalendar';
 import { EditProfile } from './EditProfile';
 import { ChangePassword } from './ChangePassword';
 import { CaseHistoryTab } from './CaseHistoryTab';
+import { CountUpNumber } from './CountUpNumber';
 import { ProgressNotesTab } from './ProgressNotesTab';
 import { ProgressNoteDetail } from './ProgressNoteDetail';
 import { GoalTrackingTab } from './GoalTrackingTab';
@@ -59,6 +60,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [clients, setClients] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [clientStatusFilter, setClientStatusFilter] = useState<'all' | 'active' | 'inactive' | 'drop-out'>('all');
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
   const [selectedAppointmentIndex, setSelectedAppointmentIndex] = useState<number | null>(null);
   const [selectedBookingIndex, setSelectedBookingIndex] = useState<number | null>(null);
@@ -149,6 +151,72 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
+  };
+
+  const formatMode = (mode: string | undefined): string => {
+    if (!mode) return 'N/A';
+    
+    const modeLower = mode.toLowerCase();
+    
+    // Check for In-person variations
+    if (modeLower.includes('person') || modeLower.includes('office') || modeLower.includes('clinic')) {
+      return 'In-Person';
+    }
+    
+    // Check for Google Meet variations
+    if (modeLower.includes('google') || modeLower.includes('meet')) {
+      return 'Google Meet';
+    }
+    
+    // Default return the original value
+    return mode;
+  };
+
+  const getClientStatus = (client: any): 'active' | 'inactive' | 'drop-out' => {
+    // If no appointments data, return inactive
+    if (!appointments || appointments.length === 0) {
+      return 'inactive';
+    }
+    
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    // Get all client appointments (excluding cancelled)
+    const clientAppointments = appointments.filter(apt => {
+      const clientEmail = client.client_email?.toLowerCase().trim();
+      const aptEmail = apt.invitee_email?.toLowerCase().trim();
+      const clientPhone = client.client_phone?.replace(/[\s\-\(\)\+]/g, '');
+      const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
+      
+      const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
+      const phoneMatch = clientPhone && aptPhone && clientPhone === aptPhone;
+      const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
+      
+      return (emailMatch || phoneMatch) && isNotCancelled;
+    });
+    
+    if (clientAppointments.length === 0) {
+      return 'inactive';
+    }
+    
+    // Check if client has any appointments in the last 30 days
+    const hasRecentAppointment = clientAppointments.some(apt => {
+      const aptDate = apt.booking_start_at ? new Date(apt.booking_start_at) : new Date();
+      return aptDate >= thirtyDaysAgo;
+    });
+    
+    // Active: Has session in last 30 days
+    if (hasRecentAppointment) {
+      return 'active';
+    }
+    
+    // Drop-out: Only 1 session and >30 days since that session
+    if (clientAppointments.length === 1) {
+      return 'drop-out';
+    }
+    
+    // Inactive: More than 1 session but >30 days since last session
+    return 'inactive';
   };
 
   const [clientAppointmentSearchTerm, setClientAppointmentSearchTerm] = useState('');
@@ -276,39 +344,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       fetchClientDetails(selectedClient);
     }
   }, [clientDateRange]);
-
-  const getClientStatus = (client: any) => {
-    // If no appointments data, return inactive
-    if (!appointments || appointments.length === 0) {
-      return 'inactive';
-    }
-    
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    // Check if client has any appointments in the last 30 days
-    const hasRecentAppointment = appointments.some(apt => {
-      // Match by email or phone (normalize for comparison)
-      const clientEmail = client.client_email?.toLowerCase().trim();
-      const aptEmail = apt.invitee_email?.toLowerCase().trim();
-      const clientPhone = client.client_phone?.replace(/[\s\-\(\)\+]/g, '');
-      const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
-      
-      const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
-      const phoneMatch = clientPhone && aptPhone && clientPhone === aptPhone;
-      
-      if (emailMatch || phoneMatch) {
-        // Use booking_start_at (standardized field from API)
-        const aptDate = apt.booking_start_at ? new Date(apt.booking_start_at) : new Date();
-        const isRecent = aptDate >= thirtyDaysAgo;
-        const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
-        return isRecent && isNotCancelled;
-      }
-      return false;
-    });
-    
-    return hasRecentAppointment ? 'active' : 'inactive';
-  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1027,12 +1062,29 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const renderMyClients = () => {
-    const filteredClients = clients.filter(client => 
-      searchTerm === '' || 
-      client.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.client_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.client_phone.includes(searchTerm)
-    );
+    // Format date as "23 Jan 2026"
+    const formatLastSessionDate = (dateString: string | null) => {
+      if (!dateString) return 'N/A';
+      const date = new Date(dateString);
+      const day = date.getDate();
+      const month = date.toLocaleDateString('en-US', { month: 'short' });
+      const year = date.getFullYear();
+      return `${day} ${month} ${year}`;
+    };
+
+    const filteredClients = clients.filter(client => {
+      // Search filter
+      const matchesSearch = searchTerm === '' || 
+        client.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        client.client_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        client.client_phone.includes(searchTerm);
+      
+      // Status filter
+      const clientStatus = getClientStatus(client);
+      const matchesStatus = clientStatusFilter === 'all' || clientStatus === clientStatusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
     
     const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1053,7 +1105,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       
       {/* Search Bar */}
       <div className="mb-6">
-        <div className="relative">
+        <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
@@ -1063,6 +1115,60 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
+        
+        {/* Status Filter Pills */}
+        <div className="flex gap-2 items-center">
+          <span className="text-sm text-gray-600 mr-1">Filter:</span>
+          <button
+            onClick={() => {
+              setClientStatusFilter('all');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+              clientStatusFilter === 'all'
+                ? 'bg-gray-800 text-white ring-2 ring-gray-400'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => {
+              setClientStatusFilter('active');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+              clientStatusFilter === 'active' ? 'ring-2 ring-teal-800' : ''
+            }`}
+            style={{ backgroundColor: '#21615D' }}
+          >
+            Active
+          </button>
+          <button
+            onClick={() => {
+              setClientStatusFilter('inactive');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+              clientStatusFilter === 'inactive' ? 'ring-2 ring-gray-500' : ''
+            }`}
+            style={{ backgroundColor: '#9CA3AF' }}
+          >
+            Inactive
+          </button>
+          <button
+            onClick={() => {
+              setClientStatusFilter('drop-out');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+              clientStatusFilter === 'drop-out' ? 'ring-2 ring-red-800' : ''
+            }`}
+            style={{ backgroundColor: '#B91C1C' }}
+          >
+            Drop-out
+          </button>
+        </div>
       </div>
       
       <div className="bg-white rounded-lg border">
@@ -1071,37 +1177,56 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Phone No.</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Email ID</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Sessions</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Last Session Booked</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
               </tr>
             </thead>
             <tbody>
               {clientsLoading ? (
                 <tr>
-                  <td colSpan={4} className="text-center text-gray-400 py-8">
+                  <td colSpan={6} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : paginatedClients.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="text-center text-gray-400 py-8">
+                  <td colSpan={6} className="text-center text-gray-400 py-8">
                     No clients found
                   </td>
                 </tr>
               ) : (
-                paginatedClients.map((client, index) => (
+                paginatedClients.map((client, index) => {
+                  const status = getClientStatus(client);
+                  return (
                     <tr key={index} className="border-b hover:bg-gray-50 cursor-pointer" onClick={async () => {
                       setActiveAppointmentTab('upcoming');
                       await fetchClientDetails(client);
                       setSelectedClient(client);
                     }}>
                       <td className="px-6 py-4 text-sm">{formatClientName(client.client_name)}</td>
-                      <td className="px-6 py-4 text-sm">{client.client_phone}</td>
-                      <td className="px-6 py-4 text-sm">{client.client_email}</td>
+                      <td className="px-6 py-4 text-sm">{client.booking_resource_name || 'N/A'}</td>
+                      <td className="px-6 py-4 text-sm">{formatMode(client.booking_mode)}</td>
                       <td className="px-6 py-4 text-sm">{client.total_sessions}</td>
+                      <td className="px-6 py-4 text-sm">{formatLastSessionDate(client.last_session_date)}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <span 
+                          className="px-3 py-1 rounded-full text-xs font-medium text-white"
+                          style={{ 
+                            backgroundColor: 
+                              status === 'active' ? '#21615D' : 
+                              status === 'drop-out' ? '#B91C1C' : 
+                              '#9CA3AF' 
+                          }}
+                        >
+                          {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
+                        </span>
+                      </td>
                     </tr>
-                  ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -2416,8 +2541,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             </div>
 
             {/* Stats Grid - Row 1 */}
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              {stats.slice(0, 3).map((stat, index) => (
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              {stats.slice(0, 4).map((stat, index) => (
                 <div 
                   key={index} 
                   className={`bg-white rounded-lg p-6 border ${
@@ -2434,16 +2559,16 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   }}
                 >
                   <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
-                  <div className="text-3xl font-bold">{stat.value}</div>
+                  <CountUpNumber value={stat.value} className="text-3xl font-bold" />
                 </div>
               ))}
             </div>
             
             {/* Stats Grid - Row 2 */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
-              {stats.slice(3).map((stat, index) => (
+            <div className="grid grid-cols-4 gap-4 mb-8">
+              {stats.slice(4).map((stat, index) => (
                 <div 
-                  key={index + 3} 
+                  key={index + 4} 
                   className={`bg-white rounded-lg p-6 border ${
                     stat.clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
                   }`}
@@ -2458,20 +2583,50 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   }}
                 >
                   <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
-                  <div className="text-3xl font-bold">{stat.value}</div>
+                  <CountUpNumber value={stat.value} className="text-3xl font-bold" />
                 </div>
               ))}
-              <div className="bg-white rounded-lg p-6 border">
+              <div 
+                className="bg-white rounded-lg p-6 border cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => {
+                  resetAllStates();
+                  setClientStatusFilter('active');
+                  setActiveView('clients');
+                }}
+              >
                 <div className="text-sm text-gray-600 mb-2">Active Clients</div>
-                <div className="text-3xl font-bold" style={{ color: '#000000' }}>
-                  {clients.filter(client => getClientStatus(client) === 'active').length}
-                </div>
+                <CountUpNumber 
+                  value={clients.filter(client => getClientStatus(client) === 'active').length} 
+                  className="text-3xl font-bold"
+                />
               </div>
-              <div className="bg-white rounded-lg p-6 border">
+              <div 
+                className="bg-white rounded-lg p-6 border cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => {
+                  resetAllStates();
+                  setClientStatusFilter('inactive');
+                  setActiveView('clients');
+                }}
+              >
                 <div className="text-sm text-gray-600 mb-2">Inactive Clients</div>
-                <div className="text-3xl font-bold" style={{ color: '#000000' }}>
-                  {clients.filter(client => getClientStatus(client) === 'inactive').length}
-                </div>
+                <CountUpNumber 
+                  value={clients.filter(client => getClientStatus(client) === 'inactive').length} 
+                  className="text-3xl font-bold"
+                />
+              </div>
+              <div 
+                className="bg-white rounded-lg p-6 border cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => {
+                  resetAllStates();
+                  setClientStatusFilter('drop-out');
+                  setActiveView('clients');
+                }}
+              >
+                <div className="text-sm text-gray-600 mb-2">Drop-Outs</div>
+                <CountUpNumber 
+                  value={clients.filter(client => getClientStatus(client) === 'drop-out').length} 
+                  className="text-3xl font-bold"
+                />
               </div>
             </div>
 

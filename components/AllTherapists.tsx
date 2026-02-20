@@ -76,6 +76,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [clientAppointmentSearchTerm, setClientAppointmentSearchTerm] = useState('');
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState('');
   const [assignedClientSearch, setAssignedClientSearch] = useState('');
+  const [assignedClientStatusFilter, setAssignedClientStatusFilter] = useState<'all' | 'active' | 'inactive' | 'drop-out'>('all');
   const [appointmentsPage, setAppointmentsPage] = useState(1);
   const appointmentsPerPage = 10;
   const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents' | 'caseHistory'>('overview');
@@ -107,6 +108,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   // Calendar filter states (for calendar view)
   const [selectedTherapistFilters, setSelectedTherapistFilters] = useState<string[]>([]);
   const [selectedModeFilter, setSelectedModeFilter] = useState<'all' | 'online' | 'in-person'>('all');
+  const [selectedSessionTypeFilter, setSelectedSessionTypeFilter] = useState<'all' | 'individual' | 'couples' | 'free_consultation'>('all');
 
   const toggleTherapistFilter = (therapistName: string) => {
     setSelectedTherapistFilters(prev => 
@@ -665,7 +667,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     }
   };
 
-  const getClientStatus = (client: Client, appointmentsToCheck?: Appointment[]) => {
+  const getClientStatus = (client: Client, appointmentsToCheck?: Appointment[]): 'active' | 'inactive' | 'drop-out' => {
     // Use clientAppointments if viewing a specific client, otherwise use all appointments
     const appointmentsData = appointmentsToCheck || appointments;
     
@@ -677,9 +679,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    // Check if client has any appointments in the last 30 days
-    const hasRecentAppointment = appointmentsData.some(apt => {
-      // Match by email or phone (normalize for comparison)
+    // Get all client appointments (excluding cancelled)
+    const clientAppointments = appointmentsData.filter(apt => {
       const clientEmail = client.invitee_email?.toLowerCase().trim();
       const aptEmail = apt.invitee_email?.toLowerCase().trim();
       
@@ -691,18 +692,33 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       
       const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
       const phoneMatch = aptPhone && clientPhones.some(phone => phone === aptPhone);
+      const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
       
-      if (emailMatch || phoneMatch) {
-        // Use booking_start_at (standardized field from API)
-        const aptDate = apt.booking_start_at ? new Date(apt.booking_start_at) : new Date();
-        const isRecent = aptDate >= thirtyDaysAgo;
-        const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
-        return isRecent && isNotCancelled;
-      }
-      return false;
+      return (emailMatch || phoneMatch) && isNotCancelled;
     });
     
-    return hasRecentAppointment ? 'active' : 'inactive';
+    if (clientAppointments.length === 0) {
+      return 'inactive';
+    }
+    
+    // Check if client has any appointments in the last 30 days
+    const hasRecentAppointment = clientAppointments.some(apt => {
+      const aptDate = apt.booking_start_at ? new Date(apt.booking_start_at) : new Date();
+      return aptDate >= thirtyDaysAgo;
+    });
+    
+    // Active: Has session in last 30 days
+    if (hasRecentAppointment) {
+      return 'active';
+    }
+    
+    // Drop-out: Only 1 session and >30 days since that session
+    if (clientAppointments.length === 1) {
+      return 'drop-out';
+    }
+    
+    // Inactive: More than 1 session but >30 days since last session
+    return 'inactive';
   };
 
   // Handler for saving edited therapist
@@ -797,10 +813,14 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             <span 
               className="px-3 py-1 rounded-full text-sm font-medium text-white"
               style={{ 
-                backgroundColor: getClientStatus(selectedClient, clientAppointments) === 'active' ? '#21615D' : '#B91C1C'
+                backgroundColor: 
+                  getClientStatus(selectedClient, clientAppointments) === 'active' ? '#21615D' : 
+                  getClientStatus(selectedClient, clientAppointments) === 'drop-out' ? '#B91C1C' : 
+                  '#9CA3AF'
               }}
             >
-              {getClientStatus(selectedClient, clientAppointments) === 'active' ? 'Active' : 'Inactive'}
+              {getClientStatus(selectedClient, clientAppointments) === 'active' ? 'Active' : 
+               getClientStatus(selectedClient, clientAppointments) === 'drop-out' ? 'Drop-out' : 'Inactive'}
             </span>
           </div>
         </div>
@@ -1536,7 +1556,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Sessions This Month</p>
               <p className="text-3xl font-bold" style={{ color: '#21615D' }}>{selectedTherapist.sessions_this_month}</p>
@@ -1551,6 +1571,12 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 {clients.filter(client => getClientStatus(client) === 'inactive').length}
               </p>
             </div>
+            <div className="bg-gray-100 p-5 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Drop-Outs</p>
+              <p className="text-3xl font-bold" style={{ color: '#21615D' }}>
+                {clients.filter(client => getClientStatus(client) === 'drop-out').length}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -1562,7 +1588,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             <div>
               <div className="mb-3">
                 <h3 className="text-lg font-semibold mb-3">Assigned Clients ({clients.length})</h3>
-                <div className="relative">
+                <div className="relative mb-3">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                   <input
                     type="text"
@@ -1571,6 +1597,60 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                     onChange={(e) => setAssignedClientSearch(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
+                </div>
+                
+                {/* Status Filter Pills */}
+                <div className="flex gap-2 items-center">
+                  <span className="text-sm text-gray-600 mr-1">Filter:</span>
+                  <button
+                    onClick={() => {
+                      setAssignedClientStatusFilter('all');
+                      setClientsPage(1);
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                      assignedClientStatusFilter === 'all'
+                        ? 'bg-gray-800 text-white ring-2 ring-gray-400'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAssignedClientStatusFilter('active');
+                      setClientsPage(1);
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+                      assignedClientStatusFilter === 'active' ? 'ring-2 ring-teal-800' : ''
+                    }`}
+                    style={{ backgroundColor: '#21615D' }}
+                  >
+                    Active
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAssignedClientStatusFilter('inactive');
+                      setClientsPage(1);
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+                      assignedClientStatusFilter === 'inactive' ? 'ring-2 ring-gray-500' : ''
+                    }`}
+                    style={{ backgroundColor: '#9CA3AF' }}
+                  >
+                    Inactive
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAssignedClientStatusFilter('drop-out');
+                      setClientsPage(1);
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+                      assignedClientStatusFilter === 'drop-out' ? 'ring-2 ring-red-800' : ''
+                    }`}
+                    style={{ backgroundColor: '#B91C1C' }}
+                  >
+                    Drop-out
+                  </button>
                 </div>
               </div>
               <div className="bg-white border rounded-lg overflow-hidden">
@@ -1586,11 +1666,18 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                     </thead>
                     <tbody>
                       {(() => {
-                        const filteredClients = clients.filter(client =>
-                          client.invitee_name?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
-                          client.invitee_email?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
-                          client.invitee_phone?.toLowerCase().includes(assignedClientSearch.toLowerCase())
-                        );
+                        const filteredClients = clients.filter(client => {
+                          // Search filter
+                          const matchesSearch = client.invitee_name?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
+                            client.invitee_email?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
+                            client.invitee_phone?.toLowerCase().includes(assignedClientSearch.toLowerCase());
+                          
+                          // Status filter
+                          const clientStatus = getClientStatus(client);
+                          const matchesStatus = assignedClientStatusFilter === 'all' || clientStatus === assignedClientStatusFilter;
+                          
+                          return matchesSearch && matchesStatus;
+                        });
                         
                         if (filteredClients.length === 0) {
                           return (
@@ -1662,9 +1749,12 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                       const status = getClientStatus(client);
                                       return (
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium text-white`} style={{
-                                          backgroundColor: status === 'active' ? '#21615D' : '#B91C1C'
+                                          backgroundColor: 
+                                            status === 'active' ? '#21615D' : 
+                                            status === 'drop-out' ? '#B91C1C' : 
+                                            '#9CA3AF'
                                         }}>
-                                          {status === 'active' ? 'Active' : 'Inactive'}
+                                          {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
                                         </span>
                                       );
                                     })()}
@@ -1701,9 +1791,12 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                           const status = getClientStatus(client);
                                           return (
                                             <span className={`px-3 py-1 rounded-full text-xs font-medium text-white`} style={{
-                                              backgroundColor: status === 'active' ? '#21615D' : '#B91C1C'
+                                              backgroundColor: 
+                                                status === 'active' ? '#21615D' : 
+                                                status === 'drop-out' ? '#B91C1C' : 
+                                                '#9CA3AF'
                                             }}>
-                                              {status === 'active' ? 'Active' : 'Inactive'}
+                                              {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
                                             </span>
                                           );
                                         })()}
@@ -1986,7 +2079,32 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               </div>
             </div>
 
-            {/* Row 2: Therapist Filters */}
+            {/* Row 2: Session Type Filters */}
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-medium text-gray-700 mr-2">Session Type:</h4>
+              <div className="flex gap-2">
+                {[
+                  { value: 'all', label: 'All Types' },
+                  { value: 'individual', label: 'Individual' },
+                  { value: 'couples', label: 'Couples' },
+                  { value: 'free_consultation', label: 'Free Consultation' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setSelectedSessionTypeFilter(option.value as any)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      selectedSessionTypeFilter === option.value
+                        ? 'bg-teal-700 text-white border-teal-700'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Row 3: Therapist Filters */}
             <div className="flex items-center gap-2">
               <h4 className="text-sm font-medium text-gray-700 mr-2">Therapists:</h4>
               <div className="flex flex-wrap gap-2">
@@ -2028,6 +2146,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             therapists={therapists} 
             selectedTherapistFilters={selectedTherapistFilters}
             selectedModeFilter={selectedModeFilter}
+            sessionTypeFilter={selectedSessionTypeFilter}
           />
         ) : (
           /* Therapists Table */

@@ -51,6 +51,7 @@ interface TherapistCalendarProps {
   selectedTherapistFilters: string[];
   selectedModeFilter: 'all' | 'online' | 'in-person';
   statusFilter?: 'all' | 'upcoming' | 'cancelled' | 'completed';
+  sessionTypeFilter?: 'all' | 'individual' | 'couples' | 'free_consultation';
   therapistId?: number;
 }
 
@@ -59,6 +60,7 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
   selectedTherapistFilters, 
   selectedModeFilter,
   statusFilter = 'all',
+  sessionTypeFilter = 'all',
   therapistId
 }) => {
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
@@ -87,7 +89,7 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
     if (allAppointments.length > 0) {
       convertAppointmentsToEvents();
     }
-  }, [allAppointments, selectedTherapistFilters, selectedModeFilter, statusFilter]);
+  }, [allAppointments, selectedTherapistFilters, selectedModeFilter, statusFilter, sessionTypeFilter]);
 
   const fetchAllAppointments = async () => {
     try {
@@ -204,6 +206,16 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
           if (statusFilter === 'completed' && appointmentStatus !== 'completed' && !apt.has_session_notes) return;
         }
 
+        // Apply session type filter
+        const sessionType = apt.session_name || apt.booking_resource_name || apt.therapy_type || 'Session';
+        const sessionTypeLower = sessionType.toLowerCase();
+        
+        if (sessionTypeFilter !== 'all') {
+          if (sessionTypeFilter === 'individual' && !sessionTypeLower.includes('individual')) return;
+          if (sessionTypeFilter === 'couples' && !sessionTypeLower.includes('couples')) return;
+          if (sessionTypeFilter === 'free_consultation' && !sessionTypeLower.includes('free consultation')) return;
+        }
+
         // Use session_timings for therapist dashboard, booking_start_at for admin dashboard
         const timeString = apt.session_timings || apt.booking_start_at;
         const timeData = parseAppointmentTime(timeString);
@@ -212,7 +224,6 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
         }
 
         const clientName = apt.invitee_name || apt.client_name || 'Unknown Client';
-        const sessionType = apt.session_name || apt.booking_resource_name || apt.therapy_type || 'Session';
 
         const therapistName = therapistId && therapists.length > 0 ? therapists[0].name : (apt.booking_host_name || 'Unknown');
         

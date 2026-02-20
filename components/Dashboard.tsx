@@ -15,6 +15,7 @@ import { Loader } from './Loader';
 import { Toast } from './Toast';
 import { ChangePassword } from './ChangePassword';
 import { AdminEditProfile } from './AdminEditProfile';
+import { CountUpNumber } from './CountUpNumber';
 import { useUrlState } from '../hooks/useUrlState';
 
 interface DashboardProps {
@@ -657,7 +658,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                 }}
               >
                 <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
-                <div className="text-3xl font-bold">{stat.value}</div>
+                <CountUpNumber 
+                  value={stat.value} 
+                  prefix={(stat.title.includes('Revenue') || stat.title.includes('Refunded')) ? '₹' : ''} 
+                  className="text-3xl font-bold"
+                />
               </div>
             ))}
           </div>

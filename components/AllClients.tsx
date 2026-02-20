@@ -18,6 +18,7 @@ interface Client {
   invitee_email: string;
   booking_host_name: string;
   booking_resource_name?: string;
+  booking_mode?: string;
   session_count: number;
   therapists: Therapist[];
   latest_booking_date?: string;
@@ -29,6 +30,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [prefilledClientData, setPrefilledClientData] = useState<{ name: string; phone: string; email: string } | undefined>(undefined);
   const [clients, setClients] = useState<Client[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -36,6 +38,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState<'clients' | 'pretherapy' | 'leads'>('clients');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'drop-out'>('all');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const itemsPerPage = 10;
   const tableRef = useRef<HTMLDivElement>(null);
@@ -80,15 +83,85 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     return name;
   };
 
+  const formatMode = (mode: string | undefined): string => {
+    if (!mode) return 'N/A';
+    
+    const modeLower = mode.toLowerCase();
+    
+    // Check for In-person variations
+    if (modeLower.includes('person') || modeLower.includes('office') || modeLower.includes('clinic')) {
+      return 'In-Person';
+    }
+    
+    // Check for Google Meet variations
+    if (modeLower.includes('google') || modeLower.includes('meet')) {
+      return 'Google Meet';
+    }
+    
+    // Default return the original value
+    return mode;
+  };
+
+  const getClientStatus = (client: Client): 'active' | 'inactive' | 'drop-out' => {
+    // If no appointments data, return inactive
+    if (!appointments || appointments.length === 0) {
+      return 'inactive';
+    }
+    
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    // Get all client appointments (excluding cancelled)
+    const clientAppointments = appointments.filter(apt => {
+      const clientEmail = client.invitee_email?.toLowerCase().trim();
+      const aptEmail = apt.invitee_email?.toLowerCase().trim();
+      const clientPhone = client.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
+      const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
+      
+      const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
+      const phoneMatch = clientPhone && aptPhone && clientPhone === aptPhone;
+      const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
+      
+      return (emailMatch || phoneMatch) && isNotCancelled;
+    });
+    
+    if (clientAppointments.length === 0) {
+      return 'inactive';
+    }
+    
+    // Check if client has any appointments in the last 30 days
+    const hasRecentAppointment = clientAppointments.some(apt => {
+      // Use booking_start_at_raw for date comparison (raw timestamp)
+      const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date(apt.booking_start_at);
+      return aptDate >= thirtyDaysAgo;
+    });
+    
+    // Active: Has session in last 30 days
+    if (hasRecentAppointment) {
+      return 'active';
+    }
+    
+    // Drop-out: Only 1 session and >30 days since that session
+    if (clientAppointments.length === 1) {
+      return 'drop-out';
+    }
+    
+    // Inactive: More than 1 session but >30 days since last session
+    return 'inactive';
+  };
+
   useEffect(() => {
-    fetch('/api/clients')
-      .then(res => res.json())
-      .then(data => {
-        setClients(data);
+    Promise.all([
+      fetch('/api/clients').then(res => res.json()),
+      fetch('/api/appointments').then(res => res.json())
+    ])
+      .then(([clientsData, appointmentsData]) => {
+        setClients(Array.isArray(clientsData) ? clientsData : []);
+        setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
         setLoading(false);
       })
       .catch(err => {
-        console.error('Error fetching clients:', err);
+        console.error('[AllClients] Error fetching data:', err);
         setLoading(false);
       });
   }, []);
@@ -182,7 +255,17 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
       return client.session_count === 0;
     } else {
       // All Clients: clients with bookings AND therapist is NOT Safestories
-      return client.session_count > 0 && !isSafestories;
+      const isInClientsTab = client.session_count > 0 && !isSafestories;
+      
+      if (!isInClientsTab) return false;
+      
+      // Apply status filter for Clients tab
+      if (statusFilter !== 'all') {
+        const clientStatus = getClientStatus(client);
+        return clientStatus === statusFilter;
+      }
+      
+      return true;
     }
   });
 
@@ -339,6 +422,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         <button
           onClick={() => {
             setActiveTab('clients');
+            setStatusFilter('all');
             setCurrentPage(1);
           }}
           className={`pb-2 font-medium ${
@@ -352,6 +436,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         <button
           onClick={() => {
             setActiveTab('pretherapy');
+            setStatusFilter('all');
             setCurrentPage(1);
           }}
           className={`pb-2 font-medium ${
@@ -365,6 +450,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         <button
           onClick={() => {
             setActiveTab('leads');
+            setStatusFilter('all');
             setCurrentPage(1);
           }}
           className={`pb-2 font-medium ${
@@ -398,6 +484,62 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         </button>
       </div>
 
+      {/* Status Filter Pills - Only for Clients Tab */}
+      {activeTab === 'clients' && (
+        <div className="mb-4 flex gap-2 items-center">
+          <span className="text-sm text-gray-600 mr-1">Filter:</span>
+          <button
+            onClick={() => {
+              setStatusFilter('all');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+              statusFilter === 'all'
+                ? 'bg-gray-800 text-white ring-2 ring-gray-400'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => {
+              setStatusFilter('active');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+              statusFilter === 'active' ? 'ring-2 ring-teal-800' : ''
+            }`}
+            style={{ backgroundColor: '#21615D' }}
+          >
+            Active
+          </button>
+          <button
+            onClick={() => {
+              setStatusFilter('inactive');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+              statusFilter === 'inactive' ? 'ring-2 ring-gray-500' : ''
+            }`}
+            style={{ backgroundColor: '#9CA3AF' }}
+          >
+            Inactive
+          </button>
+          <button
+            onClick={() => {
+              setStatusFilter('drop-out');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+              statusFilter === 'drop-out' ? 'ring-2 ring-red-800' : ''
+            }`}
+            style={{ backgroundColor: '#B91C1C' }}
+          >
+            Drop-out
+          </button>
+        </div>
+      )}
+
       {/* Clients Table */}
       {loading ? (
         <Loader />
@@ -413,17 +555,24 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                   <>
                     <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
                     <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
                     <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Last Session Booked</th>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
                   </>
                 )}
                 {activeTab === 'pretherapy' && (
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Pre-therapy Date</th>
-                )}
-                {activeTab !== 'pretherapy' && (
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                  <>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Pre-therapy Date</th>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                  </>
                 )}
                 {activeTab === 'leads' && (
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Booking Link Sent</th>
+                  <>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Booking Link Sent</th>
+                  </>
                 )}
                 {(activeTab === 'pretherapy' || activeTab === 'leads') && (
                   <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
@@ -433,13 +582,13 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === 'pretherapy' ? 4 : activeTab === 'leads' ? 6 : 7} className="text-center text-gray-400 py-8">
+                  <td colSpan={activeTab === 'pretherapy' ? 5 : activeTab === 'leads' ? 6 : 9} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === 'pretherapy' ? 4 : activeTab === 'leads' ? 6 : 7} className="text-center text-gray-400 py-8">
+                  <td colSpan={activeTab === 'pretherapy' ? 5 : activeTab === 'leads' ? 6 : 9} className="text-center text-gray-400 py-8">
                     No {activeTab === 'clients' ? 'clients' : activeTab === 'pretherapy' ? 'pre-therapy clients' : 'leads'} found
                   </td>
                 </tr>
@@ -479,23 +628,53 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                         <>
                           <td className="px-6 py-4 text-sm">{client.session_count}</td>
                           <td className="px-6 py-4 text-sm">{formatSessionName(client.booking_resource_name, client.booking_host_name)}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
+                          <td className="px-6 py-4 text-sm">
+                            {formatMode(client.booking_mode)}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            {standardizeTherapistName(client.booking_host_name)}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900">
                             {client.last_session_date ? formatDate(client.last_session_date) : 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            {(() => {
+                              const status = getClientStatus(client);
+                              return (
+                                <span 
+                                  className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
+                                  style={{ 
+                                    backgroundColor: 
+                                      status === 'active' ? '#21615D' : 
+                                      status === 'drop-out' ? '#B91C1C' : 
+                                      '#9CA3AF' 
+                                  }}
+                                >
+                                  {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
+                                </span>
+                              );
+                            })()}
                           </td>
                         </>
                       )}
                       {activeTab === 'pretherapy' && (
-                        <td className="px-6 py-4 text-sm">{formatPreTherapyDate(client.latest_booking_date)}</td>
-                      )}
-                      {activeTab !== 'pretherapy' && (
-                        <td className="px-6 py-4 text-sm">
-                          {standardizeTherapistName(client.booking_host_name)}
-                        </td>
+                        <>
+                          <td className="px-6 py-4 text-sm">{formatPreTherapyDate(client.latest_booking_date)}</td>
+                          <td className="px-6 py-4 text-sm">
+                            {standardizeTherapistName(client.booking_host_name)}
+                          </td>
+                        </>
                       )}
                       {activeTab === 'leads' && (
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {formatBookingLinkDate(client.booking_link_sent_at)}
-                        </td>
+                        <>
+                          <td className="px-6 py-4 text-sm">{formatSessionName(client.booking_resource_name, client.booking_host_name)}</td>
+                          <td className="px-6 py-4 text-sm">
+                            {standardizeTherapistName(client.booking_host_name)}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {formatBookingLinkDate(client.booking_link_sent_at)}
+                          </td>
+                        </>
                       )}
                       {activeTab === 'pretherapy' && (
                         <td className="px-6 py-4 text-sm">
@@ -528,7 +707,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                     {/* Expanded Actions Row - Only for Clients tab */}
                     {activeTab === 'clients' && expandedRows.has(index) && (
                       <tr className="bg-gray-50 border-b">
-                        <td colSpan={7} className="px-6 py-4">
+                        <td colSpan={9} className="px-6 py-4">
                           <div className="flex gap-4 justify-center">
                             <button
                               onClick={(e) => {

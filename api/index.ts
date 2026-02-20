@@ -404,6 +404,7 @@ app.get('/api/clients', async (req, res) => {
         booking_host_name,
         booking_resource_name,
         booking_status,
+        booking_mode,
         1 as session_count,
         invitee_created_at as created_at,
         booking_start_at as latest_booking_date,
@@ -419,6 +420,7 @@ app.get('/api/clients', async (req, res) => {
         therapist_name as booking_host_name,
         therapy_type as booking_resource_name,
         NULL as booking_status,
+        NULL as booking_mode,
         0 as session_count,
         created_at,
         created_at as latest_booking_date,
@@ -469,6 +471,7 @@ app.get('/api/clients', async (req, res) => {
           session_count: 0,
           booking_host_name: row.booking_host_name,
           booking_resource_name: row.booking_resource_name,
+          booking_mode: null,
           created_at: row.created_at,
           latest_booking_date: null,
           booking_link_sent_at: null,
@@ -481,7 +484,7 @@ app.get('/api/clients', async (req, res) => {
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
       
-      // Track last session date for past sessions (excluding cancelled and no_show)
+      // Track last session date and mode for past sessions (excluding cancelled and no_show)
       if (row.booking_status && !['cancelled', 'canceled', 'no_show', 'no show'].includes(row.booking_status)) {
         // Check if session is in the past
         const sessionDate = new Date(row.latest_booking_date);
@@ -492,6 +495,7 @@ app.get('/api/clients', async (req, res) => {
           if (!client.last_session_date_raw || new Date(row.latest_booking_date) > new Date(client.last_session_date_raw)) {
             client.last_session_date = row.booking_invitee_time;
             client.last_session_date_raw = row.latest_booking_date;
+            client.booking_mode = row.booking_mode; // Set mode from the same session
           }
         }
       }
@@ -1580,17 +1584,17 @@ app.get('/api/therapist-clients', async (req, res) => {
     const therapist = therapistResult.rows[0];
     const therapistFirstName = therapist ? therapist.name.split(' ')[0] : '';
 
-    // Get clients for this therapist directly from bookings table
+    // Get clients for this therapist with mode and session info
     const clientsResult = await pool.query(`
       SELECT 
         invitee_name as client_name,
         invitee_email as client_email,
         invitee_phone as client_phone,
         booking_start_at,
-        COUNT(*) as total_sessions
+        booking_resource_name,
+        booking_mode
       FROM bookings
       WHERE booking_host_name ILIKE $1
-      GROUP BY invitee_name, invitee_email, invitee_phone, booking_start_at
       ORDER BY booking_start_at DESC
     `, [`%${therapistFirstName}%`]);
 
@@ -1630,17 +1634,21 @@ app.get('/api/therapist-clients', async (req, res) => {
           client_phone: row.client_phone,
           client_email: row.client_email,
           total_sessions: 0,
-          latest_booking_date: row.booking_start_at
+          latest_booking_date: row.booking_start_at,
+          booking_resource_name: row.booking_resource_name,
+          booking_mode: row.booking_mode
         });
       }
       
       const client = clientMap.get(key);
-      client.total_sessions += parseInt(row.total_sessions) || 0;
+      client.total_sessions += 1;
       
-      // Update to most recent phone number
+      // Update to most recent session info
       if (new Date(row.booking_start_at) > new Date(client.latest_booking_date)) {
         client.latest_booking_date = row.booking_start_at;
         client.client_phone = row.client_phone;
+        client.booking_resource_name = row.booking_resource_name;
+        client.booking_mode = row.booking_mode;
       }
       
       // Fill in missing email if found
@@ -1651,7 +1659,17 @@ app.get('/api/therapist-clients', async (req, res) => {
       }
     });
 
-    const clients = Array.from(clientMap.values()).map(({ latest_booking_date, ...client }) => client);
+    const clients = Array.from(clientMap.values()).map(client => {
+      return {
+        client_name: client.client_name,
+        client_phone: client.client_phone,
+        client_email: client.client_email,
+        total_sessions: client.total_sessions,
+        booking_resource_name: client.booking_resource_name,
+        booking_mode: client.booking_mode,
+        last_session_date: client.latest_booking_date
+      };
+    });
 
     res.json({ clients });
 
