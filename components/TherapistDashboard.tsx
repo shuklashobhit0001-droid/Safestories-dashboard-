@@ -1206,7 +1206,11 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                       await fetchClientDetails(client);
                       setSelectedClient(client);
                     }}>
-                      <td className="px-6 py-4 text-sm">{formatClientName(client.client_name)}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <span className="text-teal-700 hover:underline cursor-pointer">
+                          {formatClientName(client.client_name)}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 text-sm">{client.booking_resource_name || 'N/A'}</td>
                       <td className="px-6 py-4 text-sm">{formatMode(client.booking_mode)}</td>
                       <td className="px-6 py-4 text-sm">{client.total_sessions}</td>
