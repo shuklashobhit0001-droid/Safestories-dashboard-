@@ -3,11 +3,11 @@ import cors from 'cors';
 import fetch from 'node-fetch';
 import multer from 'multer';
 import { randomUUID } from 'crypto';
-import pool from '../lib/db';
-import { convertToIST } from '../lib/timezone';
-import { startDashboardApiBookingSync } from './dashboardApiBookingSync';
-import { uploadFile } from '../lib/minio';
-import { sendOTPEmail, sendPasswordResetOTP } from '../lib/email';
+import pool from './lib/db.js';
+import { convertToIST } from './lib/timezone.js';
+import { startDashboardApiBookingSync } from './lib/dashboardApiBookingSync.js';
+import { uploadFile } from './lib/minio.js';
+import { sendOTPEmail, sendPasswordResetOTP } from './lib/email.js';
 
 // Configure multer for memory storage
 const upload = multer({ 
