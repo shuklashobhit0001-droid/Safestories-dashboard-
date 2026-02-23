@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Input } from './Input';
 import { Button } from './Button';
 import { User, KeyRound, Mail, Eye, EyeOff } from 'lucide-react';
-import { CompleteProfileModal } from './CompleteProfileModal';
 
 interface LoginFormProps {
   onLogin: (user: any) => void;
@@ -16,8 +15,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [prefilledData, setPrefilledData] = useState<any>(null);
 
   // Forgot password states
   const [resetEmail, setResetEmail] = useState('');
@@ -28,6 +25,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
   const [resetStep, setResetStep] = useState<'email' | 'otp' | 'password'>('email');
   const [successMessage, setSuccessMessage] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
+  const [canResend, setCanResend] = useState(false);
 
   const handleNormalLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,9 +69,21 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
       const data = await response.json();
 
       if (data.success) {
-        // Show profile completion modal
-        setPrefilledData(data.data);
-        setShowProfileModal(true);
+        // Create temporary user object for dashboard access
+        const tempUser = {
+          id: data.data.requestId,
+          therapist_id: data.data.requestId, // Add therapist_id for API calls
+          username: email.split('@')[0],
+          email: email,
+          role: 'therapist',
+          full_name: data.data.name,
+          needsProfileCompletion: true,
+          profileStatus: 'pending_review', // Will be under review after submission
+          profileData: data.data
+        };
+        
+        // Log them in with temporary access
+        onLogin(tempUser);
       } else {
         setError(data.error || 'Invalid email or OTP');
       }
@@ -83,14 +94,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     }
   };
 
-  const handleProfileComplete = () => {
-    setShowProfileModal(false);
-    setLoginMode('normal');
-    setEmail('');
-    setOtp('');
-    alert('Profile created successfully! Please login with your email and password.');
-  };
-
   const validatePassword = (pwd: string): boolean => {
     if (pwd.length < 8) return false;
     if (!/[A-Z]/.test(pwd)) return false;
@@ -98,6 +101,18 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     if (!/[0-9]/.test(pwd)) return false;
     return true;
   };
+
+  // Resend timer effect
+  React.useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => {
+        setResendTimer(resendTimer - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (resendTimer === 0 && resetStep === 'otp') {
+      setCanResend(true);
+    }
+  }, [resendTimer, resetStep]);
 
   const handleSendResetOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,12 +132,46 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
       if (data.success) {
         setSuccessMessage('OTP sent to your email!');
         setResetStep('otp');
+        setResendTimer(60); // 60 seconds countdown
+        setCanResend(false);
       } else {
         setError(data.error || 'Failed to send OTP');
       }
     } catch (error) {
       console.error('Error:', error);
       setError('Failed to send OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+    setCanResend(false);
+
+    try {
+      const response = await fetch('/api/forgot-password/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccessMessage('OTP resent to your email!');
+        setResendTimer(60); // Reset countdown
+        setResetOtp(''); // Clear previous OTP
+      } else {
+        setError(data.error || 'Failed to resend OTP');
+        setCanResend(true);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setError('Failed to resend OTP. Please try again.');
+      setCanResend(true);
     } finally {
       setLoading(false);
     }
@@ -309,6 +358,24 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                   <p className="text-xs text-gray-500 mt-1">
                     Enter the 6-digit OTP sent to {resetEmail}
                   </p>
+                  
+                  {/* Resend OTP Section */}
+                  <div className="text-center mt-3">
+                    {resendTimer > 0 ? (
+                      <p className="text-sm text-gray-600">
+                        Resend OTP in <span className="font-semibold text-teal-700">{resendTimer}s</span>
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        disabled={loading || !canResend}
+                        className="text-sm font-semibold text-teal-700 hover:text-teal-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      >
+                        {loading ? 'Sending...' : 'Resend OTP'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -388,6 +455,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                 setResetOtp('');
                 setResetNewPassword('');
                 setResetConfirmPassword('');
+                setResendTimer(0);
+                setCanResend(false);
               } else {
                 setLoginMode(loginMode === 'normal' ? 'otp' : 'normal');
               }
@@ -415,16 +484,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
           )}
         </div>
 
-        {loginMode === 'forgot' && resetStep === 'otp' && (
-          <button
-            type="button"
-            onClick={() => setResetStep('email')}
-            className="w-full mb-4 border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 font-medium text-lg"
-          >
-            Back
-          </button>
-        )}
-
         <Button type="submit" fullWidth className="text-lg" disabled={loading}>
           {loading ? 'Please wait...' : 
            loginMode === 'normal' ? 'Log In' : 
@@ -434,14 +493,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
            'Reset Password'}
         </Button>
       </form>
-
-      {showProfileModal && prefilledData && (
-        <CompleteProfileModal
-          onClose={() => setShowProfileModal(false)}
-          onComplete={handleProfileComplete}
-          prefilledData={prefilledData}
-        />
-      )}
     </>
   );
 };

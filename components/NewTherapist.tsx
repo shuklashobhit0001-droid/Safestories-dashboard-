@@ -20,9 +20,9 @@ export const NewTherapist: React.FC<NewTherapistProps> = ({ onBack }) => {
   const [loading, setLoading] = useState(false);
 
   const countryCodes = [
+    { code: '+91', country: 'India' },
     { code: '+1', country: 'USA/Canada' },
     { code: '+44', country: 'UK' },
-    { code: '+91', country: 'India' },
     { code: '+61', country: 'Australia' },
     { code: '+971', country: 'UAE' },
   ];

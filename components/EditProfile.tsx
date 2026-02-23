@@ -26,9 +26,9 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, onBack }) => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const countryCodes = [
+    { code: '+91', country: 'India' },
     { code: '+1', country: 'USA/Canada' },
     { code: '+44', country: 'UK' },
-    { code: '+91', country: 'India' },
     { code: '+61', country: 'Australia' },
     { code: '+971', country: 'UAE' },
   ];
@@ -46,33 +46,67 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, onBack }) => {
   const fetchTherapistProfile = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/therapist-profile?therapist_id=${user.therapist_id}`);
+      // Try with therapist_id first, fallback to email for pending therapists
+      const url = user.therapist_id 
+        ? `/api/therapist-profile?therapist_id=${user.therapist_id}`
+        : `/api/therapist-profile?email=${encodeURIComponent(user.email)}`;
+      
+      const response = await fetch(url);
       const data = await response.json();
 
       if (data.success) {
         const profile = data.data;
         setName(profile.name || '');
-        setEmail(profile.contact_info || '');
+        setEmail(profile.contact_info || profile.email || '');
         
-        const phoneMatch = profile.phone_number?.match(/^(\+\d+)\s*(.+)$/);
+        // Extract country code and phone
+        const phoneStr = profile.phone_number || profile.phone || '';
+        const phoneMatch = phoneStr.match(/^(\+\d{1,3})\s*(.+)$/);
         if (phoneMatch) {
           setCountryCode(phoneMatch[1]);
           setPhone(phoneMatch[2]);
         } else {
-          setPhone(profile.phone_number || '');
+          setCountryCode('+91'); // Default to +91 if no country code found
+          setPhone(phoneStr);
         }
 
-        if (profile.specialization) {
-          const specs = profile.specialization.split(', ');
+        // Parse specializations
+        if (profile.specialization || profile.specializations) {
+          const specs = (profile.specialization || profile.specializations).split(', ');
           setSpecializations(specs);
           
-          const details: any = {};
+          // Parse specialization details if available
+          let parsedDetails: any = {};
+          if (profile.specialization_details) {
+            try {
+              const detailsArray = typeof profile.specialization_details === 'string'
+                ? JSON.parse(profile.specialization_details)
+                : profile.specialization_details;
+              
+              if (Array.isArray(detailsArray)) {
+                detailsArray.forEach((item: any) => {
+                  parsedDetails[item.name] = {
+                    price: item.price || '',
+                    description: item.description || ''
+                  };
+                });
+              }
+            } catch (e) {
+              console.error('Error parsing specialization details:', e);
+            }
+          }
+          
+          // Fill in missing specs with empty details
           specs.forEach((spec: string) => {
-            details[spec] = { price: '', description: '' };
+            if (!parsedDetails[spec]) {
+              parsedDetails[spec] = { price: '', description: '' };
+            }
           });
-          setSpecializationDetails(details);
+          
+          setSpecializationDetails(parsedDetails);
         }
 
+        setQualification(profile.qualification || '');
         setCurrentQualificationUrl(profile.qualification_pdf_url || '');
         setCurrentProfilePictureUrl(profile.profile_picture_url || '');
       }

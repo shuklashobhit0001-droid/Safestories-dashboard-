@@ -28,6 +28,8 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
   const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
   const [resetStep, setResetStep] = useState<'email' | 'otp' | 'password'>('email');
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+  const [canResend, setCanResend] = useState(false);
 
   const validatePassword = (pwd: string): boolean => {
     if (pwd.length < 8) return false;
@@ -36,6 +38,18 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
     if (!/[0-9]/.test(pwd)) return false;
     return true;
   };
+
+  // Resend timer effect
+  React.useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => {
+        setResendTimer(resendTimer - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (resendTimer === 0 && resetStep === 'otp') {
+      setCanResend(true);
+    }
+  }, [resendTimer, resetStep]);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,12 +136,45 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
       if (data.success) {
         setToast({ message: 'OTP sent to your email!', type: 'success' });
         setResetStep('otp');
+        setResendTimer(60); // 60 seconds countdown
+        setCanResend(false);
       } else {
         setPasswordError(data.error || 'Failed to send OTP');
       }
     } catch (error) {
       console.error('Error:', error);
       setPasswordError('Failed to send OTP. Please try again.');
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setPasswordError('');
+    setResettingPassword(true);
+    setCanResend(false);
+
+    try {
+      const response = await fetch('/api/forgot-password/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setToast({ message: 'OTP resent to your email!', type: 'success' });
+        setResendTimer(60); // Reset countdown
+        setResetOtp(''); // Clear previous OTP
+      } else {
+        setPasswordError(data.error || 'Failed to resend OTP');
+        setCanResend(true);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setPasswordError('Failed to resend OTP. Please try again.');
+      setCanResend(true);
     } finally {
       setResettingPassword(false);
     }
@@ -404,10 +451,33 @@ export const ChangePassword: React.FC<ChangePasswordProps> = ({ onBack, user }) 
                     required
                   />
                 </div>
+                
+                {/* Resend OTP Section */}
+                <div className="text-center">
+                  {resendTimer > 0 ? (
+                    <p className="text-sm text-gray-600">
+                      Resend OTP in <span className="font-semibold text-teal-700">{resendTimer}s</span>
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={resettingPassword || !canResend}
+                      className="text-sm font-semibold text-teal-700 hover:text-teal-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {resettingPassword ? 'Sending...' : 'Resend OTP'}
+                    </button>
+                  )}
+                </div>
+
                 <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={() => setResetStep('email')}
+                    onClick={() => {
+                      setResetStep('email');
+                      setResendTimer(0);
+                      setCanResend(false);
+                    }}
                     className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 font-medium"
                   >
                     Back

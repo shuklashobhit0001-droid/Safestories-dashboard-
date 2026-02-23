@@ -1,17 +1,19 @@
 import express from 'express';
-import multer from 'multer';
 import cors from 'cors';
+import fetch from 'node-fetch';
+import multer from 'multer';
 import { randomUUID } from 'crypto';
-import pool from './lib/db.js';
-import { convertToIST } from './lib/timezone.js';
-import { startDashboardApiBookingSync } from './lib/dashboardApiBookingSync.js';
-import { uploadFile } from './lib/minio.js';
+import pool from '../lib/db';
+import { convertToIST } from '../lib/timezone';
+import { startDashboardApiBookingSync } from './dashboardApiBookingSync';
+import { uploadFile } from '../lib/minio';
+import { sendOTPEmail, sendPasswordResetOTP } from '../lib/email';
 
 // Configure multer for memory storage
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 12 * 1024 * 1024, // 12MB limit
+    fileSize: 5 * 1024 * 1024, // 5MB limit (reasonable for profile pictures)
   }
 });
 
@@ -46,6 +48,37 @@ app.post('/api/login', async (req, res) => {
     if (result.rows.length > 0) {
       const user = result.rows[0];
       
+      // For therapists, check their approval status
+      if (user.role === 'therapist' && user.therapist_id) {
+        try {
+          // Check therapist status in therapists table
+          const therapistCheck = await pool.query(
+            'SELECT status FROM therapists WHERE therapist_id = $1',
+            [user.therapist_id]
+          );
+          
+          if (therapistCheck.rows.length > 0) {
+            const status = therapistCheck.rows[0].status;
+            user.profileStatus = status; // 'pending_review' or 'approved'
+            user.needsProfileCompletion = false;
+            console.log(`✅ Therapist ${user.therapist_id} status: ${status}`);
+          } else {
+            // Fallback: check therapist_details table
+            const detailsCheck = await pool.query(
+              'SELECT status FROM therapist_details WHERE LOWER(email) = LOWER($1) ORDER BY created_at DESC LIMIT 1',
+              [user.email]
+            );
+            
+            if (detailsCheck.rows.length > 0) {
+              user.profileStatus = detailsCheck.rows[0].status;
+              user.needsProfileCompletion = false;
+            }
+          }
+        } catch (statusError) {
+          console.error('Error checking therapist status:', statusError);
+        }
+      }
+      
       // Log therapist login
       if (user.role === 'therapist') {
         try {
@@ -54,7 +87,6 @@ app.post('/api/login', async (req, res) => {
              VALUES ($1, $2, $3, $4, $5, true)`,
             [user.therapist_id, username, 'login', `${username} logged into dashboard`, getCurrentISTTimestamp()]
           );
-          console.log('✅ Audit log created for login:', username, user.therapist_id);
         } catch (auditError) {
           console.error('❌ Failed to create audit log for login:', auditError);
         }
@@ -70,7 +102,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Verify password endpoint (for case history access and password change)
+// Verify password endpoint (for case history access)
 app.post('/api/verify-password', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -91,9 +123,826 @@ app.post('/api/verify-password', async (req, res) => {
   }
 });
 
+// Change password endpoint
+app.post('/api/change-password', async (req, res) => {
+  try {
+    const { userId, newPassword } = req.body;
+
+    if (!userId || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+    }
+
+    const result = await pool.query(
+      'UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2 RETURNING id, username',
+      [newPassword, userId]
+    );
+
+    if (result.rows.length > 0) {
+      res.json({ success: true, message: 'Password changed successfully' });
+    } else {
+      res.status(404).json({ success: false, error: 'User not found' });
+    }
+  } catch (error) {
+    console.error('Password change error:', error);
+    res.status(500).json({ success: false, error: 'Failed to change password' });
+  }
+});
+
+// Save new therapist request with OTP
+app.post('/api/new-therapist-requests', async (req, res) => {
+  try {
+    const { therapistName, whatsappNumber, email, specializations, specializationDetails } = req.body;
+
+    // Generate 6-digit OTP
+    const otpToken = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Set expiry to 24 hours from now
+    const otpExpiresAt = new Date();
+    otpExpiresAt.setHours(otpExpiresAt.getHours() + 24);
+
+    const result = await pool.query(
+      `INSERT INTO new_therapist_requests (therapist_name, whatsapp_number, email, specializations, specialization_details, otp_token, otp_expires_at, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+       RETURNING *`,
+      [therapistName, whatsappNumber, email, specializations, JSON.stringify(specializationDetails), otpToken, otpExpiresAt]
+    );
+
+    // Send OTP email to therapist
+    try {
+      await sendOTPEmail(email, therapistName, otpToken, otpExpiresAt);
+      console.log(`✅ Therapist onboarding OTP sent to: ${email}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send therapist onboarding email:', emailError);
+      // Continue anyway - OTP is saved in database
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error saving new therapist request:', error);
+    res.status(500).json({ success: false, error: 'Failed to save new therapist request' });
+  }
+});
+
+// Verify therapist OTP
+app.post('/api/verify-therapist-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, error: 'Email and OTP are required' });
+    }
+
+    const result = await pool.query(
+      `SELECT * FROM new_therapist_requests 
+       WHERE LOWER(email) = LOWER($1) AND otp_token = $2 AND status = 'pending'`,
+      [email, otp]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ success: false, error: 'Invalid email or OTP' });
+    }
+
+    const request = result.rows[0];
+
+    // Check if OTP is expired
+    const now = new Date();
+    const expiresAt = new Date(request.otp_expires_at);
+    
+    if (now > expiresAt) {
+      await pool.query(
+        `UPDATE new_therapist_requests SET status = 'expired' WHERE request_id = $1`,
+        [request.request_id]
+      );
+      return res.status(401).json({ success: false, error: 'OTP has expired' });
+    }
+
+    // Return therapist request data for pre-filling
+    let specializationDetails = [];
+    try {
+      specializationDetails = typeof request.specialization_details === 'string' 
+        ? JSON.parse(request.specialization_details || '[]')
+        : (Array.isArray(request.specialization_details) ? request.specialization_details : []);
+    } catch (parseError) {
+      console.error('Error parsing specialization_details:', parseError);
+      specializationDetails = [];
+    }
+    
+    res.json({ 
+      success: true, 
+      data: {
+        requestId: request.request_id,
+        name: request.therapist_name,
+        email: request.email,
+        phone: request.whatsapp_number,
+        specializations: request.specializations,
+        specializationDetails: specializationDetails
+      }
+    });
+  } catch (error) {
+    console.error('Error verifying OTP:', error);
+    res.status(500).json({ success: false, error: 'Failed to verify OTP' });
+  }
+});
+
+// Complete therapist profile
+app.post('/api/complete-therapist-profile', async (req, res) => {
+  try {
+    const { 
+      requestId,
+      name, 
+      email, 
+      phone, 
+      specializations, 
+      specializationDetails,
+      qualification,
+      qualificationPdfUrl,
+      profilePictureUrl,
+      password 
+    } = req.body;
+
+    console.log('📝 Complete profile request:', { requestId, name, email, phone, specializations });
+
+    if (!name || !email || !phone || !password) {
+      console.log('❌ Missing required fields');
+      return res.status(400).json({ success: false, error: 'All required fields must be provided' });
+    }
+
+    // Check if therapist details already exist for this email
+    console.log('🔍 Checking for existing details...');
+    const existingDetails = await pool.query(
+      `SELECT * FROM therapist_details WHERE LOWER(email) = LOWER($1)`,
+      [email]
+    );
+
+    if (existingDetails.rows.length > 0) {
+      console.log('❌ Therapist details already exist:', email);
+      return res.status(400).json({ success: false, error: 'Profile already submitted for this email' });
+    }
+
+    // Serialize specialization details as JSON
+    const specializationDetailsJson = specializationDetails ? JSON.stringify(specializationDetails) : '[]';
+    console.log('📦 Serialized specialization details:', specializationDetailsJson);
+
+    // Insert into therapist_details table
+    console.log('💾 Inserting into therapist_details table...');
+    console.log('Values:', {
+      requestId, name, email, phone, specializations,
+      specializationDetailsJson, qualification,
+      qualificationPdfUrl, profilePictureUrl, password
+    });
+    
+    const detailsResult = await pool.query(
+      `INSERT INTO therapist_details (
+        request_id, name, email, phone, specializations,
+        specialization_details, qualification, qualification_pdf_url,
+        profile_picture_url, password, status
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending_review')
+       RETURNING *`,
+      [
+        requestId, name, email, phone, specializations,
+        specializationDetailsJson, qualification || null,
+        qualificationPdfUrl || null, profilePictureUrl || null, password
+      ]
+    );
+
+    const details = detailsResult.rows[0];
+    console.log('✅ Therapist details saved:', details.id);
+
+    // Generate unique therapist_id
+    console.log('🔑 Generating therapist_id...');
+    const generateTherapistId = (name: string): string => {
+      const firstName = name.split(' ')[0].toLowerCase().replace(/[^a-z]/g, '');
+      const randomNum = Math.floor(1000 + Math.random() * 9000);
+      return `${firstName}${randomNum}`;
+    };
+    
+    let therapistId = generateTherapistId(name);
+    let attempts = 0;
+    while (attempts < 10) {
+      const existingId = await pool.query(
+        'SELECT therapist_id FROM therapists WHERE therapist_id = $1',
+        [therapistId]
+      );
+      if (existingId.rows.length === 0) break;
+      therapistId = generateTherapistId(name);
+      attempts++;
+    }
+    console.log('✅ Generated therapist_id:', therapistId);
+
+    // Create entry in therapists table with status='pending_review'
+    console.log('👨‍⚕️ Creating therapist entry...');
+    try {
+      await pool.query(`
+        INSERT INTO therapists (
+          therapist_id, name, contact_info, phone_number,
+          specialization, specialization_details,
+          qualification_pdf_url, profile_picture_url, status
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_review')
+      `, [
+        therapistId,
+        name,
+        email,
+        phone,
+        specializations,
+        specializationDetailsJson,
+        qualificationPdfUrl,
+        profilePictureUrl
+      ]);
+      console.log('✅ Therapist entry created with status: pending_review');
+    } catch (therapistError) {
+      console.error('⚠️ Error creating therapist entry:', therapistError);
+      throw therapistError; // This is critical, so throw error
+    }
+
+    // Create user account for login (email + password)
+    console.log('👤 Creating user account...');
+    try {
+      // Check if user already exists
+      const existingUser = await pool.query(
+        `SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
+        [email]
+      );
+
+      if (existingUser.rows.length === 0) {
+        // Create new user account with therapist_id
+        await pool.query(
+          `INSERT INTO users (username, password, name, email, role, full_name, phone, profile_picture_url, therapist_id, created_at)
+           VALUES ($1, $2, $3, $4, 'therapist', $5, $6, $7, $8, NOW())`,
+          [email, password, name, email, name, phone, profilePictureUrl, therapistId]
+        );
+        console.log('✅ User account created for:', email, 'with therapist_id:', therapistId);
+      } else {
+        // Update existing user with new password and therapist_id
+        await pool.query(
+          `UPDATE users SET password = $1, name = $2, full_name = $3, phone = $4, profile_picture_url = $5, therapist_id = $6
+           WHERE LOWER(email) = LOWER($7)`,
+          [password, name, name, phone, profilePictureUrl, therapistId, email]
+        );
+        console.log('✅ User account updated for:', email, 'with therapist_id:', therapistId);
+      }
+    } catch (userError) {
+      console.error('⚠️ Error creating user account:', userError);
+      throw userError; // This is critical, so throw error
+    }
+
+    // Update new_therapist_requests status
+    console.log('💾 Updating request status...');
+    await pool.query(
+      `UPDATE new_therapist_requests SET status = 'profile_submitted' WHERE request_id = $1`,
+      [requestId]
+    );
+    console.log('✅ Request status updated');
+
+    // Send data to n8n webhook
+    console.log('🔔 Sending data to webhook...');
+    try {
+      const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/e7daacaf-fc75-4842-82d8-bb7ba392d178';
+      const webhookPayload = {
+        id: details.id,
+        request_id: details.request_id,
+        therapist_id: therapistId,
+        name: details.name,
+        email: details.email,
+        phone: details.phone,
+        specializations: details.specializations,
+        specialization_details: details.specialization_details,
+        qualification: details.qualification,
+        qualification_pdf_url: details.qualification_pdf_url,
+        profile_picture_url: details.profile_picture_url,
+        status: details.status,
+        created_at: details.created_at,
+        updated_at: details.updated_at
+      };
+
+      const webhookResponse = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(webhookPayload)
+      });
+
+      if (webhookResponse.ok) {
+        console.log('✅ Webhook notification sent successfully');
+      } else {
+        console.error('⚠️ Webhook notification failed:', webhookResponse.status, webhookResponse.statusText);
+      }
+    } catch (webhookError) {
+      console.error('⚠️ Error sending webhook notification:', webhookError);
+      // Don't fail the entire request if webhook fails
+    }
+
+    console.log('🎉 Profile submission successful!');
+    res.json({ 
+      success: true, 
+      message: 'Profile submitted successfully! Your profile will be reviewed by admin within 5-10 days.',
+      detailsId: details.id 
+    });
+  } catch (error) {
+    console.error('❌ Error completing therapist profile:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error detail:', error.detail);
+    console.error('Error stack:', error.stack);
+    
+    // Send more specific error message
+    const errorMessage = error.code === '23505' ? 'Email already exists' :
+                        error.code === '23503' ? 'Invalid request ID' :
+                        error.message || 'Failed to complete profile';
+    
+    res.status(500).json({ success: false, error: errorMessage, details: error.message });
+  }
+});
+
+// Check if therapist details exist
+app.get('/api/check-therapist-details', async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email) {
+      return res.status(400).json({ exists: false, error: 'Email is required' });
+    }
+
+    const result = await pool.query(
+      `SELECT id FROM therapist_details WHERE LOWER(email) = LOWER($1)`,
+      [email]
+    );
+
+    res.json({ exists: result.rows.length > 0 });
+  } catch (error) {
+    console.error('Error checking therapist details:', error);
+    res.status(500).json({ exists: false, error: 'Failed to check profile status' });
+  }
+});
+
+// Get therapist profile
+app.get('/api/therapist-profile', async (req, res) => {
+  try {
+    const { therapist_id, email } = req.query;
+
+    if (!therapist_id && !email) {
+      return res.status(400).json({ error: 'Therapist ID or email is required' });
+    }
+
+    // First try to get from therapists table (approved therapists)
+    let result;
+    if (therapist_id) {
+      result = await pool.query(
+        `SELECT * FROM therapists WHERE therapist_id = $1`,
+        [therapist_id]
+      );
+    }
+
+    // If not found in therapists table, check therapist_details (pending approval)
+    if (!result || result.rows.length === 0) {
+      if (email) {
+        result = await pool.query(
+          `SELECT * FROM therapist_details WHERE LOWER(email) = LOWER($1) ORDER BY created_at DESC LIMIT 1`,
+          [email]
+        );
+        
+        if (result.rows.length > 0) {
+          // Map therapist_details fields to match therapists table structure
+          const details = result.rows[0];
+          const mappedData = {
+            therapist_id: null,
+            name: details.name,
+            contact_info: details.email,
+            email: details.email,
+            phone_number: details.phone,
+            specialization: details.specializations,
+            specialization_details: details.specialization_details,
+            qualification: details.qualification,
+            qualification_pdf_url: details.qualification_pdf_url,
+            profile_picture_url: details.profile_picture_url,
+            status: details.status
+          };
+          return res.json({ success: true, data: mappedData });
+        }
+      }
+    }
+
+    if (!result || result.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching therapist profile:', error);
+    res.status(500).json({ error: 'Failed to fetch therapist profile' });
+  }
+});
+
+// Upload file endpoint (profile picture or qualification PDF)
+app.post('/api/upload-file', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      console.error('❌ Multer error:', err);
+      return res.status(400).json({ 
+        success: false, 
+        error: `File upload error: ${err.message}` 
+      });
+    } else if (err) {
+      console.error('❌ Unknown upload error:', err);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'File upload failed' 
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    const { folder } = req.body; // 'profile-pictures' or 'qualification-pdfs'
+    
+    if (!folder || !['profile-pictures', 'qualification-pdfs'].includes(folder)) {
+      return res.status(400).json({ success: false, error: 'Invalid folder specified' });
+    }
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const originalName = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const fileName = `${timestamp}-${originalName}`;
+
+    // Upload to MinIO
+    const fileUrl = await uploadFile(
+      req.file.buffer,
+      fileName,
+      folder as 'profile-pictures' | 'qualification-pdfs',
+      req.file.mimetype
+    );
+
+    res.json({ success: true, url: fileUrl });
+  } catch (error) {
+    console.error('❌ Error uploading file:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to upload file';
+    res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// Update therapist profile
+app.put('/api/therapist-profile', async (req, res) => {
+  try {
+    const { 
+      therapist_id,
+      name, 
+      email, 
+      phone, 
+      specializations,
+      qualificationPdfUrl,
+      profilePictureUrl
+    } = req.body;
+
+    if (!therapist_id) {
+      return res.status(400).json({ error: 'Therapist ID is required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE therapists 
+       SET name = $1, contact_info = $2, phone_number = $3, specialization = $4,
+           qualification_pdf_url = $5, profile_picture_url = $6
+       WHERE therapist_id = $7
+       RETURNING *`,
+      [name, email, phone, specializations, qualificationPdfUrl, profilePictureUrl, therapist_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating therapist profile:', error);
+    res.status(500).json({ error: 'Failed to update therapist profile' });
+  }
+});
+
+// Update password
+app.post('/api/update-password', async (req, res) => {
+  try {
+    const { user_id, new_password } = req.body;
+
+    if (!user_id || !new_password) {
+      return res.status(400).json({ success: false, error: 'User ID and new password are required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE users SET password = $1 WHERE id = $2 RETURNING id`,
+      [new_password, user_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error updating password:', error);
+    res.status(500).json({ success: false, error: 'Failed to update password' });
+  }
+});
+
+// ==================== FORGOT PASSWORD ENDPOINTS ====================
+
+import crypto from 'crypto';
+
+// Helper function to generate 6-digit OTP
+function generateOTP(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Helper function to generate secure token
+function generateToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// 1. Send OTP for password reset
+app.post('/api/forgot-password/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+
+    // Validate email
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, error: 'Valid email is required' });
+    }
+
+    // Check if user exists
+    const userResult = await pool.query(
+      `SELECT id, username, full_name, email FROM users WHERE LOWER(email) = LOWER($1)`,
+      [email]
+    );
+
+    // For testing: Allow OTP for any email (even if not in database)
+    const user = userResult.rows.length > 0 
+      ? userResult.rows[0] 
+      : { id: null, username: 'User', full_name: 'User', email: email };
+
+    // Check rate limiting (max 3 requests per hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const attemptsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM password_reset_attempts 
+       WHERE LOWER(email) = LOWER($1) AND attempted_at > $2`,
+      [email, oneHourAgo]
+    );
+
+    const attemptCount = parseInt(attemptsResult.rows[0].count);
+    if (attemptCount >= 3) {
+      return res.status(429).json({ 
+        success: false, 
+        error: 'Too many requests. Please try again in an hour.' 
+      });
+    }
+
+    // Generate OTP and token
+    const otp = generateOTP();
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store in database
+    await pool.query(
+      `INSERT INTO password_reset_tokens 
+       (user_id, email, otp, token, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [user.id, email, otp, token, expiresAt, ipAddress, req.headers['user-agent']]
+    );
+
+    // Log attempt
+    await pool.query(
+      `INSERT INTO password_reset_attempts (email, ip_address, success)
+       VALUES ($1, $2, true)`,
+      [email, ipAddress]
+    );
+
+    // Send email
+    try {
+      await sendPasswordResetOTP(email, user.full_name || user.username, otp, expiresAt);
+      
+      res.json({ 
+        success: true, 
+        message: 'OTP sent to your email',
+        expiresIn: 600 // 10 minutes in seconds
+      });
+    } catch (emailError) {
+      console.error('❌ Failed to send email:', emailError);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to send OTP email. Please try again.' 
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error in send-otp:', error);
+    res.status(500).json({ success: false, error: 'Failed to process request' });
+  }
+});
+
+// 2. Verify OTP
+app.post('/api/forgot-password/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    // Validate input
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, error: 'Email and OTP are required' });
+    }
+
+    // Find OTP record
+    const result = await pool.query(
+      `SELECT * FROM password_reset_tokens 
+       WHERE LOWER(email) = LOWER($1) AND otp = $2 AND used = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [email, otp]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid OTP' });
+    }
+
+    const resetRecord = result.rows[0];
+
+    // Check if expired
+    if (new Date() > new Date(resetRecord.expires_at)) {
+      console.log('❌ Expired OTP for:', email);
+      return res.status(410).json({ success: false, error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Mark as verified (but not used yet)
+    await pool.query(
+      `UPDATE password_reset_tokens SET verified = true WHERE id = $1`,
+      [resetRecord.id]
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'OTP verified successfully',
+      resetToken: resetRecord.token 
+    });
+
+  } catch (error) {
+    console.error('❌ Error in verify-otp:', error);
+    res.status(500).json({ success: false, error: 'Failed to verify OTP' });
+  }
+});
+
+// 3. Reset password
+app.post('/api/forgot-password/reset', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    // Validate input
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Email, OTP, and new password are required' });
+    }
+
+    // Validate password strength
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({ success: false, error: 'Password must contain at least one uppercase letter' });
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      return res.status(400).json({ success: false, error: 'Password must contain at least one lowercase letter' });
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      return res.status(400).json({ success: false, error: 'Password must contain at least one number' });
+    }
+
+    // Find verified OTP record
+    const result = await pool.query(
+      `SELECT * FROM password_reset_tokens 
+       WHERE LOWER(email) = LOWER($1) AND otp = $2 AND verified = true AND used = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [email, otp]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid or unverified OTP' });
+    }
+
+    const resetRecord = result.rows[0];
+
+    // Check if expired
+    if (new Date() > new Date(resetRecord.expires_at)) {
+      console.log('❌ Expired OTP for:', email);
+      return res.status(410).json({ success: false, error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Update password
+    const updateResult = await pool.query(
+      `UPDATE users SET password = $1 WHERE id = $2 RETURNING id, username`,
+      [newPassword, resetRecord.user_id]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Mark token as used
+    await pool.query(
+      `UPDATE password_reset_tokens SET used = true WHERE id = $1`,
+      [resetRecord.id]
+    );
+
+    // Invalidate all other reset tokens for this user
+    await pool.query(
+      `UPDATE password_reset_tokens SET used = true 
+       WHERE user_id = $1 AND id != $2 AND used = false`,
+      [resetRecord.user_id, resetRecord.id]
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Password reset successfully. You can now login with your new password.' 
+    });
+
+  } catch (error) {
+    console.error('❌ Error in reset password:', error);
+    res.status(500).json({ success: false, error: 'Failed to reset password' });
+  }
+});
+
+// ==================== END FORGOT PASSWORD ENDPOINTS ====================
+
+// Get admin profile
+app.get('/api/admin-profile', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+
+    if (!user_id) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, username, full_name, email, phone, profile_picture_url FROM users WHERE id = $1 AND role = 'admin'`,
+      [user_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching admin profile:', error);
+    res.status(500).json({ error: 'Failed to fetch admin profile' });
+  }
+});
+
+// Update admin profile
+app.put('/api/admin-profile', async (req, res) => {
+  try {
+    const { 
+      user_id,
+      name, 
+      email, 
+      phone, 
+      profilePictureUrl
+    } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE users 
+       SET full_name = $1, email = $2, phone = $3, profile_picture_url = $4
+       WHERE id = $5 AND role = 'admin'
+       RETURNING id, username, full_name, email, phone, profile_picture_url`,
+      [name, email, phone, profilePictureUrl, user_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating admin profile:', error);
+    res.status(500).json({ error: 'Failed to update admin profile' });
+  }
+});
+
 // Get live sessions count
 app.get('/api/live-sessions-count', async (req, res) => {
   try {
+    // Prevent caching of live session data
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const result = await pool.query(`
       SELECT booking_invitee_time
       FROM bookings
@@ -332,11 +1181,17 @@ app.get('/api/dashboard/bookings', async (req, res) => {
       try {
         const timeMatch = row.booking_invitee_time.match(/at\s+(\d+):(\d+)\s+([AP]M)\s+-\s+(\d+):(\d+)\s+([AP]M)/);
         
-        if (!timeMatch) return false;
+        if (!timeMatch) {
+          console.log('No time match for:', row.booking_invitee_time);
+          return false;
+        }
         
         const dateStr = row.booking_invitee_time.match(/(\w+),\s+(\w+)\s+(\d+),\s+(\d+)/);
         
-        if (!dateStr) return false;
+        if (!dateStr) {
+          console.log('No date match for:', row.booking_invitee_time);
+          return false;
+        }
         
         const month = dateStr[2];
         const day = parseInt(dateStr[3]);
@@ -372,8 +1227,22 @@ app.get('/api/dashboard/bookings', async (req, res) => {
         // Adjust for timezone offset (subtract because we want UTC)
         endDate.setMinutes(endDate.getMinutes() - timezoneOffset);
         
+        const isUpcoming = endDate > nowUTC;
+        
+        // Debug log for Aarohi
+        if (row.client_name && row.client_name.includes('Aarohi')) {
+          console.log('Aarohi debug:', {
+            raw: row.booking_invitee_time,
+            endHour, endMinute, endPeriod,
+            timezoneOffset,
+            endDate: endDate.toISOString(),
+            nowUTC: nowUTC.toISOString(),
+            isUpcoming
+          });
+        }
+        
         // Session is upcoming if end time hasn't passed
-        return endDate > nowUTC;
+        return isUpcoming;
       } catch (error) {
         console.error('Error parsing booking time:', error, row.booking_invitee_time);
         return false;
@@ -396,6 +1265,11 @@ app.get('/api/dashboard/bookings', async (req, res) => {
 // Get all clients
 app.get('/api/clients', async (req, res) => {
   try {
+    // Prevent caching of client data
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const result = await pool.query(`
       SELECT 
         invitee_name,
@@ -688,350 +1562,14 @@ app.post('/api/booking-requests', async (req, res) => {
   }
 });
 
-// Save new therapist request
-app.post('/api/new-therapist-requests', async (req, res) => {
-  try {
-    const { therapistName, whatsappNumber, email, specializations, specializationDetails } = req.body;
-
-    // Generate 6-digit OTP
-    const otpToken = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Set expiry to 24 hours from now
-    const otpExpiresAt = new Date();
-    otpExpiresAt.setHours(otpExpiresAt.getHours() + 24);
-
-    const result = await pool.query(
-      `INSERT INTO new_therapist_requests (therapist_name, whatsapp_number, email, specializations, specialization_details, otp_token, otp_expires_at, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-       RETURNING *`,
-      [therapistName, whatsappNumber, email, specializations, JSON.stringify(specializationDetails), otpToken, otpExpiresAt]
-    );
-
-    // TODO: Send email with OTP to therapist
-    // Email should contain: login link with token
-    // Link format: https://yourdomain.com/login?token={otpToken}&email={email}
-    console.log(`📧 OTP for ${email}: ${otpToken} (expires at ${otpExpiresAt})`);
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error saving new therapist request:', error);
-    res.status(500).json({ success: false, error: 'Failed to save new therapist request' });
-  }
-});
-
-// Verify therapist OTP
-app.post('/api/verify-therapist-otp', async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-
-    if (!email || !otp) {
-      return res.status(400).json({ success: false, error: 'Email and OTP are required' });
-    }
-
-    const result = await pool.query(
-      `SELECT * FROM new_therapist_requests 
-       WHERE LOWER(email) = LOWER($1) AND otp_token = $2 AND status = 'pending'`,
-      [email, otp]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ success: false, error: 'Invalid email or OTP' });
-    }
-
-    const request = result.rows[0];
-
-    // Check if OTP is expired
-    const now = new Date();
-    const expiresAt = new Date(request.otp_expires_at);
-    
-    if (now > expiresAt) {
-      await pool.query(
-        `UPDATE new_therapist_requests SET status = 'expired' WHERE request_id = $1`,
-        [request.request_id]
-      );
-      return res.status(401).json({ success: false, error: 'OTP has expired' });
-    }
-
-    // Return therapist request data for pre-filling
-    res.json({ 
-      success: true, 
-      data: {
-        requestId: request.request_id,
-        name: request.therapist_name,
-        email: request.email,
-        phone: request.whatsapp_number,
-        specializations: request.specializations,
-        specializationDetails: JSON.parse(request.specialization_details || '[]')
-      }
-    });
-  } catch (error) {
-    console.error('Error verifying OTP:', error);
-    res.status(500).json({ success: false, error: 'Failed to verify OTP' });
-  }
-});
-
-// Complete therapist profile
-app.post('/api/complete-therapist-profile', async (req, res) => {
-  try {
-    const { 
-      requestId,
-      name, 
-      email, 
-      phone, 
-      specializations, 
-      specializationDetails,
-      qualification,
-      qualificationPdfUrl,
-      profilePictureUrl,
-      password 
-    } = req.body;
-
-    if (!name || !email || !phone || !password) {
-      return res.status(400).json({ success: false, error: 'All required fields must be provided' });
-    }
-
-    // Check if therapist already exists
-    const existingTherapist = await pool.query(
-      `SELECT * FROM therapists WHERE LOWER(email) = LOWER($1)`,
-      [email]
-    );
-
-    if (existingTherapist.rows.length > 0) {
-      return res.status(400).json({ success: false, error: 'Therapist with this email already exists' });
-    }
-
-    // Create therapist entry
-    const therapistResult = await pool.query(
-      `INSERT INTO therapists (
-        name, email, phone_number, specializations, 
-        qualification_pdf_url, profile_picture_url, is_profile_complete
-      )
-       VALUES ($1, $2, $3, $4, $5, $6, true)
-       RETURNING *`,
-      [name, email, phone, specializations, qualificationPdfUrl || null, profilePictureUrl || null]
-    );
-
-    const therapist = therapistResult.rows[0];
-
-    // Create user entry for login
-    const username = email.split('@')[0]; // Use email prefix as username
-    await pool.query(
-      `INSERT INTO users (username, password, role, therapist_id, full_name)
-       VALUES ($1, $2, 'therapist', $3, $4)`,
-      [username, password, therapist.therapist_id, name]
-    );
-
-    // Update new_therapist_requests status
-    await pool.query(
-      `UPDATE new_therapist_requests SET status = 'completed' WHERE request_id = $1`,
-      [requestId]
-    );
-
-    res.json({ success: true, message: 'Profile created successfully', therapistId: therapist.therapist_id });
-  } catch (error) {
-    console.error('Error completing therapist profile:', error);
-    res.status(500).json({ success: false, error: 'Failed to complete profile' });
-  }
-});
-
-// Get therapist profile
-app.get('/api/therapist-profile', async (req, res) => {
-  try {
-    const { therapist_id } = req.query;
-
-    if (!therapist_id) {
-      return res.status(400).json({ error: 'Therapist ID is required' });
-    }
-
-    const result = await pool.query(
-      `SELECT * FROM therapists WHERE therapist_id = $1`,
-      [therapist_id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Therapist not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error fetching therapist profile:', error);
-    res.status(500).json({ error: 'Failed to fetch therapist profile' });
-  }
-});
-
-// Upload file endpoint (profile picture or qualification PDF)
-app.post('/api/upload-file', upload.single('file'), async (req, res) => {
-  try {
-    console.log('📤 Upload file request received');
-    
-    if (!req.file) {
-      console.log('❌ No file in request');
-      return res.status(400).json({ success: false, error: 'No file uploaded' });
-    }
-
-    console.log('📁 File details:', {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size
-    });
-
-    const { folder } = req.body; // 'profile-pictures' or 'qualification-pdfs'
-    
-    if (!folder || !['profile-pictures', 'qualification-pdfs'].includes(folder)) {
-      console.log('❌ Invalid folder:', folder);
-      return res.status(400).json({ success: false, error: 'Invalid folder specified' });
-    }
-
-    console.log('📂 Target folder:', folder);
-
-    // Generate unique filename
-    const timestamp = Date.now();
-    const originalName = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const fileName = `${timestamp}-${originalName}`;
-
-    console.log('🔄 Uploading to MinIO:', fileName);
-
-    // Upload to MinIO
-    const fileUrl = await uploadFile(
-      req.file.buffer,
-      fileName,
-      folder as 'profile-pictures' | 'qualification-pdfs',
-      req.file.mimetype
-    );
-
-    console.log('✅ Upload successful:', fileUrl);
-    res.json({ success: true, url: fileUrl });
-  } catch (error) {
-    console.error('❌ Error uploading file:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to upload file';
-    res.status(500).json({ success: false, error: errorMessage });
-  }
-});
-
-// Update therapist profile
-app.put('/api/therapist-profile', async (req, res) => {
-  try {
-    const { 
-      therapist_id,
-      name, 
-      email, 
-      phone, 
-      specializations,
-      qualificationPdfUrl,
-      profilePictureUrl
-    } = req.body;
-
-    if (!therapist_id) {
-      return res.status(400).json({ error: 'Therapist ID is required' });
-    }
-
-    const result = await pool.query(
-      `UPDATE therapists 
-       SET name = $1, email = $2, phone_number = $3, specializations = $4,
-           qualification_pdf_url = $5, profile_picture_url = $6
-       WHERE therapist_id = $7
-       RETURNING *`,
-      [name, email, phone, specializations, qualificationPdfUrl, profilePictureUrl, therapist_id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Therapist not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error updating therapist profile:', error);
-    res.status(500).json({ error: 'Failed to update therapist profile' });
-  }
-});
-
-// Get admin profile
-app.get('/api/admin-profile', async (req, res) => {
-  try {
-    const { user_id } = req.query;
-
-    if (!user_id) {
-      return res.status(400).json({ error: 'User ID is required' });
-    }
-
-    const result = await pool.query(
-      `SELECT id, username, full_name, email, phone, profile_picture_url FROM users WHERE id = $1 AND role = 'admin'`,
-      [user_id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Admin user not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error fetching admin profile:', error);
-    res.status(500).json({ error: 'Failed to fetch admin profile' });
-  }
-});
-
-// Update admin profile
-app.put('/api/admin-profile', async (req, res) => {
-  try {
-    const { 
-      user_id,
-      name, 
-      email, 
-      phone, 
-      profilePictureUrl
-    } = req.body;
-
-    if (!user_id) {
-      return res.status(400).json({ error: 'User ID is required' });
-    }
-
-    const result = await pool.query(
-      `UPDATE users 
-       SET full_name = $1, email = $2, phone = $3, profile_picture_url = $4
-       WHERE id = $5 AND role = 'admin'
-       RETURNING id, username, full_name, email, phone, profile_picture_url`,
-      [name, email, phone, profilePictureUrl, user_id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Admin user not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error updating admin profile:', error);
-    res.status(500).json({ error: 'Failed to update admin profile' });
-  }
-});
-
-// Update password
-app.post('/api/update-password', async (req, res) => {
-  try {
-    const { user_id, new_password } = req.body;
-
-    if (!user_id || !new_password) {
-      return res.status(400).json({ success: false, error: 'User ID and new password are required' });
-    }
-
-    const result = await pool.query(
-      `UPDATE users SET password = $1 WHERE id = $2 RETURNING id`,
-      [new_password, user_id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-
-    res.json({ success: true, message: 'Password updated successfully' });
-  } catch (error) {
-    console.error('Error updating password:', error);
-    res.status(500).json({ success: false, error: 'Failed to update password' });
-  }
-});
-
 // Get therapists live status
 app.get('/api/therapists-live-status', async (req, res) => {
   try {
+    // Prevent caching of live status data
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const result = await pool.query(`
       SELECT DISTINCT booking_host_name, booking_invitee_time
       FROM bookings
@@ -1220,7 +1758,7 @@ app.get('/api/therapist-details', async (req, res) => {
 app.get('/api/client-details', async (req, res) => {
   try {
     const phones = req.query.phone;
-    const email = req.query.email;
+    const email = typeof req.query.email === 'string' ? req.query.email : undefined;
 
     if (!email && !phones) {
       return res.status(400).json({ error: 'Client email or phone is required' });
@@ -1231,7 +1769,7 @@ app.get('/api/client-details', async (req, res) => {
     let allPhones: string[] = [];
 
     if (email) {
-      allEmails.push(email as string);
+      allEmails.push(email);
       // Get all phones for this email
       const phonesResult = await pool.query(
         'SELECT DISTINCT invitee_phone FROM bookings WHERE invitee_email = $1 AND invitee_phone IS NOT NULL',
@@ -1242,11 +1780,13 @@ app.get('/api/client-details', async (req, res) => {
 
     if (phones) {
       const phoneArray = Array.isArray(phones) ? phones : [phones];
-      allPhones.push(...phoneArray.filter(p => !allPhones.includes(p as string)));
+      const stringPhones = phoneArray.filter((p): p is string => typeof p === 'string');
+      allPhones.push(...stringPhones.filter(p => !allPhones.includes(p)));
       
       // Get email for these phones if not already provided
       if (!email) {
         for (const phone of phoneArray) {
+          if (typeof phone !== 'string') continue;
           const emailResult = await pool.query(
             'SELECT DISTINCT invitee_email FROM bookings WHERE invitee_phone = $1 AND invitee_email IS NOT NULL LIMIT 1',
             [phone]
@@ -1337,6 +1877,11 @@ app.get('/api/client-details', async (req, res) => {
 // Get therapist stats
 app.get('/api/therapist-stats', async (req, res) => {
   try {
+    // Prevent caching of stats data
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const { therapist_id, start, end } = req.query;
 
     if (!therapist_id) {
@@ -1367,10 +1912,6 @@ app.get('/api/therapist-stats', async (req, res) => {
 
     const hasDateFilter = start && end;
 
-    console.log('🔍 [Therapist Stats] Therapist:', therapist.name);
-    console.log('🔍 [Therapist Stats] First name for query:', therapistFirstName);
-    console.log('🔍 [Therapist Stats] Has date filter:', hasDateFilter, start, end);
-
     // Calculate last month date range
     const now = new Date();
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -1387,8 +1928,6 @@ app.get('/api/therapist-stats', async (req, res) => {
           'SELECT COUNT(*) as total FROM bookings WHERE booking_host_name ILIKE $1',
           [`%${therapistFirstName}%`]
         );
-
-    console.log('📊 [Therapist Stats] Bookings count:', bookings.rows[0].total);
 
     // Sessions Completed - count ALL completed sessions where session date has passed
     const sessionsCompleted = hasDateFilter
@@ -1407,8 +1946,6 @@ app.get('/api/therapist-stats', async (req, res) => {
            AND booking_status NOT IN ($2, $3, $4, $5)`,
           [`%${therapistFirstName}%`, 'cancelled', 'canceled', 'no_show', 'no show']
         );
-
-    console.log('📊 [Therapist Stats] Sessions completed count:', sessionsCompleted.rows[0].total);
 
     const noShows = hasDateFilter
       ? await pool.query(
@@ -1456,11 +1993,59 @@ app.get('/api/therapist-stats', async (req, res) => {
         booking_start_at as booking_date
       FROM bookings
       WHERE booking_host_name ILIKE $1
-        AND booking_start_at + INTERVAL '50 minutes' >= NOW()
         AND booking_status NOT IN ('cancelled', 'canceled', 'no_show', 'no show')
       ORDER BY booking_start_at ASC
-      LIMIT 10
     `, [`%${therapistFirstName}%`]);
+
+    // Filter upcoming sessions based on booking_invitee_time
+    const nowUTC = new Date();
+    const upcomingBookings = upcomingResult.rows.filter(row => {
+      const timeMatch = row.session_timings.match(/at\s+(\d+):(\d+)\s+([AP]M)\s+-\s+(\d+):(\d+)\s+([AP]M)/);
+      
+      if (timeMatch) {
+        const dateStr = row.session_timings.match(/(\w+),\s+(\w+)\s+(\d+),\s+(\d+)/);
+        
+        if (dateStr) {
+          const month = dateStr[2];
+          const day = parseInt(dateStr[3]);
+          const year = parseInt(dateStr[4]);
+          
+          // Parse end time
+          let endHour = parseInt(timeMatch[4]);
+          const endMinute = parseInt(timeMatch[5]);
+          const endPeriod = timeMatch[6];
+          
+          // Convert to 24-hour format
+          if (endPeriod === 'PM' && endHour !== 12) endHour += 12;
+          if (endPeriod === 'AM' && endHour === 12) endHour = 0;
+          
+          // Parse timezone offset
+          const timezoneMatch = row.session_timings.match(/GMT([+-])(\d+):(\d+)/);
+          let timezoneOffset = 330; // Default to IST (+5:30)
+          
+          if (timezoneMatch) {
+            const sign = timezoneMatch[1] === '+' ? 1 : -1;
+            const hours = parseInt(timezoneMatch[2]);
+            const minutes = parseInt(timezoneMatch[3]);
+            timezoneOffset = sign * (hours * 60 + minutes);
+          }
+          
+          // Create date in UTC
+          const monthMap: { [key: string]: number } = {
+            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+          };
+          
+          const endDate = new Date(Date.UTC(year, monthMap[month], day, endHour, endMinute));
+          // Adjust for timezone offset (subtract because we want UTC)
+          endDate.setMinutes(endDate.getMinutes() - timezoneOffset);
+          
+          // Session is upcoming if end time hasn't passed
+          return endDate > nowUTC;
+        }
+      }
+      return false;
+    }).slice(0, 10);
 
     res.json({
       therapist: {
@@ -1476,7 +2061,7 @@ app.get('/api/therapist-stats', async (req, res) => {
         lastMonthNoShows: parseInt(lastMonthNoShows.rows[0].total) || 0,
         lastMonthCancelled: parseInt(lastMonthCancelled.rows[0].total) || 0
       },
-      upcomingBookings: upcomingResult.rows.map(booking => ({
+      upcomingBookings: upcomingBookings.map(booking => ({
         booking_id: booking.booking_id,
         client_name: booking.client_name,
         therapy_type: booking.session_name,
@@ -1736,6 +2321,15 @@ app.get('/api/client-appointments', async (req, res) => {
           b.booking_mode as mode,
           b.booking_start_at as booking_date,
           b.booking_status,
+          b.invitee_payment_amount,
+          b.emergency_contact_name,
+          b.emergency_contact_relation,
+          b.emergency_contact_number,
+          b.invitee_age,
+          b.invitee_gender,
+          b.invitee_occupation,
+          b.invitee_marital_status,
+          b.clinical_profile,
           CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
@@ -1750,6 +2344,15 @@ app.get('/api/client-appointments', async (req, res) => {
           b.booking_mode as mode,
           b.booking_start_at as booking_date,
           b.booking_status,
+          b.invitee_payment_amount,
+          b.emergency_contact_name,
+          b.emergency_contact_relation,
+          b.emergency_contact_number,
+          b.invitee_age,
+          b.invitee_gender,
+          b.invitee_occupation,
+          b.invitee_marital_status,
+          b.clinical_profile,
           CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
@@ -1770,7 +2373,16 @@ app.get('/api/client-appointments', async (req, res) => {
       mode: row.mode ? row.mode.replace(/\s*\(.*?\)\s*/g, '').split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Google Meet',
       has_session_notes: row.has_session_notes,
       booking_status: row.booking_status,
-      booking_date: row.booking_date
+      booking_date: row.booking_date,
+      invitee_payment_amount: row.invitee_payment_amount,
+      emergency_contact_name: row.emergency_contact_name,
+      emergency_contact_relation: row.emergency_contact_relation,
+      emergency_contact_number: row.emergency_contact_number,
+      invitee_age: row.invitee_age,
+      invitee_gender: row.invitee_gender,
+      invitee_occupation: row.invitee_occupation,
+      invitee_marital_status: row.invitee_marital_status,
+      clinical_profile: row.clinical_profile
     }));
 
     res.json({ appointments });
@@ -1782,7 +2394,6 @@ app.get('/api/client-appointments', async (req, res) => {
 
 // Transfer client endpoint
 app.post('/api/transfer-client', async (req, res) => {
-  console.log('Transfer client API called');
   
   try {
     const {
@@ -1795,8 +2406,6 @@ app.post('/api/transfer-client', async (req, res) => {
       transferredByAdminName,
       reason
     } = req.body;
-
-    console.log('Transfer data:', { clientName, fromTherapistName, toTherapistId });
 
     // Get new therapist details
     const therapistResult = await pool.query(
@@ -1828,8 +2437,6 @@ app.post('/api/transfer-client', async (req, res) => {
       [newTherapist.name, toTherapistId, clientEmail || '', clientPhone || '', fromTherapistName]
     );
     
-    console.log(`Updated ${updateResult.rowCount} bookings for client transfer`);
-
     // Insert transfer record
     await pool.query(
       `INSERT INTO client_transfer_history 
@@ -1858,8 +2465,6 @@ app.post('/api/transfer-client', async (req, res) => {
        `Transferred ${clientName} from ${fromTherapistName} to ${newTherapist.name}`, clientName, getCurrentISTTimestamp()]
     );
 
-    console.log('Database insert successful');
-
     // Trigger n8n webhook
     const webhookData = {
       clientName,
@@ -1874,15 +2479,12 @@ app.post('/api/transfer-client', async (req, res) => {
       timestamp: new Date().toISOString()
     };
     const webhookUrl = `https://n8n.srv1169280.hstgr.cloud/webhook/efc4396f-401b-4d46-bfdb-e990a3ac3846?${new URLSearchParams(webhookData as any).toString()}`;
-    console.log('Calling webhook:', webhookUrl);
     
     try {
       const webhookResponse = await fetch(webhookUrl, {
         method: 'GET'
       });
-      console.log('Webhook status:', webhookResponse.status);
       const webhookResponseData = await webhookResponse.text();
-      console.log('Webhook response:', webhookResponseData);
     } catch (webhookError) {
       console.error('Webhook error:', webhookError);
     }
@@ -1919,7 +2521,6 @@ app.post('/api/transfer-client', async (req, res) => {
 
 
 
-    console.log('Sending success response');
     res.json({ success: true, message: 'Client transferred successfully' });
   } catch (error) {
     console.error('Error transferring client:', error);
@@ -1963,7 +2564,6 @@ app.post('/api/audit-logs', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
       [therapist_id, therapist_name, action_type, action_description, client_name, ip_address, getCurrentISTTimestamp()]
     );
-    console.log('✅ Manual audit log created:', action_type, therapist_name);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Error creating audit log:', error);
@@ -1983,7 +2583,6 @@ app.post('/api/logout', async (req, res) => {
            VALUES ($1, $2, $3, $4, $5, true)`,
           [user.therapist_id, user.username, 'logout', `${user.username} logged out`, getCurrentISTTimestamp()]
         );
-        console.log('✅ Audit log created for logout:', user.username, user.therapist_id);
       } catch (auditError) {
         console.error('❌ Failed to create audit log for logout:', auditError);
       }
@@ -2178,6 +2777,7 @@ app.post('/api/bookings/cancel', async (req, res) => {
 app.get('/api/refunds', async (req, res) => {
   try {
     const { status } = req.query;
+    const statusStr = typeof status === 'string' ? status : '';
     
     let query = `
       SELECT 
@@ -2198,12 +2798,12 @@ app.get('/api/refunds', async (req, res) => {
     
     const params: any[] = [];
     
-    if (status && status !== 'all') {
-      if (status.toLowerCase() === 'pending') {
+    if (statusStr && statusStr !== 'all') {
+      if (statusStr.toLowerCase() === 'pending') {
         query += " AND LOWER(b.refund_status) = 'initiated'";
       } else {
         query += ' AND LOWER(b.refund_status) = LOWER($1)';
-        params.push(status);
+        params.push(statusStr);
       }
     }
     
@@ -2500,37 +3100,6 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
   }
 });
 
-// Get client's most recent therapy type
-app.get('/api/client-therapy-type', async (req, res) => {
-  try {
-    const { email, phone } = req.query;
-
-    if (!email && !phone) {
-      return res.status(400).json({ error: 'Email or phone is required' });
-    }
-
-    // Query to get the most recent booking's therapy type
-    const result = await pool.query(
-      `SELECT booking_resource_name as therapy_type
-       FROM bookings
-       WHERE (invitee_email = $1 OR invitee_phone = $2)
-       AND booking_status NOT IN ('cancelled', 'canceled')
-       ORDER BY booking_invitee_time DESC
-       LIMIT 1`,
-      [email, phone]
-    );
-
-    if (result.rows.length > 0) {
-      res.json({ therapy_type: result.rows[0].therapy_type });
-    } else {
-      res.json({ therapy_type: 'Individual Therapy' });
-    }
-  } catch (error) {
-    console.error('Error fetching client therapy type:', error);
-    res.status(500).json({ error: 'Failed to fetch therapy type' });
-  }
-});
-
 // Send booking link webhook
 app.post('/api/send-booking-link', async (req, res) => {
   try {
@@ -2593,45 +3162,130 @@ app.post('/api/send-booking-link', async (req, res) => {
   }
 });
 
-// Check client session type (free consultation vs paid sessions)
-app.get('/api/client-session-type', async (req, res) => {
+// SOS Risk Assessments endpoints
+app.post('/api/sos-assessments', async (req, res) => {
   try {
-    const { client_id } = req.query;
-    
-    if (!client_id) {
-      return res.status(400).json({ error: 'client_id is required' });
+    const {
+      booking_id,
+      therapist_id,
+      therapist_name,
+      client_name,
+      session_name,
+      session_timings,
+      contact_info,
+      mode,
+      risk_assessment
+    } = req.body;
+
+    // Validate required fields
+    if (!risk_assessment || !risk_assessment.severity_level || !risk_assessment.risk_summary) {
+      return res.status(400).json({ error: 'Missing required risk assessment data' });
     }
 
-    // Check if client has any PAID session bookings (non-free-consultation)
-    const paidBookingsResult = await pool.query(
-      `SELECT booking_id FROM bookings 
-       WHERE invitee_phone = $1 
-       AND booking_resource_name NOT ILIKE '%free consultation%'
-       LIMIT 1`,
-      [client_id]
-    );
-    const hasPaidSessions = paidBookingsResult.rows.length > 0;
+    const insertQuery = `
+      INSERT INTO sos_risk_assessments (
+        booking_id, therapist_id, therapist_name, client_name, session_name,
+        session_timings, contact_info, mode,
+        risk_severity_level, risk_severity_description,
+        emotional_dysregulation, physical_harm_ideas, drug_alcohol_abuse,
+        suicidal_attempt, self_harm, delusions_hallucinations, impulsiveness,
+        severe_stress, social_isolation, concern_by_others, other_risk,
+        other_details, risk_summary
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+      ) RETURNING id, created_at
+    `;
 
-    // Check if client has free consultation bookings
-    const freeConsultBookingResult = await pool.query(
-      `SELECT booking_id FROM bookings 
-       WHERE invitee_phone = $1 
-       AND booking_resource_name ILIKE '%free consultation%'
-       LIMIT 1`,
-      [client_id]
-    );
-    const hasFreeConsultation = freeConsultBookingResult.rows.length > 0;
+    const values = [
+      booking_id,
+      therapist_id,
+      therapist_name,
+      client_name,
+      session_name,
+      session_timings,
+      contact_info,
+      mode,
+      risk_assessment.severity_level,
+      risk_assessment.severity_description,
+      risk_assessment.risk_indicators?.emotionalDysregulation || null,
+      risk_assessment.risk_indicators?.physicalHarmIdeas || null,
+      risk_assessment.risk_indicators?.drugAlcoholAbuse || null,
+      risk_assessment.risk_indicators?.suicidalAttempt || null,
+      risk_assessment.risk_indicators?.selfHarm || null,
+      risk_assessment.risk_indicators?.delusionsHallucinations || null,
+      risk_assessment.risk_indicators?.impulsiveness || null,
+      risk_assessment.risk_indicators?.severeStress || null,
+      risk_assessment.risk_indicators?.socialIsolation || null,
+      risk_assessment.risk_indicators?.concernByOthers || null,
+      risk_assessment.risk_indicators?.other || null,
+      risk_assessment.other_details || null,
+      risk_assessment.risk_summary
+    ];
 
-    res.json({ 
-      success: true, 
-      data: { 
-        hasPaidSessions, 
-        hasFreeConsultation 
-      } 
+    const result = await pool.query(insertQuery, values);
+    const assessmentId = result.rows[0].id;
+    const createdAt = result.rows[0].created_at;
+
+    res.status(201).json({
+      success: true,
+      assessment_id: assessmentId,
+      created_at: createdAt,
+      message: 'SOS Risk Assessment saved successfully'
     });
+
   } catch (error) {
-    console.error('Error checking client session type:', error);
-    res.status(500).json({ error: 'Failed to check client session type' });
+    console.error('Error saving SOS Risk Assessment:', error);
+    res.status(500).json({ 
+      error: 'Failed to save SOS Risk Assessment',
+      details: error.message 
+    });
+  }
+});
+
+// Update SOS Risk Assessment
+app.put('/api/sos-assessments', async (req, res) => {
+  try {
+    const { id } = req.query;
+    const { webhook_sent, webhook_response, status, reviewed_by, resolution_notes } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Assessment ID is required' });
+    }
+
+    const updateQuery = `
+      UPDATE sos_risk_assessments 
+      SET 
+        webhook_sent = COALESCE($2, webhook_sent),
+        webhook_response = COALESCE($3, webhook_response),
+        status = COALESCE($4, status),
+        reviewed_by = COALESCE($5, reviewed_by),
+        resolution_notes = COALESCE($6, resolution_notes),
+        updated_at = CURRENT_TIMESTAMP,
+        reviewed_at = CASE WHEN $5 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE reviewed_at END
+      WHERE id = $1
+      RETURNING *
+    `;
+
+    const values = [id, webhook_sent, webhook_response, status, reviewed_by, resolution_notes];
+    const result = await pool.query(updateQuery, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'SOS Risk Assessment not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      assessment: result.rows[0],
+      message: 'SOS Risk Assessment updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating SOS Risk Assessment:', error);
+    res.status(500).json({ 
+      error: 'Failed to update SOS Risk Assessment',
+      details: error.message 
+    });
   }
 });
 
@@ -2640,9 +3294,6 @@ app.post('/api/generate-sos-token', async (req, res) => {
   try {
     const { sos_assessment_id, client_email, client_phone, client_name, expires_in_days = 7 } = req.body;
 
-    console.log('📋 Token generation request:', { sos_assessment_id, client_email, client_phone, client_name });
-
-    // Validate required fields
     if (!sos_assessment_id) {
       return res.status(400).json({ error: 'Missing sos_assessment_id', received: req.body });
     }
@@ -2679,9 +3330,7 @@ app.post('/api/generate-sos-token', async (req, res) => {
       expiresAt
     ]);
 
-    console.log(`✅ SOS access token generated: ${token}`);
-
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       token: token,
       expires_at: expiresAt,
@@ -2690,56 +3339,304 @@ app.post('/api/generate-sos-token', async (req, res) => {
 
   } catch (error) {
     console.error('Error generating SOS token:', error);
-    return res.status(500).json({ 
+    res.status(500).json({ 
       error: 'Failed to generate SOS token',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error.message 
     });
   }
 });
 
-// Get booking details by booking_id
-app.get('/api/bookings', async (req, res) => {
+// Get SOS Documentation by Token (Public endpoint - no auth required)
+app.get('/api/sos-documentation', async (req, res) => {
   try {
-    const booking_id = Array.isArray(req.query.booking_id) 
-      ? req.query.booking_id[0] 
-      : req.query.booking_id;
+    const { token } = req.query;
 
-    if (!booking_id || typeof booking_id !== 'string') {
-      return res.status(400).json({ error: 'booking_id is required' });
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required' });
     }
 
-    const query = `
+    // 1. Validate token
+    const tokenQuery = `
       SELECT 
-        booking_id,
-        invitee_name,
-        invitee_email,
-        invitee_phone,
-        booking_resource_name,
-        booking_start_at,
-        booking_end_at,
-        booking_status
-      FROM bookings
-      WHERE booking_id = $1
+        sat.*,
+        sra.risk_severity_level,
+        sra.risk_severity_description,
+        sra.risk_summary,
+        sra.created_at as sos_created_at
+      FROM sos_access_tokens sat
+      LEFT JOIN sos_risk_assessments sra ON sat.sos_assessment_id = sra.id
+      WHERE sat.token = $1
     `;
+    
+    const tokenResult = await pool.query(tokenQuery, [token]);
 
-    const result = await pool.query(query, [booking_id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Booking not found' });
+    if (tokenResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid or expired token' });
     }
 
-    return res.status(200).json(result.rows);
+    const tokenData = tokenResult.rows[0];
+
+    // Check if token is active
+    if (!tokenData.is_active) {
+      return res.status(403).json({ error: 'This link has been revoked' });
+    }
+
+    // Check if token is expired
+    if (new Date(tokenData.expires_at) < new Date()) {
+      return res.status(403).json({ error: 'This link has expired' });
+    }
+
+    // 2. Fetch client documentation
+    const clientEmail = tokenData.client_email;
+    const clientPhone = tokenData.client_phone;
+    const clientName = tokenData.client_name;
+
+    // Get client_id from bookings table
+    const clientIdQuery = `
+      SELECT DISTINCT invitee_email || '_' || invitee_phone as client_id
+      FROM bookings
+      WHERE invitee_email = $1 AND invitee_phone = $2
+      LIMIT 1
+    `;
+    const clientIdResult = await pool.query(clientIdQuery, [clientEmail, clientPhone]);
+    const clientId = clientIdResult.rows[0]?.client_id || `${clientEmail}_${clientPhone}`;
+
+    // Get case history
+    const caseHistoryQuery = `
+      SELECT * FROM client_case_history
+      WHERE client_name = $1 OR client_id = $2
+      ORDER BY created_at DESC
+    `;
+    const caseHistory = await pool.query(caseHistoryQuery, [clientName, clientId]);
+
+    // Get all progress notes
+    const progressNotesQuery = `
+      SELECT * FROM client_progress_notes
+      WHERE client_name = $1 OR client_id = $2
+      ORDER BY session_date DESC
+    `;
+    const progressNotes = await pool.query(progressNotesQuery, [clientName, clientId]);
+
+    // Get therapy goals
+    const goalsQuery = `
+      SELECT * FROM client_therapy_goals
+      WHERE client_name = $1 OR client_id = $2
+      ORDER BY created_at DESC
+    `;
+    const goals = await pool.query(goalsQuery, [clientName, clientId]);
+
+    // Get session count
+    const sessionCountQuery = `
+      SELECT COUNT(*) as session_count
+      FROM bookings
+      WHERE invitee_email = $1 AND invitee_phone = $2
+      AND booking_status != 'cancelled'
+    `;
+    const sessionCount = await pool.query(sessionCountQuery, [clientEmail, clientPhone]);
+
+    // Get emergency contact from bookings
+    const emergencyContactQuery = `
+      SELECT invitee_question
+      FROM bookings
+      WHERE invitee_email = $1 AND invitee_phone = $2
+      AND invitee_question IS NOT NULL
+      ORDER BY booking_start_at DESC
+      LIMIT 1
+    `;
+    const emergencyContact = await pool.query(emergencyContactQuery, [clientEmail, clientPhone]);
+
+    // 3. Update access tracking
+    const updateAccessQuery = `
+      UPDATE sos_access_tokens
+      SET 
+        accessed_at = CASE WHEN accessed_at IS NULL THEN CURRENT_TIMESTAMP ELSE accessed_at END,
+        access_count = access_count + 1
+      WHERE token = $1
+    `;
+    await pool.query(updateAccessQuery, [token]);
+
+    // 4. Return all documentation
+    res.status(200).json({
+      success: true,
+      client: {
+        name: tokenData.client_name,
+        email: clientEmail,
+        phone: clientPhone,
+        session_count: sessionCount.rows[0]?.session_count || 0,
+        emergency_contact: emergencyContact.rows[0]?.invitee_question || null
+      },
+      sos_assessment: {
+        severity_level: tokenData.risk_severity_level,
+        severity_description: tokenData.risk_severity_description,
+        risk_summary: tokenData.risk_summary,
+        created_at: tokenData.sos_created_at
+      },
+      documentation: {
+        case_history: caseHistory.rows,
+        progress_notes: progressNotes.rows,
+        therapy_goals: goals.rows
+      },
+      token_info: {
+        created_at: tokenData.created_at,
+        expires_at: tokenData.expires_at,
+        access_count: tokenData.access_count + 1
+      }
+    });
 
   } catch (error) {
-    console.error('Error fetching booking:', error);
-    return res.status(500).json({ 
-      error: 'Failed to fetch booking',
-      details: error instanceof Error ? error.message : 'Unknown error'
+    console.error('Error fetching SOS documentation:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch documentation',
+      details: error.message 
     });
   }
 });
 
-// Get progress notes list (both new and old format)
+// ==================== THERAPY DOCUMENTATION ENDPOINTS ====================
+
+// 1. Receive session documentation from N8N
+app.post('/api/session-documentation', async (req, res) => {
+  try {
+    const { session_type, client_id, client_name, booking_id, case_history, progress_notes, therapy_goals } = req.body;
+
+    // If First Session - store case history
+    if (session_type === 'First Session' && case_history) {
+      await pool.query(`
+        INSERT INTO client_case_history (
+          client_id, client_name, booking_id,
+          age, gender_identity, education, occupation, primary_income,
+          marital_status, children, religion, socio_economic_status, city_state,
+          presenting_concerns, duration_onset, triggers_factors,
+          sleep, appetite, energy_levels, weight_changes, libido, menstrual_history,
+          family_history, genogram_url, developmental_history,
+          medical_history, medications, previous_mental_health, insight_level
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+        ON CONFLICT (client_id) DO UPDATE SET
+          age = EXCLUDED.age,
+          gender_identity = EXCLUDED.gender_identity,
+          education = EXCLUDED.education,
+          occupation = EXCLUDED.occupation,
+          updated_at = NOW()
+      `, [
+        client_id, client_name, booking_id,
+        case_history.age, case_history.gender_identity, case_history.education,
+        case_history.occupation, case_history.primary_income,
+        case_history.marital_status, case_history.children, case_history.religion,
+        case_history.socio_economic_status, case_history.city_state,
+        case_history.presenting_concerns, case_history.duration_onset, case_history.triggers_factors,
+        case_history.sleep, case_history.appetite, case_history.energy_levels,
+        case_history.weight_changes, case_history.libido, case_history.menstrual_history,
+        case_history.family_history, case_history.genogram_url, case_history.developmental_history,
+        case_history.medical_history, case_history.medications,
+        case_history.previous_mental_health, case_history.insight_level
+      ]);
+    }
+
+    // If Follow-up Session - store progress notes
+    if (session_type === 'Follow-up Session' && progress_notes) {
+      await pool.query(`
+        INSERT INTO client_progress_notes (
+          client_id, client_name, booking_id, session_number, session_date,
+          session_duration, session_mode,
+          client_report, direct_quotes,
+          client_presentation, presentation_tags,
+          techniques_used, homework_assigned,
+          client_reaction, reaction_tags, engagement_notes,
+          themes_patterns, progress_regression, clinical_concerns,
+          self_harm_mention, self_harm_details, risk_level,
+          risk_factors, protective_factors, safety_plan,
+          future_interventions, session_frequency,
+          therapist_name, therapist_signature, signature_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+      `, [
+        client_id, client_name, booking_id,
+        progress_notes.session_number, progress_notes.session_date,
+        progress_notes.session_duration, progress_notes.session_mode,
+        progress_notes.client_report, progress_notes.direct_quotes,
+        progress_notes.client_presentation, progress_notes.presentation_tags,
+        progress_notes.techniques_used, progress_notes.homework_assigned,
+        progress_notes.client_reaction, progress_notes.reaction_tags, progress_notes.engagement_notes,
+        progress_notes.themes_patterns, progress_notes.progress_regression, progress_notes.clinical_concerns,
+        progress_notes.self_harm_mention, progress_notes.self_harm_details, progress_notes.risk_level,
+        progress_notes.risk_factors, progress_notes.protective_factors, progress_notes.safety_plan,
+        progress_notes.future_interventions, progress_notes.session_frequency,
+        progress_notes.therapist_name, progress_notes.therapist_signature, progress_notes.signature_date
+      ]);
+    }
+
+    // Always store/update therapy goals
+    if (therapy_goals) {
+      await pool.query(`
+        INSERT INTO client_therapy_goals (
+          client_id, client_name, goal_description, current_stage, initiation_date
+        ) VALUES ($1, $2, $3, $4, $5)
+      `, [
+        client_id, client_name,
+        therapy_goals.goal_description,
+        therapy_goals.current_stage || 'Initiation',
+        new Date()
+      ]);
+      console.log('✅ Therapy goals stored');
+    }
+
+    res.json({ success: true, message: 'Session documentation stored successfully' });
+  } catch (error) {
+    console.error('❌ Error storing session documentation:', error);
+    res.status(500).json({ success: false, error: 'Failed to store session documentation' });
+  }
+});
+
+// 2. Get case history
+app.get('/api/case-history', async (req, res) => {
+  try {
+    const { client_id } = req.query;
+    
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM client_case_history WHERE client_id = $1',
+      [client_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ success: true, data: null });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching case history:', error);
+    res.status(500).json({ error: 'Failed to fetch case history' });
+  }
+});
+
+// 3. Update case history
+app.put('/api/case-history/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const result = await pool.query(`
+      UPDATE client_case_history 
+      SET ${Object.keys(updates).map((key, i) => `${key} = $${i + 2}`).join(', ')},
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `, [id, ...Object.values(updates)]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Case history not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating case history:', error);
+    res.status(500).json({ error: 'Failed to update case history' });
+  }
+});
+
+// 4. Get progress notes list
 app.get('/api/progress-notes', async (req, res) => {
   try {
     const { client_id } = req.query;
@@ -2759,6 +3656,7 @@ app.get('/api/progress-notes', async (req, res) => {
     );
 
     // Fetch from client_session_notes (old system)
+    // client_id is actually the phone number, so use it directly to match bookings
     const sessionNotesResult = await pool.query(
       `SELECT DISTINCT csn.note_id as id, csn.session_timing, csn.created_at, 
               csn.client_name, csn.concerns_discussed, csn.somatic_cues, csn.interventions_used,
@@ -2779,7 +3677,7 @@ app.get('/api/progress-notes', async (req, res) => {
       })),
       ...sessionNotesResult.rows.map(note => ({
         ...note,
-        session_date: note.created_at,
+        session_date: note.created_at, // Use created_at as session_date for old notes
         note_type: 'session_note'
       }))
     ];
@@ -2794,7 +3692,7 @@ app.get('/api/progress-notes', async (req, res) => {
   }
 });
 
-// Get single progress note
+// 5. Get single progress note
 app.get('/api/progress-notes/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -2815,22 +3713,44 @@ app.get('/api/progress-notes/:id', async (req, res) => {
   }
 });
 
-// Get free consultation notes list
-app.get('/api/free-consultation-notes', async (req, res) => {
+// 6. Get therapy goals
+app.get('/api/therapy-goals', async (req, res) => {
   try {
     const { client_id } = req.query;
-
+    
     if (!client_id) {
       return res.status(400).json({ error: 'client_id is required' });
     }
 
     const result = await pool.query(
-      `SELECT fcn.*, 
-              CONCAT(u.first_name, ' ', u.last_name) as assigned_therapist_name
-       FROM free_consultation_pretherapy_notes fcn
-       LEFT JOIN users u ON fcn.assigned_therapist_id = u.therapist_id
-       WHERE fcn.client_id = $1
-       ORDER BY fcn.session_date DESC`,
+      `SELECT * FROM client_therapy_goals 
+       WHERE client_id = $1 AND is_active = true
+       ORDER BY created_at DESC`,
+      [client_id]
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching therapy goals:', error);
+    res.status(500).json({ error: 'Failed to fetch therapy goals' });
+  }
+});
+
+// 6a. Get free consultation notes list
+app.get('/api/free-consultation-notes', async (req, res) => {
+  try {
+    const { client_id } = req.query;
+    
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, session_date, session_mode, presenting_concerns,
+              assigned_therapist_name, created_at
+       FROM free_consultation_pretherapy_notes 
+       WHERE client_id = $1 
+       ORDER BY session_date DESC`,
       [client_id]
     );
 
@@ -2841,17 +3761,13 @@ app.get('/api/free-consultation-notes', async (req, res) => {
   }
 });
 
-// Get single free consultation note
+// 6b. Get single free consultation note
 app.get('/api/free-consultation-notes/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await pool.query(
-      `SELECT fcn.*, 
-              CONCAT(u.first_name, ' ', u.last_name) as assigned_therapist_name
-       FROM free_consultation_pretherapy_notes fcn
-       LEFT JOIN users u ON fcn.assigned_therapist_id = u.therapist_id
-       WHERE fcn.id = $1`,
+      'SELECT * FROM free_consultation_pretherapy_notes WHERE id = $1',
       [id]
     );
 
@@ -2864,6 +3780,440 @@ app.get('/api/free-consultation-notes/:id', async (req, res) => {
     console.error('Error fetching free consultation note:', error);
     res.status(500).json({ error: 'Failed to fetch free consultation note' });
   }
+});
+
+// 7. Create therapy goal
+app.post('/api/therapy-goals', async (req, res) => {
+  try {
+    const { client_id, client_name, goal_description, current_stage } = req.body;
+
+    const result = await pool.query(`
+      INSERT INTO client_therapy_goals (
+        client_id, client_name, goal_description, current_stage, initiation_date
+      ) VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `, [client_id, client_name, goal_description, current_stage || 'Initiation', new Date()]);
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating therapy goal:', error);
+    res.status(500).json({ error: 'Failed to create therapy goal' });
+  }
+});
+
+// 8. Update therapy goal
+app.put('/api/therapy-goals/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { current_stage } = req.body;
+
+    const stageField = `${current_stage.toLowerCase().replace('-', '_')}_date`;
+    
+    const result = await pool.query(`
+      UPDATE client_therapy_goals 
+      SET current_stage = $1,
+          ${stageField} = COALESCE(${stageField}, NOW()),
+          updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `, [current_stage, id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Therapy goal not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating therapy goal:', error);
+    res.status(500).json({ error: 'Failed to update therapy goal' });
+  }
+});
+
+// 9. Paperform Webhook - Free Consultation
+app.post('/api/paperform-webhook/free-consultation', async (req, res) => {
+  try {
+    const { submission_id, booking_id, data } = req.body;
+
+    // Verify booking_id exists and get session_type
+    const docForm = await pool.query(
+      'SELECT session_type FROM client_doc_form WHERE booking_id = $1',
+      [booking_id]
+    );
+
+    if (docForm.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Booking not found in client_doc_form' });
+    }
+
+    const sessionType = docForm.rows[0].session_type;
+
+    // Verify it's a free consultation
+    if (sessionType !== 'Free Consultation - SafeStories') {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Invalid session type: ${sessionType}. Expected: Free Consultation - SafeStories` 
+      });
+    }
+
+    // Insert into free_consultation_pretherapy_notes
+    await pool.query(`
+      INSERT INTO free_consultation_pretherapy_notes (
+        client_name, client_id, booking_id,
+        session_date, session_timing, session_duration,
+        therapist_name, session_mode,
+        presenting_concerns, duration_onset, triggers_factors,
+        therapy_overview_given, client_questions, answers_given,
+        preferred_languages, preferred_modes, preferred_price_range,
+        preferred_time_slots, assigned_therapist_name,
+        chatbot_booking_explained,
+        clinical_concerns_mentioned, clinical_concerns_details,
+        suicidal_thoughts_mentioned, suicidal_thoughts_details,
+        other_notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+    `, [
+      data.client_name,
+      data.client_id,
+      booking_id,
+      data.session_date,
+      data.session_timing,
+      data.session_duration,
+      data.therapist_name,
+      data.session_mode,
+      data.presenting_concerns,
+      data.duration_onset,
+      data.triggers_factors,
+      data.therapy_overview_given || false,
+      data.client_questions,
+      data.answers_given,
+      data.preferred_languages,
+      data.preferred_modes,
+      data.preferred_price_range,
+      data.preferred_time_slots,
+      data.assigned_therapist_name,
+      data.chatbot_booking_explained || false,
+      data.clinical_concerns_mentioned || false,
+      data.clinical_concerns_details,
+      data.suicidal_thoughts_mentioned || false,
+      data.suicidal_thoughts_details,
+      data.other_notes
+    ]);
+
+    // Update client_doc_form status
+    await pool.query(`
+      UPDATE client_doc_form 
+      SET status = 'completed',
+          paperform_submission_id = $1
+      WHERE booking_id = $2
+    `, [submission_id, booking_id]);
+
+    console.log('✅ client_doc_form updated to completed');
+
+    res.json({ success: true, message: 'Free consultation notes stored successfully' });
+  } catch (error) {
+    console.error('❌ Error storing free consultation notes:', error);
+    res.status(500).json({ success: false, error: 'Failed to store free consultation notes' });
+  }
+});
+
+// 10. Paperform Webhook - Therapy Documentation
+app.post('/api/paperform-webhook/therapy-documentation', async (req, res) => {
+  try {
+    const { submission_id, booking_id, data } = req.body;
+
+    console.log('📝 Received therapy documentation form submission:', { submission_id, booking_id });
+
+    // Verify booking_id exists and get session_type
+    const docForm = await pool.query(
+      'SELECT session_type FROM client_doc_form WHERE booking_id = $1',
+      [booking_id]
+    );
+
+    if (docForm.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Booking not found in client_doc_form' });
+    }
+
+    const sessionType = docForm.rows[0].session_type;
+
+    // Verify it's NOT a free consultation
+    if (sessionType === 'Free Consultation - SafeStories') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'This is a free consultation. Use /api/paperform-webhook/free-consultation endpoint' 
+      });
+    }
+
+    const sessionNumber = data.session_number || 1;
+    const isFirstSession = sessionNumber === 1;
+
+    console.log(`📊 Session type: ${sessionType}, Session number: ${sessionNumber}, First session: ${isFirstSession}`);
+
+    // If First Session - store case history
+    if (isFirstSession && data.case_history) {
+      await pool.query(`
+        INSERT INTO client_case_history (
+          client_id, client_name, booking_id,
+          age, gender_identity, education, occupation, primary_income,
+          marital_status, children, religion, socio_economic_status, city_state,
+          presenting_concerns, duration_onset, triggers_factors,
+          sleep, appetite, energy_levels, weight_changes, libido, menstrual_history,
+          family_history, genogram_url, developmental_history,
+          medical_history, medications, previous_mental_health, insight_level
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+        ON CONFLICT (client_id) DO UPDATE SET
+          age = EXCLUDED.age,
+          gender_identity = EXCLUDED.gender_identity,
+          education = EXCLUDED.education,
+          occupation = EXCLUDED.occupation,
+          primary_income = EXCLUDED.primary_income,
+          marital_status = EXCLUDED.marital_status,
+          children = EXCLUDED.children,
+          religion = EXCLUDED.religion,
+          socio_economic_status = EXCLUDED.socio_economic_status,
+          city_state = EXCLUDED.city_state,
+          presenting_concerns = EXCLUDED.presenting_concerns,
+          duration_onset = EXCLUDED.duration_onset,
+          triggers_factors = EXCLUDED.triggers_factors,
+          sleep = EXCLUDED.sleep,
+          appetite = EXCLUDED.appetite,
+          energy_levels = EXCLUDED.energy_levels,
+          weight_changes = EXCLUDED.weight_changes,
+          libido = EXCLUDED.libido,
+          menstrual_history = EXCLUDED.menstrual_history,
+          family_history = EXCLUDED.family_history,
+          genogram_url = EXCLUDED.genogram_url,
+          developmental_history = EXCLUDED.developmental_history,
+          medical_history = EXCLUDED.medical_history,
+          medications = EXCLUDED.medications,
+          previous_mental_health = EXCLUDED.previous_mental_health,
+          insight_level = EXCLUDED.insight_level,
+          updated_at = NOW()
+      `, [
+        data.client_id,
+        data.client_name,
+        booking_id,
+        data.case_history.age,
+        data.case_history.gender_identity,
+        data.case_history.education,
+        data.case_history.occupation,
+        data.case_history.primary_income,
+        data.case_history.marital_status,
+        data.case_history.children,
+        data.case_history.religion,
+        data.case_history.socio_economic_status,
+        data.case_history.city_state,
+        data.case_history.presenting_concerns,
+        data.case_history.duration_onset,
+        data.case_history.triggers_factors,
+        data.case_history.sleep,
+        data.case_history.appetite,
+        data.case_history.energy_levels,
+        data.case_history.weight_changes,
+        data.case_history.libido,
+        data.case_history.menstrual_history,
+        data.case_history.family_history,
+        data.case_history.genogram_url,
+        data.case_history.developmental_history,
+        data.case_history.medical_history,
+        data.case_history.medications,
+        data.case_history.previous_mental_health,
+        data.case_history.insight_level
+      ]);
+      console.log('✅ Case history stored');
+    }
+
+    // Always store progress notes
+    if (data.progress_notes) {
+      await pool.query(`
+        INSERT INTO client_progress_notes (
+          client_id, client_name, booking_id, session_number, session_date,
+          session_duration, session_mode,
+          client_report, direct_quotes,
+          client_presentation, presentation_tags,
+          techniques_used, homework_assigned,
+          client_reaction, reaction_tags, engagement_notes,
+          themes_patterns, progress_regression, clinical_concerns,
+          self_harm_mention, self_harm_details, risk_level,
+          risk_factors, protective_factors, safety_plan,
+          future_interventions, session_frequency,
+          therapist_name, therapist_signature, signature_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+      `, [
+        data.client_id,
+        data.client_name,
+        booking_id,
+        sessionNumber,
+        data.session_date,
+        data.session_duration,
+        data.session_mode,
+        data.progress_notes.client_report,
+        data.progress_notes.direct_quotes,
+        data.progress_notes.client_presentation,
+        data.progress_notes.presentation_tags,
+        data.progress_notes.techniques_used,
+        data.progress_notes.homework_assigned,
+        data.progress_notes.client_reaction,
+        data.progress_notes.reaction_tags,
+        data.progress_notes.engagement_notes,
+        data.progress_notes.themes_patterns,
+        data.progress_notes.progress_regression,
+        data.progress_notes.clinical_concerns,
+        data.progress_notes.self_harm_mention || false,
+        data.progress_notes.self_harm_details,
+        data.progress_notes.risk_level || 'None',
+        data.progress_notes.risk_factors,
+        data.progress_notes.protective_factors,
+        data.progress_notes.safety_plan,
+        data.progress_notes.future_interventions,
+        data.progress_notes.session_frequency,
+        data.therapist_name,
+        data.therapist_signature,
+        data.signature_date
+      ]);
+      console.log('✅ Progress notes stored');
+    }
+
+    // Store/update therapy goals
+    if (data.therapy_goals) {
+      await pool.query(`
+        INSERT INTO client_therapy_goals (
+          client_id, client_name, goal_description, current_stage, initiation_date
+        ) VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (client_id) DO UPDATE SET
+          goal_description = EXCLUDED.goal_description,
+          current_stage = EXCLUDED.current_stage,
+          updated_at = NOW()
+      `, [
+        data.client_id,
+        data.client_name,
+        data.therapy_goals.goal_description,
+        data.therapy_goals.current_stage || 'Initiation',
+        new Date()
+      ]);
+      console.log('✅ Therapy goals stored');
+    }
+
+    // Update client_doc_form status
+    await pool.query(`
+      UPDATE client_doc_form 
+      SET status = 'completed',
+          paperform_submission_id = $1
+      WHERE booking_id = $2
+    `, [submission_id, booking_id]);
+
+    console.log('✅ client_doc_form updated to completed');
+
+    res.json({ success: true, message: 'Therapy documentation stored successfully' });
+  } catch (error) {
+    console.error('❌ Error storing therapy documentation:', error);
+    res.status(500).json({ success: false, error: 'Failed to store therapy documentation' });
+  }
+});
+
+// ==================== END THERAPY DOCUMENTATION ENDPOINTS ====================
+
+// ==================== FREE CONSULTATION ENDPOINTS ====================
+
+// 9. Check client session type (free consultation vs paid sessions)
+app.get('/api/client-session-type', async (req, res) => {
+  try {
+    const { client_id } = req.query;
+    
+    console.log('🔍 [API] client-session-type called with client_id:', client_id);
+    
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
+    }
+
+    // Check if client has any PAID session bookings (non-free-consultation)
+    const paidBookingsResult = await pool.query(
+      `SELECT booking_id FROM bookings 
+       WHERE invitee_phone = $1 
+       AND booking_resource_name NOT ILIKE '%free consultation%'
+       LIMIT 1`,
+      [client_id]
+    );
+    const hasPaidSessions = paidBookingsResult.rows.length > 0;
+    console.log('💰 [API] Paid sessions found:', hasPaidSessions, '(', paidBookingsResult.rows.length, 'rows)');
+
+    // Check if client has free consultation bookings
+    const freeConsultBookingResult = await pool.query(
+      `SELECT booking_id FROM bookings 
+       WHERE invitee_phone = $1 
+       AND booking_resource_name ILIKE '%free consultation%'
+       LIMIT 1`,
+      [client_id]
+    );
+    const hasFreeConsultation = freeConsultBookingResult.rows.length > 0;
+    console.log('🆓 [API] Free consultations found:', hasFreeConsultation, '(', freeConsultBookingResult.rows.length, 'rows)');
+
+    const response = { 
+      success: true, 
+      data: { 
+        hasPaidSessions, 
+        hasFreeConsultation 
+      } 
+    };
+    console.log('📤 [API] Returning:', response);
+    res.json(response);
+  } catch (error) {
+    console.error('Error checking client session type:', error);
+    res.status(500).json({ error: 'Failed to check client session type' });
+  }
+});
+
+// 10. Get free consultation notes
+app.get('/api/free-consultation-notes', async (req, res) => {
+  try {
+    const { client_id } = req.query;
+    
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM free_consultation_pretherapy_notes WHERE client_name = $1 ORDER BY session_date DESC',
+      [client_id]
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching free consultation notes:', error);
+    res.status(500).json({ error: 'Failed to fetch free consultation notes' });
+  }
+});
+
+// 11. Get single free consultation note
+app.get('/api/free-consultation-notes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      'SELECT * FROM free_consultation_pretherapy_notes WHERE id = $1',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Free consultation note not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching free consultation note:', error);
+    res.status(500).json({ error: 'Failed to fetch free consultation note' });
+  }
+});
+
+// ==================== END FREE CONSULTATION ENDPOINTS ====================
+
+// Global error handler - must be after all routes
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('❌ Unhandled error:', err);
+  
+  // Always return JSON
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'Internal server error',
+    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
 });
 
 const PORT = 3002;

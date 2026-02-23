@@ -60,7 +60,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expandedClientRows, setExpandedClientRows] = useState<Set<number>>(new Set());
   const [selectedClientForAction, setSelectedClientForAction] = useState<number | null>(null);
-  const [clientAppointmentTab, setClientAppointmentTab] = useState('upcoming');
+  const [clientAppointmentTab, setClientAppointmentTab] = useState('all');
   const [selectedAppointmentIndex, setSelectedAppointmentIndex] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
@@ -1151,7 +1151,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
 
                   <div className="flex gap-6 mb-4">
                     {[
-                      { id: 'upcoming', label: 'Upcoming' },
                       { id: 'all', label: 'Booking History' },
                     ].map((tab) => {
                       const count = clientAppointments.filter(apt => {
@@ -1165,10 +1164,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                           if (aptDate < startDate || aptDate > endDate) return false;
                         }
                         if (tab.id === 'all') return true;
-                        if (tab.id === 'upcoming') {
-                          // Use server-calculated status - only 'scheduled' sessions are upcoming
-                          return apt.booking_status === 'scheduled';
-                        }
                         return apt.booking_status === tab.id;
                       }).length;
                       
@@ -1214,10 +1209,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                 if (aptDate < startDate || aptDate > endDate) return false;
                               }
                               if (clientAppointmentTab === 'all') return true;
-                              if (clientAppointmentTab === 'upcoming') {
-                                // Use server-calculated status - only 'scheduled' sessions are upcoming
-                                return apt.booking_status === 'scheduled';
-                              }
                               return apt.booking_status === clientAppointmentTab;
                             }).length === 0 ? (
                               <tr>
@@ -1235,10 +1226,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                   if (aptDate < startDate || aptDate > endDate) return false;
                                 }
                                 if (clientAppointmentTab === 'all') return true;
-                                if (clientAppointmentTab === 'upcoming') {
-                                  // Use server-calculated status - only 'scheduled' sessions are upcoming
-                                  return apt.booking_status === 'scheduled';
-                                }
                                 return apt.booking_status === clientAppointmentTab;
                               }).map((apt, index) => (
                                 <React.Fragment key={index}>

@@ -19,9 +19,9 @@ export const AdminEditProfile: React.FC<AdminEditProfileProps> = ({ user, onBack
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const countryCodes = [
+    { code: '+91', country: 'India' },
     { code: '+1', country: 'USA/Canada' },
     { code: '+44', country: 'UK' },
-    { code: '+91', country: 'India' },
     { code: '+61', country: 'Australia' },
     { code: '+971', country: 'UAE' },
   ];
@@ -56,6 +56,7 @@ export const AdminEditProfile: React.FC<AdminEditProfileProps> = ({ user, onBack
           setCountryCode(phoneMatch[1]);
           setPhone(phoneMatch[2]);
         } else {
+          setCountryCode('+91'); // Default to +91 if no country code found
           setPhone(profile.phone || '');
         }
 

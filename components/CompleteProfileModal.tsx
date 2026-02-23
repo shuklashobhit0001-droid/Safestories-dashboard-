@@ -21,8 +21,45 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
 }) => {
   const [name, setName] = useState(prefilledData.name);
   const [email, setEmail] = useState(prefilledData.email);
-  const [countryCode, setCountryCode] = useState('+91');
-  const [phone, setPhone] = useState(prefilledData.phone.replace(/^\+\d+\s*/, ''));
+  const [showCloseWarning, setShowCloseWarning] = useState(false);
+  
+  // Extract country code and phone number from prefilledData
+  const extractPhoneDetails = (fullPhone: string) => {
+    if (!fullPhone) {
+      return { countryCode: '+91', phone: '' };
+    }
+    
+    // Remove any spaces first
+    const cleaned = fullPhone.replace(/\s/g, '');
+    
+    // Match specific country code patterns (non-greedy)
+    // Try +1 first (1 digit), then +91, +44, +61, +971 etc (2-3 digits)
+    const patterns = [
+      /^(\+1)(\d+)$/,      // USA/Canada
+      /^(\+\d{2})(\d+)$/,  // Most countries (2 digits like +91, +44, +61)
+      /^(\+\d{3})(\d+)$/,  // Some countries (3 digits like +971)
+    ];
+    
+    for (const pattern of patterns) {
+      const match = cleaned.match(pattern);
+      if (match && match[2].length >= 10) { // Ensure phone number is at least 10 digits
+        return { countryCode: match[1], phone: match[2] };
+      }
+    }
+    
+    // If no country code found, default to +91
+    return { countryCode: '+91', phone: cleaned };
+  };
+  
+  const phoneDetails = extractPhoneDetails(prefilledData.phone);
+  console.log('📞 Phone extraction:', { 
+    original: prefilledData.phone, 
+    countryCode: phoneDetails.countryCode, 
+    phone: phoneDetails.phone 
+  });
+  const [countryCode, setCountryCode] = useState(phoneDetails.countryCode);
+  const [phone, setPhone] = useState(phoneDetails.phone);
+  
   const [specializations, setSpecializations] = useState<string[]>(
     prefilledData.specializations.split(', ')
   );
@@ -44,11 +81,12 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const countryCodes = [
+    { code: '+91', country: 'India' },
     { code: '+1', country: 'USA/Canada' },
     { code: '+44', country: 'UK' },
-    { code: '+91', country: 'India' },
     { code: '+61', country: 'Australia' },
     { code: '+971', country: 'UAE' },
   ];
@@ -154,38 +192,116 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
     setLoading(true);
 
     try {
-      // TODO: Upload files to S3 bucket when bucket link is provided
-      const qualificationPdfUrl = qualificationFile ? 'pending-upload' : null;
-      const profilePictureUrl = profilePicture ? 'pending-upload' : null;
+      // Upload profile picture if selected
+      let profilePictureUrl = null;
+      if (profilePicture) {
+        setError('Uploading profile picture...');
+        try {
+          const formData = new FormData();
+          formData.append('file', profilePicture);
+          formData.append('folder', 'profile-pictures');
+
+          const uploadResponse = await fetch('/api/upload-file', {
+            method: 'POST',
+            body: formData
+          });
+
+          const uploadData = await uploadResponse.json();
+          if (uploadData.success) {
+            profilePictureUrl = uploadData.url;
+            console.log('✅ Profile picture uploaded:', profilePictureUrl);
+            setError(''); // Clear the uploading message
+          } else {
+            throw new Error(uploadData.error || 'Failed to upload profile picture');
+          }
+        } catch (uploadError) {
+          console.error('❌ Profile picture upload failed:', uploadError);
+          setError('Failed to upload profile picture. Please try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Upload qualification PDF if selected
+      let qualificationPdfUrl = null;
+      if (qualificationFile) {
+        setError('Uploading qualification PDF...');
+        try {
+          const formData = new FormData();
+          formData.append('file', qualificationFile);
+          formData.append('folder', 'qualification-pdfs');
+
+          const uploadResponse = await fetch('/api/upload-file', {
+            method: 'POST',
+            body: formData
+          });
+
+          const uploadData = await uploadResponse.json();
+          if (uploadData.success) {
+            qualificationPdfUrl = uploadData.url;
+            console.log('✅ Qualification PDF uploaded:', qualificationPdfUrl);
+            setError(''); // Clear the uploading message
+          } else {
+            throw new Error(uploadData.error || 'Failed to upload qualification PDF');
+          }
+        } catch (uploadError) {
+          console.error('❌ Qualification PDF upload failed:', uploadError);
+          setError('Failed to upload qualification PDF. Please try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      const payload = {
+        requestId: prefilledData.requestId,
+        name,
+        email,
+        phone: `${countryCode}${phone}`,
+        specializations: specializations.join(', '),
+        specializationDetails: Object.entries(specializationDetails).map(([name, details]) => ({
+          name,
+          price: details.price,
+          description: details.description
+        })),
+        qualification,
+        qualificationPdfUrl,
+        profilePictureUrl,
+        password
+      };
+
+      console.log('Submitting profile:', payload);
 
       const response = await fetch('/api/complete-therapist-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestId: prefilledData.requestId,
-          name,
-          email,
-          phone: `${countryCode}${phone}`,
-          specializations: specializations.join(', '),
-          specializationDetails: Object.entries(specializationDetails).map(([name, details]) => ({
-            name,
-            price: details.price,
-            description: details.description
-          })),
-          qualification,
-          qualificationPdfUrl,
-          profilePictureUrl,
-          password
-        })
+        body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse JSON response:', jsonError);
+        setError('Server error: Unable to process response. Please check server logs.');
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Profile submission response:', data);
 
       if (data.success) {
-        alert('Profile created successfully! You can now login with your email and password.');
-        onComplete();
+        // Update user object in localStorage to prevent modal from showing again
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+          const userObj = JSON.parse(savedUser);
+          userObj.needsProfileCompletion = false;
+          userObj.profileStatus = 'pending_review';
+          localStorage.setItem('user', JSON.stringify(userObj));
+        }
+        
+        setShowSuccessModal(true);
       } else {
-        setError(data.error || 'Failed to create profile');
+        setError(data.error || 'Failed to submit profile');
       }
     } catch (error) {
       console.error('Error:', error);
@@ -197,10 +313,78 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+      {/* Close Warning Modal */}
+      {showCloseWarning && (
+        <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg w-full max-w-md p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-3">
+              Profile Completion Required
+            </h3>
+            <p className="text-gray-600 mb-6">
+              You need to complete your profile before accessing the dashboard. This is a one-time setup required for all new therapists.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCloseWarning(false)}
+                className="flex-1 bg-teal-700 text-white py-2.5 rounded-lg hover:bg-teal-800 font-medium"
+              >
+                Continue Setup
+              </button>
+              <button
+                onClick={() => {
+                  setShowCloseWarning(false);
+                  onClose();
+                }}
+                className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg hover:bg-gray-300 font-medium"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSuccessModal ? (
+        // Success Modal
+        <div className="bg-white rounded-lg w-full max-w-md p-8 text-center">
+          <div className="text-6xl mb-4">✅</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">
+            Profile Submitted Successfully!
+          </h2>
+          <p className="text-gray-600 mb-4">
+            Your profile has been submitted and is currently under review by our team.
+          </p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <p className="text-sm text-yellow-800 font-medium mb-1">
+              ⏱️ Review Timeline: 5-10 days
+            </p>
+            <p className="text-xs text-yellow-700">
+              You'll receive an email notification once your profile is approved.
+            </p>
+          </div>
+          <p className="text-sm text-gray-500 mb-6">
+            In the meantime, you can explore your dashboard and view your profile.
+          </p>
+          <button
+            onClick={() => {
+              // Reload the page to refresh with updated user object
+              window.location.reload();
+            }}
+            className="w-full bg-teal-700 text-white py-3 rounded-lg hover:bg-teal-800 font-medium"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      ) : (
+        // Profile Form
+        <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
           <h2 className="text-2xl font-bold">Complete Your Profile</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <button 
+            onClick={() => setShowCloseWarning(true)} 
+            className="text-gray-500 hover:text-gray-700 transition-colors"
+            type="button"
+          >
             <X size={24} />
           </button>
         </div>
@@ -211,6 +395,33 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
               {error}
             </div>
           )}
+
+          {/* Profile Picture Upload - AT TOP */}
+          <div className="flex flex-col items-center mb-6">
+            <div className="relative">
+              {profilePicture ? (
+                <img
+                  src={URL.createObjectURL(profilePicture)}
+                  alt="Profile preview"
+                  className="w-32 h-32 rounded-full object-cover border-4 border-teal-100"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-gray-100 border-4 border-teal-100 flex items-center justify-center">
+                  <Upload size={32} className="text-gray-400" />
+                </div>
+              )}
+              <label className="absolute bottom-0 right-0 bg-teal-700 text-white p-2 rounded-full cursor-pointer hover:bg-teal-800 shadow-lg">
+                <Upload size={16} />
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleProfilePictureChange}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">JPG, PNG, or WebP. Max 2MB</p>
+          </div>
 
           {/* Name */}
           <div>
@@ -363,33 +574,6 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
             <p className="text-xs text-gray-500 mt-1">Max size: 5MB</p>
           </div>
 
-          {/* Profile Picture Upload */}
-          <div>
-            <label className="block text-sm font-semibold mb-1.5">
-              Profile Picture
-            </label>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 px-4 py-2.5 border rounded-lg cursor-pointer hover:bg-gray-50">
-                <Upload size={18} />
-                <span className="text-sm">
-                  {profilePicture ? profilePicture.name : 'Choose image'}
-                </span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleProfilePictureChange}
-                  className="hidden"
-                />
-              </label>
-              {profilePicture && (
-                <span className="text-xs text-gray-500">
-                  {(profilePicture.size / 1024 / 1024).toFixed(2)} MB
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">JPG, PNG, or WebP. Max size: 2MB</p>
-          </div>
-
           {/* Create Password */}
           <div>
             <label className="block text-sm font-semibold mb-1.5">
@@ -449,6 +633,7 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
           </button>
         </form>
       </div>
+      )}
     </div>
   );
 };

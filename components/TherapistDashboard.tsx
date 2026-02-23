@@ -13,6 +13,9 @@ import { ProgressNotesTab } from './ProgressNotesTab';
 import { ProgressNoteDetail } from './ProgressNoteDetail';
 import { GoalTrackingTab } from './GoalTrackingTab';
 import { FreeConsultationDetail } from './FreeConsultationDetail';
+import { CompleteProfileModal } from './CompleteProfileModal';
+import { ProfileUnderReviewBanner } from './ProfileUnderReviewBanner';
+import { EmptyStateCard } from './EmptyStateCard';
 import { useUrlState } from '../hooks/useUrlState';
 
 interface TherapistDashboardProps {
@@ -24,7 +27,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   
   // Use URL state for view and tabs
   const [activeView, setActiveView] = useUrlState<string>('view', 'dashboard', 'therapistActiveView');
-  const [activeAppointmentTab, setActiveAppointmentTab] = useUrlState<string>('tab', 'scheduled', undefined);
+  const [activeAppointmentTab, setActiveAppointmentTab] = useUrlState<string>('tab', 'all', undefined);
   
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('All Time');
@@ -118,6 +121,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [selectedProgressNoteId, setSelectedProgressNoteId] = useState<number | null>(null);
   const [isFreeConsultationNote, setIsFreeConsultationNote] = useState(false);
   const [clientSessionType, setClientSessionType] = useState<{ hasPaidSessions: boolean; hasFreeConsultation: boolean }>({ hasPaidSessions: false, hasFreeConsultation: false });
+  
+  // Profile completion states
+  const [showCompleteProfileModal, setShowCompleteProfileModal] = useState(false);
+  
+  // Check if profile is under review (submitted but not approved yet)
+  const isProfileUnderReview = user.profileStatus === 'pending_review' || 
+                                 (user.needsProfileCompletion === false && !user.therapist_id);
+  
   const dropdownRef = React.useRef<HTMLDivElement>(null);
   const clientDropdownRef = React.useRef<HTMLDivElement>(null);
   const bookingActionsRef = React.useRef<HTMLTableElement>(null);
@@ -399,6 +410,34 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     fetchTherapistData();
   }, [dateRange, user.id]);
 
+  // Check if profile needs completion on mount
+  useEffect(() => {
+    const checkProfileStatus = async () => {
+      if (user.needsProfileCompletion) {
+        // Check if profile has already been submitted
+        try {
+          const response = await fetch(`/api/check-therapist-details?email=${user.email}`);
+          const data = await response.json();
+          
+          if (data.exists) {
+            // Profile already submitted, don't show modal
+            console.log('✅ Profile already submitted');
+            return;
+          }
+          
+          // Profile not submitted yet, show modal
+          setShowCompleteProfileModal(true);
+        } catch (error) {
+          console.error('Error checking profile status:', error);
+          // On error, show modal to be safe
+          setShowCompleteProfileModal(true);
+        }
+      }
+    };
+    
+    checkProfileStatus();
+  }, [user.needsProfileCompletion, user.email]);
+
   useEffect(() => {
     if (activeView === 'clients') {
       fetchClientsData();
@@ -413,6 +452,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
 
   const fetchAppointmentsData = async () => {
+    // Skip API calls if profile is under review
+    if (isProfileUnderReview) {
+      setAppointments([]);
+      setAppointmentsLoading(false);
+      return;
+    }
+    
     try {
       setAppointmentsLoading(true);
       const response = await fetch(`/api/therapist-appointments?therapist_id=${user.id}`);
@@ -429,6 +475,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const fetchClientsData = async () => {
+    // Skip API calls if profile is under review
+    if (isProfileUnderReview) {
+      setClients([]);
+      setClientsLoading(false);
+      return;
+    }
+    
     try {
       setClientsLoading(true);
       const response = await fetch(`/api/therapist-clients?therapist_id=${user.id}`);
@@ -524,6 +577,20 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const fetchTherapistData = async () => {
+    // Skip API calls if profile is under review
+    if (isProfileUnderReview) {
+      setStats([
+        { title: 'Bookings', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'all' },
+        { title: 'Sessions Completed', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'completed' },
+        { title: 'No-shows', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'no_show' },
+        { title: 'Cancelled', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'cancelled' },
+        { title: 'Pending Session Notes', value: '0', lastMonth: '0', clickable: true, targetView: 'appointments', targetTab: 'pending_notes' },
+      ]);
+      setBookings([]);
+      setDashboardLoading(false);
+      return;
+    }
+    
     try {
       setDashboardLoading(true);
       
@@ -1062,6 +1129,19 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const renderMyClients = () => {
+    if (isProfileUnderReview) {
+      return (
+        <div className="p-8">
+          <EmptyStateCard
+            icon=""
+            title="No Clients Yet"
+            message="You'll start seeing your clients here once your profile is approved and you receive your first booking."
+            subMessage="Expected approval: 5-10 days"
+          />
+        </div>
+      );
+    }
+    
     // Format date as "23 Jan 2026"
     const formatLastSessionDate = (dateString: string | null) => {
       if (!dateString) return 'N/A';
@@ -1202,7 +1282,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                   const status = getClientStatus(client);
                   return (
                     <tr key={index} className="border-b hover:bg-gray-50 cursor-pointer" onClick={async () => {
-                      setActiveAppointmentTab('upcoming');
+                      setActiveAppointmentTab('all');
                       await fetchClientDetails(client);
                       setSelectedClient(client);
                     }}>
@@ -1403,7 +1483,21 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
     setAppointmentCurrentPage(1);
   }, [activeAppointmentTab, appointmentSearchTerm]);
 
-  const renderMyAppointments = () => (
+  const renderMyAppointments = () => {
+    if (isProfileUnderReview) {
+      return (
+        <div className="p-8">
+          <EmptyStateCard
+            icon=""
+            title="No Bookings Yet"
+            message="Your booking calendar will be available once your profile is approved by our team."
+            subMessage="Expected approval: 5-10 days"
+          />
+        </div>
+      );
+    }
+    
+    return (
     <div className="p-8">
       {appointmentsLoading ? (
         <Loader />
@@ -1654,7 +1748,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       </>
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -1717,23 +1812,43 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <div className="absolute bottom-full left-4 right-4 mb-2 bg-white border rounded-lg shadow-lg z-50">
               <button
                 onClick={() => {
-                  setShowProfileMenu(false);
-                  setActiveView('settings');
+                  if (!isProfileUnderReview) {
+                    setShowProfileMenu(false);
+                    setActiveView('settings');
+                  }
                 }}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b"
+                disabled={isProfileUnderReview}
+                className={`w-full px-4 py-3 text-left flex items-center gap-3 border-b ${
+                  isProfileUnderReview 
+                    ? 'bg-gray-100 cursor-not-allowed opacity-60' 
+                    : 'hover:bg-gray-50 cursor-pointer'
+                }`}
               >
                 <Edit size={18} className="text-gray-600" />
                 <span className="text-sm font-medium">Edit Profile</span>
+                {isProfileUnderReview && (
+                  <span className="ml-auto text-xs text-gray-500">(Disabled)</span>
+                )}
               </button>
               <button
                 onClick={() => {
-                  setShowProfileMenu(false);
-                  setActiveView('changePassword');
+                  if (!isProfileUnderReview) {
+                    setShowProfileMenu(false);
+                    setActiveView('changePassword');
+                  }
                 }}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3"
+                disabled={isProfileUnderReview}
+                className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
+                  isProfileUnderReview 
+                    ? 'bg-gray-100 cursor-not-allowed opacity-60' 
+                    : 'hover:bg-gray-50 cursor-pointer'
+                }`}
               >
                 <Eye size={18} className="text-gray-600" />
                 <span className="text-sm font-medium">Change/Forgot Password</span>
+                {isProfileUnderReview && (
+                  <span className="ml-auto text-xs text-gray-500">(Disabled)</span>
+                )}
               </button>
             </div>
           )}
@@ -2115,7 +2230,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             {/* Tabs */}
             <div className="flex gap-6 mb-4">
               {[
-                { id: 'upcoming', label: 'Upcoming' },
                 { id: 'all', label: 'Booking History' },
               ].map((tab) => {
                 const count = clientAppointments.filter(apt => {
@@ -2167,11 +2281,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                           return false;
                         }
                         if (activeAppointmentTab === 'all') return true;
-                        if (activeAppointmentTab === 'upcoming') {
-                          // Use getAppointmentStatus to properly check if session is upcoming
-                          const status = getAppointmentStatus(apt);
-                          return status === 'scheduled';
-                        }
                         return getAppointmentStatus(apt) === activeAppointmentTab;
                       }).length === 0 ? (
                         <tr>
@@ -2183,11 +2292,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                             return false;
                           }
                           if (activeAppointmentTab === 'all') return true;
-                          if (activeAppointmentTab === 'upcoming') {
-                            // Use getAppointmentStatus to properly check if session is upcoming
-                            const status = getAppointmentStatus(apt);
-                            return status === 'scheduled';
-                          }
                           return getAppointmentStatus(apt) === activeAppointmentTab;
                         }).map((apt, index) => (
                           <React.Fragment key={index}>
@@ -2447,7 +2551,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               <div className="flex items-center gap-4">
                 <div>
                   <h1 className="text-3xl font-bold mb-1">Therapist Dashboard</h1>
-                  <p className="text-gray-600">Welcome Back, {user.username}!</p>
+                  <p className="text-gray-600">Welcome Back, {user.name || user.full_name || user.username}!</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -2545,6 +2649,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             </div>
 
             {/* Stats Grid - Row 1 */}
+            {isProfileUnderReview && <ProfileUnderReviewBanner />}
+            
             <div className="grid grid-cols-4 gap-4 mb-4">
               {stats.slice(0, 4).map((stat, index) => (
                 <div 
@@ -3239,6 +3345,22 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             </div>
           </div>
         </div>
+      )}
+
+      {/* Complete Profile Modal */}
+      {showCompleteProfileModal && user.needsProfileCompletion && (
+        <CompleteProfileModal
+          onClose={() => {
+            // User wants to logout instead of completing profile
+            onLogout();
+          }}
+          onComplete={() => {
+            setShowCompleteProfileModal(false);
+            // Reload to update user state
+            window.location.reload();
+          }}
+          prefilledData={user.profileData}
+        />
       )}
       </div>
     </div>
