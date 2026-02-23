@@ -85,15 +85,26 @@ export async function sendOTPEmail(
                 </tr>
               </table>
               
+              <!-- Login Button -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 30px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="https://safestories-dashboard.vercel.app/" style="display: inline-block; background-color: #21615D; color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                      🔐 Login to Complete Your Profile
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
               <!-- Instructions -->
               <div style="background-color: #fff8e1; border-left: 4px solid #ffc107; padding: 20px; margin: 0 0 30px 0; border-radius: 4px;">
                 <p style="margin: 0 0 10px 0; color: #333333; font-size: 15px; font-weight: 600;">
                   📋 Next Steps:
                 </p>
                 <ol style="margin: 10px 0 0 0; padding-left: 20px; color: #555555; font-size: 14px; line-height: 1.8;">
-                  <li>Go to the SafeStories login page</li>
-                  <li>Click on "First Time Login?"</li>
-                  <li>Enter your email and the OTP code above</li>
+                  <li>Click the "Login to Complete Your Profile" button above</li>
+                  <li>Click on "First Time Login?" on the login page</li>
+                  <li>Enter your email and the OTP code shown above</li>
                   <li>Complete your profile with your details</li>
                   <li>Set up your password for future logins</li>
                 </ol>
@@ -148,9 +159,11 @@ Welcome to SafeStories! Your One-Time Password (OTP) for profile setup is: ${otp
 
 This OTP will expire on ${expiryTime}.
 
+🔐 LOGIN LINK: https://safestories-dashboard.vercel.app/
+
 Next Steps:
-1. Go to the SafeStories login page
-2. Click on "First Time Login?"
+1. Click the login link above or go to the SafeStories dashboard
+2. Click on "First Time Login?" on the login page
 3. Enter your email and the OTP code
 4. Complete your profile with your details
 5. Set up your password for future logins
