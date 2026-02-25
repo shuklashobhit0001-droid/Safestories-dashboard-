@@ -421,7 +421,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           
           if (data.exists) {
             // Profile already submitted, don't show modal
-            console.log('✅ Profile already submitted');
             return;
           }
           

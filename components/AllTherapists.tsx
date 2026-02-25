@@ -284,10 +284,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
 
   const handleSendClientReminder = async (client: Client) => {
     // Show confirmation modal instead of sending directly
-    console.log('handleSendClientReminder called', client);
     setSelectedClientForBookingLink(client);
     setShowBookingLinkConfirmModal(true);
-    console.log('Modal state set to true');
   };
 
   const confirmSendBookingLink = async () => {
@@ -1461,10 +1459,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
 
         {/* Booking Link Confirmation Modal */}
         {showBookingLinkConfirmModal && (
-          <>
-            {console.log('RENDERING MODAL NOW')}
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-              <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
                 <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
                 <p className="text-gray-600 mb-6">
                   This will send a booking link reminder to the client. Would you like to proceed?
@@ -2049,10 +2045,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
 
         {/* Booking Link Confirmation Modal */}
         {showBookingLinkConfirmModal && (
-          <>
-            {console.log('RENDERING MODAL NOW IN SELECTED THERAPIST VIEW')}
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-              <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
                 <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
                 <p className="text-gray-600 mb-6">
                   This will send a booking link reminder to the client. Would you like to proceed?

@@ -52,11 +52,6 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
   };
   
   const phoneDetails = extractPhoneDetails(prefilledData.phone);
-  console.log('📞 Phone extraction:', { 
-    original: prefilledData.phone, 
-    countryCode: phoneDetails.countryCode, 
-    phone: phoneDetails.phone 
-  });
   const [countryCode, setCountryCode] = useState(phoneDetails.countryCode);
   const [phone, setPhone] = useState(phoneDetails.phone);
   
@@ -209,7 +204,6 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
           const uploadData = await uploadResponse.json();
           if (uploadData.success) {
             profilePictureUrl = uploadData.url;
-            console.log('✅ Profile picture uploaded:', profilePictureUrl);
             setError(''); // Clear the uploading message
           } else {
             throw new Error(uploadData.error || 'Failed to upload profile picture');
@@ -239,7 +233,6 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
           const uploadData = await uploadResponse.json();
           if (uploadData.success) {
             qualificationPdfUrl = uploadData.url;
-            console.log('✅ Qualification PDF uploaded:', qualificationPdfUrl);
             setError(''); // Clear the uploading message
           } else {
             throw new Error(uploadData.error || 'Failed to upload qualification PDF');
@@ -269,8 +262,6 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
         password
       };
 
-      console.log('Submitting profile:', payload);
-
       const response = await fetch('/api/complete-therapist-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -287,8 +278,6 @@ export const CompleteProfileModal: React.FC<CompleteProfileModalProps> = ({
         return;
       }
       
-      console.log('Profile submission response:', data);
-
       if (data.success) {
         // Update user object in localStorage to prevent modal from showing again
         const savedUser = localStorage.getItem('user');

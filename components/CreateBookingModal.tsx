@@ -282,22 +282,7 @@ export const CreateBookingModal: React.FC<CreateBookingModalProps> = ({ isOpen, 
   };
 
   const handleCheckSlots = async () => {
-    alert('Button clicked! Check console for details.');
-    console.log('Button clicked!');
-    console.log('Form validation:', {
-      clientName: clientName.trim(),
-      clientEmail: clientEmail.trim(),
-      clientWhatsApp: clientWhatsApp.trim(),
-      selectedDate,
-      selectedTherapy,
-      selectedTherapist,
-      isFreeConsultation,
-      isValid: isFormValid()
-    });
-    
     if (!isFormValid()) {
-      console.log('Form validation failed!');
-      alert('Form validation failed!');
       return;
     }
 
@@ -313,8 +298,6 @@ export const CreateBookingModal: React.FC<CreateBookingModalProps> = ({ isOpen, 
       sessionMode,
       isFreeConsultation,
     };
-    
-    console.log('Sending data to webhook:', payload);
     
     try {
       const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/b5ab584c-1203-41c0-b296-3107e2e6035e', {

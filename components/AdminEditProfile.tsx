@@ -167,13 +167,10 @@ export const AdminEditProfile: React.FC<AdminEditProfileProps> = ({ user, onBack
         formData.append('file', profilePicture);
         formData.append('folder', 'profile-pictures');
 
-        console.log('📤 Uploading profile picture...');
         const uploadResponse = await fetch('/api/upload-file', {
           method: 'POST',
           body: formData
         });
-
-        console.log('📥 Upload response status:', uploadResponse.status);
         
         if (!uploadResponse.ok) {
           const errorText = await uploadResponse.text();

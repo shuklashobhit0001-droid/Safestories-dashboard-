@@ -1252,18 +1252,6 @@ app.get('/api/dashboard/bookings', async (req, res) => {
         
         const isUpcoming = endDate > nowUTC;
         
-        // Debug log for Aarohi
-        if (row.client_name && row.client_name.includes('Aarohi')) {
-          console.log('Aarohi debug:', {
-            raw: row.booking_invitee_time,
-            endHour, endMinute, endPeriod,
-            timezoneOffset,
-            endDate: endDate.toISOString(),
-            nowUTC: nowUTC.toISOString(),
-            isUpcoming
-          });
-        }
-        
         // Session is upcoming if end time hasn't passed
         return isUpcoming;
       } catch (error) {
