@@ -18,14 +18,14 @@ export const bucketName = process.env.MINIO_BUCKET_NAME || 'safestories-panel';
  * Upload a file to MinIO
  * @param file - File buffer
  * @param fileName - Name of the file
- * @param folder - Folder path (e.g., 'profile-pictures' or 'qualification-pdfs')
+ * @param folder - Folder path (e.g., 'profile-pictures', 'qualification-pdfs', or 'issue-screenshots')
  * @param contentType - MIME type of the file
  * @returns Public URL of the uploaded file
  */
 export async function uploadFile(
   file: Buffer,
   fileName: string,
-  folder: 'profile-pictures' | 'qualification-pdfs',
+  folder: 'profile-pictures' | 'qualification-pdfs' | 'issue-screenshots',
   contentType: string
 ): Promise<string> {
   try {

@@ -99,6 +99,25 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
     return false;
   };
 
+  const formatMode = (mode: string | undefined): string => {
+    if (!mode) return 'N/A';
+    
+    const modeLower = mode.toLowerCase();
+    
+    // Check for In-person variations - clean up location details
+    if (modeLower.includes('person') || modeLower.includes('office') || modeLower.includes('clinic')) {
+      return 'In-person';
+    }
+    
+    // Check for Google Meet variations
+    if (modeLower.includes('google') || modeLower.includes('meet')) {
+      return 'Google Meet';
+    }
+    
+    // Default return the original value
+    return mode;
+  };
+
   const handleReminderClick = (apt: Appointment) => {
     if (isMeetingEnded(apt)) {
       setToast({ message: 'Cannot send reminder after meeting has ended', type: 'error' });
@@ -365,7 +384,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                         <div className="text-gray-500 text-xs">{apt.invitee_email}</div>
                       </td>
                       <td className="px-6 py-4 text-sm">{apt.booking_host_name}</td>
-                      <td className="px-6 py-4 text-sm">{apt.booking_mode}</td>
+                      <td className="px-6 py-4 text-sm">{formatMode(apt.booking_mode)}</td>
                       <td className="px-6 py-4 text-sm">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
                           getAppointmentStatus(apt) === 'completed' ? 'bg-green-100 text-green-700' :

@@ -564,9 +564,9 @@ app.post('/api/upload-file', (req, res, next) => {
       return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
 
-    const { folder } = req.body; // 'profile-pictures' or 'qualification-pdfs'
+    const { folder } = req.body; // 'profile-pictures', 'qualification-pdfs', or 'issue-screenshots'
     
-    if (!folder || !['profile-pictures', 'qualification-pdfs'].includes(folder)) {
+    if (!folder || !['profile-pictures', 'qualification-pdfs', 'issue-screenshots'].includes(folder)) {
       return res.status(400).json({ success: false, error: 'Invalid folder specified' });
     }
 
@@ -579,7 +579,7 @@ app.post('/api/upload-file', (req, res, next) => {
     const fileUrl = await uploadFile(
       req.file.buffer,
       fileName,
-      folder as 'profile-pictures' | 'qualification-pdfs',
+      folder as 'profile-pictures' | 'qualification-pdfs' | 'issue-screenshots',
       req.file.mimetype
     );
 
@@ -588,6 +588,29 @@ app.post('/api/upload-file', (req, res, next) => {
     console.error('❌ Error uploading file:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to upload file';
     res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// Report issue endpoint
+app.post('/api/report-issue', async (req, res) => {
+  try {
+    const { subject, component, description, screenshot_url, reported_by, user_role } = req.body;
+
+    if (!subject || !component || !description || !reported_by || !user_role) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO report_issues (subject, component, description, screenshot_url, reported_by, user_role, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'open', CURRENT_TIMESTAMP)
+       RETURNING id`,
+      [subject, component, description, screenshot_url, reported_by, user_role]
+    );
+
+    res.json({ success: true, issueId: result.rows[0].id });
+  } catch (error) {
+    console.error('Error reporting issue:', error);
+    res.status(500).json({ error: 'Failed to report issue' });
   }
 });
 
@@ -1733,7 +1756,8 @@ app.get('/api/therapist-details', async (req, res) => {
         booking_start_at,
         booking_start_at as booking_start_at_raw,
         booking_invitee_time,
-        booking_status
+        booking_status,
+        booking_mode as mode
       FROM bookings
       WHERE booking_host_name ILIKE '%' || SPLIT_PART($1, ' ', 1) || '%'
       ORDER BY booking_start_at DESC

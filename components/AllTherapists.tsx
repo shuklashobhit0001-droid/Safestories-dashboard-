@@ -36,6 +36,7 @@ interface Appointment {
   booking_invitee_time: string;
   booking_host_name?: string;
   booking_status?: string;
+  mode?: string;
   has_session_notes?: boolean;
   booking_start_at_raw?: string;
 }
@@ -1649,6 +1650,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
                       </tr>
                     </thead>
@@ -1670,7 +1672,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                         if (filteredClients.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={4} className="text-center py-4 text-gray-400 text-sm">
+                              <td colSpan={5} className="text-center py-4 text-gray-400 text-sm">
                                 {assignedClientSearch ? 'No clients found matching your search' : 'No clients found'}
                               </td>
                             </tr>
@@ -1692,6 +1694,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                               phoneNumbers.some(phone => apt.invitee_phone === phone)
                             );
                             const sessionName = clientAppointment?.booking_resource_name || 'N/A';
+                            const mode = clientAppointment?.mode || 'Google Meet';
                             
                             return (
                               <React.Fragment key={actualIndex}>
@@ -1732,6 +1735,19 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                     </div>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-gray-600">{sessionName}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {(() => {
+                                      let displayMode = mode;
+                                      if (mode?.includes('_')) {
+                                        displayMode = mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                                      }
+                                      // Clean up "In-person (location details)" to just "In-person"
+                                      if (displayMode?.startsWith('In-person')) {
+                                        displayMode = 'In-person';
+                                      }
+                                      return displayMode;
+                                    })()}
+                                  </td>
                                   <td className="px-4 py-3 text-sm">
                                     {(() => {
                                       const status = getClientStatus(client);

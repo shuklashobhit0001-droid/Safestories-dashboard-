@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell, Copy, Send, Plus, User, Eye } from 'lucide-react';
+import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell, Copy, Send, Plus, User, Eye, AlertCircle } from 'lucide-react';
 import { Logo } from './Logo';
 import { AllClients } from './AllClients';
 import { AllTherapists } from './AllTherapists';
@@ -16,6 +16,7 @@ import { Toast } from './Toast';
 import { ChangePassword } from './ChangePassword';
 import { AdminEditProfile } from './AdminEditProfile';
 import { CountUpNumber } from './CountUpNumber';
+import { ReportIssuePage } from './ReportIssuePage';
 import { useUrlState } from '../hooks/useUrlState';
 
 interface DashboardProps {
@@ -416,6 +417,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
 
         <div className="px-4 mb-4 pt-4 border-t">
           <div 
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+            style={{ backgroundColor: activeView === 'reportIssue' ? '#2D75795C' : 'transparent' }}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('reportIssue');
+            }}
+          >
+            <AlertCircle size={20} className={activeView === 'reportIssue' ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={activeView === 'reportIssue' ? 'text-teal-700' : 'text-gray-700'}>Report an Issue</span>
+          </div>
+          
+          <div 
             className="rounded-lg px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'audit' ? '#2D75795C' : 'transparent' }}
             onClick={() => {
@@ -490,6 +503,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <AdminEditProfile user={user} onBack={() => setActiveView('dashboard')} />
         ) : activeView === 'changePassword' ? (
           <ChangePassword user={user} onBack={() => setActiveView('dashboard')} />
+        ) : activeView === 'reportIssue' ? (
+          <ReportIssuePage 
+            onBack={() => setActiveView('dashboard')} 
+            userInfo={{
+              username: user?.full_name || user?.username || 'Admin',
+              role: 'Admin'
+            }}
+          />
         ) : activeView === 'create' ? (
           <CreatePage 
             onCreateBooking={() => setActiveView('createBooking')} 
