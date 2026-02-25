@@ -18,6 +18,7 @@ interface Client {
   invitee_phone: string;
   emergency_contact_name?: string;
   emergency_contact_relation?: string;
+  emergency_contact_email?: string;
   emergency_contact_number?: string;
   invitee_age?: number;
   invitee_gender?: string;
@@ -850,10 +851,10 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               <div className="border rounded-lg p-4 bg-gray-50">
                 <div className="mb-2">
                   <span className="font-medium text-sm">{selectedClient.emergency_contact_name || 'Not provided'}</span>
-                  {selectedClient.emergency_contact_relation && (
-                    <span className="text-gray-500 text-sm ml-2">({selectedClient.emergency_contact_relation})</span>
-                  )}
                 </div>
+                {selectedClient.emergency_contact_relation && (
+                  <div className="text-sm text-gray-600 mb-1">({selectedClient.emergency_contact_relation})</div>
+                )}
                 {selectedClient.emergency_contact_number && (
                   <div className="text-sm text-gray-600">{selectedClient.emergency_contact_number}</div>
                 )}

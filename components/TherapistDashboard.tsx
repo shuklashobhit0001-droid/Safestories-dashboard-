@@ -544,11 +544,14 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
         const sessionsCompleted = filteredAppointments.filter((a: any) => {
           const sessionDate = a.booking_date ? new Date(a.booking_date) : new Date();
           const isPast = sessionDate < new Date();
-          const isNotCancelledOrNoShow = a.booking_status !== 'cancelled' && a.booking_status !== 'no_show';
+          const isNotCancelledOrNoShow = a.booking_status !== 'cancelled' && 
+                                         a.booking_status !== 'canceled' && 
+                                         a.booking_status !== 'no_show' && 
+                                         a.booking_status !== 'no show';
           return isPast && isNotCancelledOrNoShow;
         }).length; // Only past sessions (completed + pending notes), excluding cancelled/no_show
-        const noShows = filteredAppointments.filter((a: any) => a.booking_status === 'no_show').length;
-        const cancelled = filteredAppointments.filter((a: any) => a.booking_status === 'cancelled').length;
+        const noShows = filteredAppointments.filter((a: any) => a.booking_status === 'no_show' || a.booking_status === 'no show').length;
+        const cancelled = filteredAppointments.filter((a: any) => a.booking_status === 'cancelled' || a.booking_status === 'canceled').length;
         setClientStats({ bookings, sessionsCompleted, noShows, cancelled });
         
         // Update selectedClient with emergency contact and demographic data from the most recent appointment
@@ -1549,7 +1552,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
               </tr>
@@ -1557,13 +1559,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <tbody>
               {appointmentsLoading ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-gray-400 py-8">
+                  <td colSpan={6} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : appointments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-gray-400 py-8">
+                  <td colSpan={6} className="text-center text-gray-400 py-8">
                     No bookings found
                   </td>
                 </tr>
@@ -1589,7 +1591,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
 
                 return paginatedAppointments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-gray-400 py-8">
+                    <td colSpan={6} className="text-center text-gray-400 py-8">
                       No bookings found
                     </td>
                   </tr>
@@ -1611,7 +1613,6 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                             {formatClientName(appointment.client_name)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-sm">{appointment.contact_info}</td>
                         <td className="px-6 py-4 text-sm">
                           {appointment.mode?.includes('_') 
                             ? appointment.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
@@ -1634,7 +1635,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                       </tr>
                       {selectedAppointmentIndex === index && (
                         <tr className="bg-gray-100">
-                          <td colSpan={6} className="px-6 py-4">
+                          <td colSpan={5} className="px-6 py-4">
                             <div className="flex gap-3 justify-center">
                               <button
                                 onClick={() => copyAppointmentDetails(appointment)}
@@ -1913,33 +1914,18 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <div className="grid grid-cols-12 gap-6">
               {/* Left Column - Client Information (Always Visible) */}
               <div className="col-span-4 space-y-6">
-                {/* Contact Info */}
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-600 mb-3">Contact Info:</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3 text-sm">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                      <span className="text-gray-700">{maskPhone(selectedClient.client_phone || 'N/A')}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm">
-                      <Mail size={18} />
-                      <span className="text-gray-700">{maskEmail(selectedClient.client_email || 'N/A')}</span>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Emergency Contact */}
                 <div>
                   <h3 className="text-sm font-semibold text-gray-600 mb-3">Emergency Contact:</h3>
                   <div className="border rounded-lg p-4 bg-gray-50">
                     <div className="mb-2">
                       <span className="font-medium text-sm">{selectedClient.emergency_contact_name || 'Not provided'}</span>
-                      {selectedClient.emergency_contact_relation && (
-                        <span className="text-gray-500 text-sm ml-2">({selectedClient.emergency_contact_relation})</span>
-                      )}
                     </div>
+                    {selectedClient.emergency_contact_relation && (
+                      <div className="text-sm text-gray-600 mb-1">({selectedClient.emergency_contact_relation})</div>
+                    )}
                     {selectedClient.emergency_contact_number && (
-                      <div className="text-sm text-gray-600">{maskPhone(selectedClient.emergency_contact_number)}</div>
+                      <div className="text-sm text-gray-600">{selectedClient.emergency_contact_number}</div>
                     )}
                   </div>
                 </div>
