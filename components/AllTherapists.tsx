@@ -1484,7 +1484,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 </div>
               </div>
             </div>
-          </>
         )}
       </div>
     );
@@ -2070,7 +2069,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 </div>
               </div>
             </div>
-          </>
         )}
       </div>
     );
