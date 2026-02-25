@@ -821,14 +821,36 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   };
 
   const handleSOSClick = (booking: any) => {
-    // Time validation DISABLED - Allow SOS at any time
+    // Time validation ENABLED - 24-hour window after session ends
+    const timeMatch = booking.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+    if (timeMatch) {
+      const [, dateStr, , endTimeStr] = timeMatch;
+      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+      const now = new Date();
+      const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
+      
+      // Check if session has ended
+      if (hoursSinceEnd < 0) {
+        setToast({ message: 'SOS ticket can only be raised after the session ends', type: 'error' });
+        setSelectedAppointmentIndex(null);
+        return;
+      }
+      
+      // Check if within 24-hour window
+      if (hoursSinceEnd > 24) {
+        setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
+        setSelectedAppointmentIndex(null);
+        return;
+      }
+    }
+    
     setSelectedSOSBooking(booking);
     setShowSOSModal(true);
     setSelectedAppointmentIndex(null);
   };
 
   const handleSOSClickFromClient = (apt: any) => {
-    // Time validation DISABLED - Allow SOS at any time
+    // Time validation ENABLED - 24-hour window after session ends
     const booking = {
       ...apt,
       client_name: selectedClient?.client_name,
@@ -836,6 +858,26 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       contact_info: selectedClient?.client_phone,
       session_timings: apt.session_timings
     };
+    
+    const timeMatch = booking.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+    if (timeMatch) {
+      const [, dateStr, , endTimeStr] = timeMatch;
+      const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
+      const now = new Date();
+      const hoursSinceEnd = (now.getTime() - endDateTime.getTime()) / (1000 * 60 * 60);
+      
+      // Check if session has ended
+      if (hoursSinceEnd < 0) {
+        setToast({ message: 'SOS ticket can only be raised after the session ends', type: 'error' });
+        return;
+      }
+      
+      // Check if within 24-hour window
+      if (hoursSinceEnd > 24) {
+        setToast({ message: 'SOS ticket can only be raised within 24 hours of session end', type: 'error' });
+        return;
+      }
+    }
     
     setSelectedSOSBooking(booking);
     setShowSOSModal(true);
@@ -1614,10 +1656,17 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm">
-                          {appointment.mode?.includes('_') 
-                            ? appointment.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-                            : appointment.mode || 'Google Meet'
-                          }
+                          {(() => {
+                            let displayMode = appointment.mode || 'Google Meet';
+                            if (appointment.mode?.includes('_')) {
+                              displayMode = appointment.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                            }
+                            // Clean up "In-person (location details)" to just "In-person"
+                            if (displayMode?.startsWith('In-person')) {
+                              displayMode = 'In-person';
+                            }
+                            return displayMode;
+                          })()}
                         </td>
                         <td className="px-6 py-4 text-sm">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
@@ -2889,10 +2938,17 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                               <td className="px-6 py-4">{appointment.session_name}</td>
                               <td className="px-6 py-4 text-sm">{appointment.session_timings}</td>
                               <td className="px-6 py-4">
-                                {appointment.mode?.includes('_') 
-                                  ? appointment.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-                                  : appointment.mode || 'Google Meet'
-                                }
+                                {(() => {
+                                  let displayMode = appointment.mode || 'Google Meet';
+                                  if (appointment.mode?.includes('_')) {
+                                    displayMode = appointment.mode.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                                  }
+                                  // Clean up "In-person (location details)" to just "In-person"
+                                  if (displayMode?.startsWith('In-person')) {
+                                    displayMode = 'In-person';
+                                  }
+                                  return displayMode;
+                                })()}
                               </td>
                               <td className="px-6 py-4">
                                 <span className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-yellow-100 text-yellow-700">

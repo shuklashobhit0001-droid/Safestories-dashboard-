@@ -67,6 +67,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedAppointmentForReminder, setSelectedAppointmentForReminder] = useState<Appointment | null>(null);
+  const [showBookingLinkConfirmModal, setShowBookingLinkConfirmModal] = useState(false);
+  const [selectedClientForBookingLink, setSelectedClientForBookingLink] = useState<Client | null>(null);
   const appointmentActionsRef = React.useRef<HTMLTableElement>(null);
   const [clientDateFilter, setClientDateFilter] = useState({ start: '', end: '' });
   const [clientSelectedMonth, setClientSelectedMonth] = useState('All Time');
@@ -281,6 +283,18 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   };
 
   const handleSendClientReminder = async (client: Client) => {
+    // Show confirmation modal instead of sending directly
+    console.log('handleSendClientReminder called', client);
+    setSelectedClientForBookingLink(client);
+    setShowBookingLinkConfirmModal(true);
+    console.log('Modal state set to true');
+  };
+
+  const confirmSendBookingLink = async () => {
+    if (!selectedClientForBookingLink) return;
+
+    const client = selectedClientForBookingLink;
+    
     try {
       // First, get the client's therapy type from their appointments
       let therapyType = 'Individual Therapy Session'; // fallback default
@@ -346,7 +360,9 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       setToast({ message: 'Failed to send booking link to client', type: 'error' });
     }
     
-    // Close the action row
+    // Close the modal and action row
+    setShowBookingLinkConfirmModal(false);
+    setSelectedClientForBookingLink(null);
     setSelectedClientForAction(null);
   };
 
@@ -1442,6 +1458,38 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             </div>
           </div>
         )}
+
+        {/* Booking Link Confirmation Modal */}
+        {showBookingLinkConfirmModal && (
+          <>
+            {console.log('RENDERING MODAL NOW')}
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
+                <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
+                <p className="text-gray-600 mb-6">
+                  This will send a booking link reminder to the client. Would you like to proceed?
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={confirmSendBookingLink}
+                    className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-medium"
+                  >
+                    Yes, Send
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowBookingLinkConfirmModal(false);
+                      setSelectedClientForBookingLink(null);
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                  >
+                    No, Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -1997,6 +2045,38 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             type={toast.type}
             onClose={() => setToast(null)}
           />
+        )}
+
+        {/* Booking Link Confirmation Modal */}
+        {showBookingLinkConfirmModal && (
+          <>
+            {console.log('RENDERING MODAL NOW IN SELECTED THERAPIST VIEW')}
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
+                <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
+                <p className="text-gray-600 mb-6">
+                  This will send a booking link reminder to the client. Would you like to proceed?
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={confirmSendBookingLink}
+                    className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-medium"
+                  >
+                    Yes, Send
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowBookingLinkConfirmModal(false);
+                      setSelectedClientForBookingLink(null);
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                  >
+                    No, Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
     );

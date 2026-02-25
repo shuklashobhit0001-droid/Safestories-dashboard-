@@ -40,6 +40,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const [activeTab, setActiveTab] = useState<'clients' | 'pretherapy' | 'leads'>('clients');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'drop-out'>('all');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showBookingLinkConfirmModal, setShowBookingLinkConfirmModal] = useState(false);
+  const [selectedClientForBookingLink, setSelectedClientForBookingLink] = useState<Client | null>(null);
   const itemsPerPage = 10;
   const tableRef = useRef<HTMLDivElement>(null);
   const [adminUser] = useState(() => {
@@ -340,6 +342,16 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   };
 
   const handleSendBookingLink = async (client: Client) => {
+    // Show confirmation modal instead of sending directly
+    setSelectedClientForBookingLink(client);
+    setShowBookingLinkConfirmModal(true);
+  };
+
+  const confirmSendBookingLink = async () => {
+    if (!selectedClientForBookingLink) return;
+
+    const client = selectedClientForBookingLink;
+
     try {
       // Get the most recent therapy type for this client
       let therapyType = 'Individual Therapy';
@@ -388,6 +400,10 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
       console.error('Error sending booking link:', error);
       setToast({ message: 'Failed to send booking link to client', type: 'error' });
     }
+
+    // Close modal
+    setShowBookingLinkConfirmModal(false);
+    setSelectedClientForBookingLink(null);
   };
 
   const handleTransferSuccess = () => {
@@ -809,6 +825,35 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
           type={toast.type}
           onClose={() => setToast(null)}
         />
+      )}
+
+      {/* Booking Link Confirmation Modal */}
+      {showBookingLinkConfirmModal && selectedClientForBookingLink && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
+            <p className="text-gray-600 mb-6">
+              This will send a booking link reminder to <span className="font-semibold">{formatClientName(selectedClientForBookingLink.invitee_name)}</span>. Would you like to proceed?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={confirmSendBookingLink}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-medium"
+              >
+                Yes, Send
+              </button>
+              <button
+                onClick={() => {
+                  setShowBookingLinkConfirmModal(false);
+                  setSelectedClientForBookingLink(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                No, Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
