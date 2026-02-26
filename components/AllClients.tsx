@@ -37,8 +37,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<'clients' | 'pretherapy' | 'leads'>('clients');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'drop-out'>('all');
+  const [activeTab, setActiveTab] = useState<'clients' | 'pretherapy'>('clients');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'drop-out' | 'invitation-sent'>('all');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showBookingLinkConfirmModal, setShowBookingLinkConfirmModal] = useState(false);
   const [selectedClientForBookingLink, setSelectedClientForBookingLink] = useState<Client | null>(null);
@@ -248,21 +248,25 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     
     const isSafestories = (client.booking_host_name || '').toLowerCase().trim() === 'safestories';
     
-    // Filter by tab - each client appears in only one tab
+    // Filter by tab
     if (activeTab === 'pretherapy') {
       // Pre-Therapy: clients with Safestories as therapist (any booking count)
       return isSafestories;
-    } else if (activeTab === 'leads') {
-      // Leads: clients with 0 bookings (any therapist)
-      return client.session_count === 0;
     } else {
-      // All Clients: clients with bookings AND therapist is NOT Safestories
-      const isInClientsTab = client.session_count > 0 && !isSafestories;
-      
-      if (!isInClientsTab) return false;
+      // Clients tab: Include both regular clients AND leads (0 bookings)
+      // Exclude only Safestories pre-therapy clients
+      if (isSafestories) return false;
       
       // Apply status filter for Clients tab
       if (statusFilter !== 'all') {
+        // Filter for invitation-sent (leads)
+        if (statusFilter === 'invitation-sent') {
+          return client.session_count === 0;
+        }
+        
+        // For other statuses, exclude leads (0 bookings)
+        if (client.session_count === 0) return false;
+        
         const clientStatus = getClientStatus(client);
         return clientStatus === statusFilter;
       }
@@ -287,25 +291,22 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         client.invitee_email,
         formatPreTherapyDate(client.latest_booking_date)
       ]);
-    } else if (activeTab === 'leads') {
-      headers = ['Client Name', 'Phone No.', 'Email ID', 'Assigned Therapist', 'Booking Link Sent'];
-      rows = filteredClients.map(client => [
-        formatClientName(client.invitee_name),
-        client.invitee_phone,
-        client.invitee_email,
-        client.booking_host_name,
-        formatBookingLinkDate(client.booking_link_sent_at)
-      ]);
     } else {
-      headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Bookings', 'Session Name', 'Assigned Therapist'];
-      rows = filteredClients.map(client => [
-        formatClientName(client.invitee_name),
-        client.invitee_phone,
-        client.invitee_email,
-        client.session_count,
-        formatSessionName(client.booking_resource_name, client.booking_host_name),
-        standardizeTherapistName(client.booking_host_name)
-      ]);
+      // Clients tab (includes both regular clients and leads)
+      headers = ['Client Name', 'Phone No.', 'Email ID', 'No. of Bookings', 'Session Name', 'Assigned Therapist', 'Last Session Booked', 'Status'];
+      rows = filteredClients.map(client => {
+        const isLead = client.session_count === 0;
+        return [
+          formatClientName(client.invitee_name),
+          client.invitee_phone,
+          client.invitee_email,
+          client.session_count,
+          formatSessionName(client.booking_resource_name, client.booking_host_name),
+          standardizeTherapistName(client.booking_host_name),
+          isLead ? formatBookingLinkDate(client.booking_link_sent_at) : formatDate(client.last_session_date),
+          isLead ? 'Invitation Sent' : getClientStatus(client)
+        ];
+      });
     }
     
     const csvContent = [
@@ -463,20 +464,6 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         >
           Pre-Therapy
         </button>
-        <button
-          onClick={() => {
-            setActiveTab('leads');
-            setStatusFilter('all');
-            setCurrentPage(1);
-          }}
-          className={`pb-2 font-medium ${
-            activeTab === 'leads'
-              ? 'text-teal-700 border-b-2 border-teal-700'
-              : 'text-gray-400'
-          }`}
-        >
-          Leads
-        </button>
       </div>
 
       {/* Search Bar */}
@@ -553,6 +540,18 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
           >
             Drop-out
           </button>
+          <button
+            onClick={() => {
+              setStatusFilter('invitation-sent');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
+              statusFilter === 'invitation-sent' ? 'ring-2 ring-blue-800' : ''
+            }`}
+            style={{ backgroundColor: '#3B82F6' }}
+          >
+            Invitation Sent
+          </button>
         </div>
       )}
 
@@ -581,35 +580,28 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                   <>
                     <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Pre-therapy Date</th>
                     <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                    <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
                   </>
-                )}
-                {activeTab === 'leads' && (
-                  <>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Booking Link Sent</th>
-                  </>
-                )}
-                {(activeTab === 'pretherapy' || activeTab === 'leads') && (
-                  <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
                 )}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === 'pretherapy' ? 5 : activeTab === 'leads' ? 6 : 9} className="text-center text-gray-400 py-8">
+                  <td colSpan={activeTab === 'pretherapy' ? 5 : 9} className="text-center text-gray-400 py-8">
                     Loading...
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === 'pretherapy' ? 5 : activeTab === 'leads' ? 6 : 9} className="text-center text-gray-400 py-8">
-                    No {activeTab === 'clients' ? 'clients' : activeTab === 'pretherapy' ? 'pre-therapy clients' : 'leads'} found
+                  <td colSpan={activeTab === 'pretherapy' ? 5 : 9} className="text-center text-gray-400 py-8">
+                    No {activeTab === 'clients' ? 'clients' : 'pre-therapy clients'} found
                   </td>
                 </tr>
               ) : (
-                paginatedClients.map((client, index) => (
+                paginatedClients.map((client, index) => {
+                  const isLead = client.session_count === 0;
+                  return (
                   <React.Fragment key={index}>
                     <tr 
                       className={`border-b hover:bg-gray-50 ${activeTab === 'clients' ? 'cursor-pointer' : ''}`}
@@ -645,31 +637,40 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                           <td className="px-6 py-4 text-sm">{client.session_count}</td>
                           <td className="px-6 py-4 text-sm">{formatSessionName(client.booking_resource_name, client.booking_host_name)}</td>
                           <td className="px-6 py-4 text-sm">
-                            {formatMode(client.booking_mode)}
+                            {isLead ? 'N/A' : formatMode(client.booking_mode)}
                           </td>
                           <td className="px-6 py-4 text-sm">
                             {standardizeTherapistName(client.booking_host_name)}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900">
-                            {client.last_session_date ? formatDate(client.last_session_date) : 'N/A'}
+                            {isLead ? formatBookingLinkDate(client.booking_link_sent_at) : (client.last_session_date ? formatDate(client.last_session_date) : 'N/A')}
                           </td>
                           <td className="px-6 py-4 text-sm">
-                            {(() => {
-                              const status = getClientStatus(client);
-                              return (
-                                <span 
-                                  className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
-                                  style={{ 
-                                    backgroundColor: 
-                                      status === 'active' ? '#21615D' : 
-                                      status === 'drop-out' ? '#B91C1C' : 
-                                      '#9CA3AF' 
-                                  }}
-                                >
-                                  {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
-                                </span>
-                              );
-                            })()}
+                            {isLead ? (
+                              <span 
+                                className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
+                                style={{ backgroundColor: '#3B82F6' }}
+                              >
+                                Invitation Sent
+                              </span>
+                            ) : (
+                              (() => {
+                                const status = getClientStatus(client);
+                                return (
+                                  <span 
+                                    className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
+                                    style={{ 
+                                      backgroundColor: 
+                                        status === 'active' ? '#21615D' : 
+                                        status === 'drop-out' ? '#B91C1C' : 
+                                        '#9CA3AF' 
+                                    }}
+                                  >
+                                    {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
+                                  </span>
+                                );
+                              })()
+                            )}
                           </td>
                         </>
                       )}
@@ -679,44 +680,18 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                           <td className="px-6 py-4 text-sm">
                             {standardizeTherapistName(client.booking_host_name)}
                           </td>
-                        </>
-                      )}
-                      {activeTab === 'leads' && (
-                        <>
-                          <td className="px-6 py-4 text-sm">{formatSessionName(client.booking_resource_name, client.booking_host_name)}</td>
                           <td className="px-6 py-4 text-sm">
-                            {standardizeTherapistName(client.booking_host_name)}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            {formatBookingLinkDate(client.booking_link_sent_at)}
+                            <div className="flex justify-center">
+                              <button
+                                onClick={() => handleAssignTherapist(client)}
+                                className="flex items-center gap-1 text-sm font-medium text-teal-600 hover:text-teal-700"
+                              >
+                                <Plus size={16} />
+                                Assign a Therapist
+                              </button>
+                            </div>
                           </td>
                         </>
-                      )}
-                      {activeTab === 'pretherapy' && (
-                        <td className="px-6 py-4 text-sm">
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => handleAssignTherapist(client)}
-                              className="flex items-center gap-1 text-sm font-medium text-teal-600 hover:text-teal-700"
-                            >
-                              <Plus size={16} />
-                              Assign a Therapist
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                      {activeTab === 'leads' && (
-                        <td className="px-6 py-4 text-sm">
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() => handleSendBookingLink(client)}
-                              className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-                            >
-                              <Send size={16} />
-                              Send Booking Link
-                            </button>
-                          </div>
-                        </td>
                       )}
                     </tr>
                     
@@ -735,21 +710,23 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                               <Send size={16} />
                               Send Booking Link
                             </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTransferClick(client);
-                              }}
-                              disabled={isTransferDisabled(client)}
-                              className={`flex items-center gap-1 text-sm font-medium ${
-                                isTransferDisabled(client)
-                                  ? 'text-gray-400 cursor-not-allowed'
-                                  : 'text-orange-600 hover:text-orange-700'
-                              }`}
-                            >
-                              <ArrowRightLeft size={16} />
-                              Transfer
-                            </button>
+                            {!isLead && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleTransferClick(client);
+                                }}
+                                disabled={isTransferDisabled(client)}
+                                className={`flex items-center gap-1 text-sm font-medium ${
+                                  isTransferDisabled(client)
+                                    ? 'text-gray-400 cursor-not-allowed'
+                                    : 'text-orange-600 hover:text-orange-700'
+                                }`}
+                              >
+                                <ArrowRightLeft size={16} />
+                                Transfer
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -768,17 +745,24 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                             <>
                               <td className="px-6 py-4 text-sm text-gray-600">{therapist.session_count}</td>
                               <td className="px-6 py-4 text-sm text-gray-600">{therapist.booking_host_name}</td>
+                              <td></td>
+                              <td></td>
+                              <td></td>
+                              <td></td>
                             </>
                           )}
                           {activeTab === 'pretherapy' && (
-                            <td className="px-6 py-4 text-sm text-gray-600"></td>
+                            <>
+                              <td className="px-6 py-4 text-sm text-gray-600"></td>
+                              <td></td>
+                            </>
                           )}
-                          {(activeTab === 'clients' || activeTab === 'pretherapy') && <td></td>}
                         </tr>
                       ))
                     )}
                   </React.Fragment>
-                ))
+                );
+                })
               )}
             </tbody>
           </table>

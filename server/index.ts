@@ -1290,7 +1290,10 @@ app.get('/api/clients', async (req, res) => {
         booking_resource_name,
         booking_status,
         booking_mode,
-        1 as session_count,
+        CASE 
+          WHEN booking_status IN ('cancelled', 'canceled', 'no_show', 'no show') THEN 0
+          ELSE 1
+        END as session_count,
         invitee_created_at as created_at,
         booking_start_at as latest_booking_date,
         booking_invitee_time
@@ -1313,7 +1316,7 @@ app.get('/api/clients', async (req, res) => {
       FROM booking_requests
     `);
 
-    // Group by email (primary) or phone (fallback)
+    // Group by phone (primary) or email (fallback) - phone is more reliable
     const clientMap = new Map();
     const emailToKey = new Map();
     const phoneToKey = new Map();
@@ -1324,22 +1327,22 @@ app.get('/api/clients', async (req, res) => {
       
       let key = null;
       
-      // Find existing key by email or phone
-      if (email && emailToKey.has(email)) {
-        key = emailToKey.get(email);
-      } else if (phone && phoneToKey.has(phone)) {
+      // Find existing key by phone (primary) or email (fallback)
+      if (phone && phoneToKey.has(phone)) {
         key = phoneToKey.get(phone);
-        // If we now have an email for this phone-based entry, upgrade the key
-        if (email) {
-          const oldData = clientMap.get(key);
-          clientMap.delete(key);
-          key = email;
-          clientMap.set(key, oldData);
+        // Track this email to the same key
+        if (email && !emailToKey.has(email)) {
           emailToKey.set(email, key);
         }
+      } else if (email && emailToKey.has(email)) {
+        key = emailToKey.get(email);
+        // Track this phone to the same key
+        if (phone && !phoneToKey.has(phone)) {
+          phoneToKey.set(phone, key);
+        }
       } else {
-        // New client
-        key = email || phone;
+        // New client - prefer phone as key if available
+        key = phone || email;
       }
       
       if (!key) return;
@@ -1368,6 +1371,16 @@ app.get('/api/clients', async (req, res) => {
       
       const client = clientMap.get(key);
       client.session_count += parseInt(row.session_count) || 0;
+      
+      // Update to most recent/valid email if current one is missing or looks invalid
+      if (row.invitee_email) {
+        if (!client.invitee_email || client.invitee_email.includes('.con')) {
+          // Prefer .com over .con (common typo)
+          if (!row.invitee_email.includes('.con')) {
+            client.invitee_email = row.invitee_email;
+          }
+        }
+      }
       
       // Track last session date and mode for past sessions (excluding cancelled and no_show)
       if (row.booking_status && !['cancelled', 'canceled', 'no_show', 'no show'].includes(row.booking_status)) {
@@ -1414,11 +1427,6 @@ app.get('/api/clients', async (req, res) => {
         if (parseInt(row.session_count) > 0) {
           client.booking_host_name = row.booking_host_name;
         }
-      }
-      
-      // Fill in missing email if found
-      if (row.invitee_email && !client.invitee_email) {
-        client.invitee_email = row.invitee_email;
       }
       
       // Add to therapists array only if different therapist
