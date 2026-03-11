@@ -360,36 +360,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
-            style={{ backgroundColor: activeView === 'clients' ? '#2D75795C' : 'transparent' }}
+            style={{ backgroundColor: (activeView === 'clients' || (activeView === 'therapists' && clientViewSource === 'clients')) ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
               setActiveView('clients');
             }}
           >
-            <Users size={20} className={activeView === 'clients' ? 'text-teal-700' : 'text-gray-700'} />
-            <span className={activeView === 'clients' ? 'text-teal-700' : 'text-gray-700'}>All Clients</span>
+            <Users size={20} className={(activeView === 'clients' || (activeView === 'therapists' && clientViewSource === 'clients')) ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={(activeView === 'clients' || (activeView === 'therapists' && clientViewSource === 'clients')) ? 'text-teal-700' : 'text-gray-700'}>All Clients</span>
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
-            style={{ backgroundColor: activeView === 'therapists' ? '#2D75795C' : 'transparent' }}
+            style={{ backgroundColor: (activeView === 'therapists' && (!selectedClientForView || clientViewSource === 'therapists')) ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
               setActiveView('therapists');
             }}
           >
-            <UserCog size={20} className={activeView === 'therapists' ? 'text-teal-700' : 'text-gray-700'} />
-            <span className={activeView === 'therapists' ? 'text-teal-700' : 'text-gray-700'}>All Therapists</span>
+            <UserCog size={20} className={(activeView === 'therapists' && (!selectedClientForView || clientViewSource === 'therapists')) ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={(activeView === 'therapists' && (!selectedClientForView || clientViewSource === 'therapists')) ? 'text-teal-700' : 'text-gray-700'}>All Therapists</span>
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
-            style={{ backgroundColor: activeView === 'appointments' ? '#2D75795C' : 'transparent' }}
+            style={{ backgroundColor: (activeView === 'appointments' || (activeView === 'therapists' && clientViewSource === 'appointments')) ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
               setActiveView('appointments');
             }}
           >
-            <Calendar size={20} className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'} />
-            <span className={activeView === 'appointments' ? 'text-teal-700' : 'text-gray-700'}>Bookings</span>
+            <Calendar size={20} className={(activeView === 'appointments' || (activeView === 'therapists' && clientViewSource === 'appointments')) ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={(activeView === 'appointments' || (activeView === 'therapists' && clientViewSource === 'appointments')) ? 'text-teal-700' : 'text-gray-700'}>Bookings</span>
           </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
