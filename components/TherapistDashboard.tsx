@@ -375,6 +375,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setShowProfileMenu(false);
       }
+      // Close expanded rows when clicking outside the table
+      if (expandedRows.size > 0 && bookingActionsRef.current && !bookingActionsRef.current.contains(event.target as Node)) {
+        setExpandedRows(new Set());
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -1297,7 +1301,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       
       <div className="bg-white rounded-lg border">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full" ref={bookingActionsRef}>
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
@@ -1324,35 +1328,91 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               ) : (
                 paginatedClients.map((client, index) => {
                   const status = getClientStatus(client);
+                  const isExpanded = expandedRows.has(index);
                   return (
-                    <tr key={index} className="border-b hover:bg-gray-50 cursor-pointer" onClick={async () => {
-                      setActiveAppointmentTab('all');
-                      await fetchClientDetails(client);
-                      setSelectedClient(client);
-                    }}>
-                      <td className="px-6 py-4 text-sm">
-                        <span className="text-teal-700 hover:underline cursor-pointer">
-                          {formatClientName(client.client_name)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm">{client.booking_resource_name || 'N/A'}</td>
-                      <td className="px-6 py-4 text-sm">{formatMode(client.booking_mode)}</td>
-                      <td className="px-6 py-4 text-sm">{client.total_sessions}</td>
-                      <td className="px-6 py-4 text-sm">{formatLastSessionDate(client.last_session_date)}</td>
-                      <td className="px-6 py-4 text-sm">
-                        <span 
-                          className="px-3 py-1 rounded-full text-xs font-medium text-white"
-                          style={{ 
-                            backgroundColor: 
-                              status === 'active' ? '#21615D' : 
-                              status === 'drop-out' ? '#B91C1C' : 
-                              '#9CA3AF' 
-                          }}
-                        >
-                          {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
-                        </span>
-                      </td>
-                    </tr>
+                    <React.Fragment key={index}>
+                      <tr 
+                        className="border-b hover:bg-gray-50 cursor-pointer"
+                        onClick={() => toggleRow(index)}
+                      >
+                        <td className="px-6 py-4 text-sm">
+                          <span 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveAppointmentTab('all');
+                              fetchClientDetails(client);
+                              setSelectedClient(client);
+                            }}
+                            className="text-teal-700 hover:underline cursor-pointer"
+                          >
+                            {formatClientName(client.client_name)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm">{client.booking_resource_name || 'N/A'}</td>
+                        <td className="px-6 py-4 text-sm">{formatMode(client.booking_mode)}</td>
+                        <td className="px-6 py-4 text-sm">{client.total_sessions}</td>
+                        <td className="px-6 py-4 text-sm">{formatLastSessionDate(client.last_session_date)}</td>
+                        <td className="px-6 py-4 text-sm">
+                          <span 
+                            className="px-3 py-1 rounded-full text-xs font-medium text-white"
+                            style={{ 
+                              backgroundColor: 
+                                status === 'active' ? '#21615D' : 
+                                status === 'drop-out' ? '#B91C1C' : 
+                                '#9CA3AF' 
+                            }}
+                          >
+                            {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
+                          </span>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-gray-50 border-b">
+                          <td colSpan={6} className="px-6 py-4">
+                            <div className="flex justify-center">
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const webhookData = {
+                                      clientName: client.client_name,
+                                      email: client.client_email || '',
+                                      phone: client.client_phone || '',
+                                      therapistName: user.therapist_name || user.name,
+                                      therapy: client.booking_resource_name || 'Individual Therapy'
+                                    };
+
+                                    const response = await fetch('/api/send-booking-link', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify(webhookData)
+                                    });
+
+                                    if (response.ok) {
+                                      const result = await response.json();
+                                      if (result.warning) {
+                                        setToast({ message: `${result.message} (${result.warning})`, type: 'success' });
+                                      } else {
+                                        setToast({ message: 'Booking link sent to client successfully!', type: 'success' });
+                                      }
+                                    } else {
+                                      setToast({ message: 'Failed to send booking link', type: 'error' });
+                                    }
+                                  } catch (error) {
+                                    console.error('Error sending booking link:', error);
+                                    setToast({ message: 'Failed to send booking link', type: 'error' });
+                                  }
+                                  setExpandedRows(new Set());
+                                }}
+                                className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                              >
+                                <Send size={16} />
+                                Send Booking Link
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}
