@@ -36,6 +36,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
   const [clients, setClients] = useState<any[]>([]);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [filteredClients, setFilteredClients] = useState<any[]>([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const countryCodes = [
@@ -390,37 +391,49 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setShowConfirmModal(true);
+  };
+
+  const confirmSend = async () => {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/booking-requests', {
+      const response = await fetch('/api/send-booking-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clientName,
-          clientWhatsapp: `${countryCode}${clientWhatsapp}`,
-          clientEmail,
-          therapyType,
+          email: clientEmail,
+          phone: `${countryCode}${clientWhatsapp}`,
           therapistName,
-          bookingLink: null,
-          isFreeConsultation,
-        }),
+          therapy: therapyType || 'Individual Therapy'
+        })
       });
 
       if (response.ok) {
-        setToast({ message: 'Booking request Sent successfully!', type: 'success' });
+        const result = await response.json();
+        if (result.warning) {
+          setToast({ message: `${result.message} (${result.warning})`, type: 'success' });
+        } else {
+          setToast({ message: 'Booking link sent to client successfully!', type: 'success' });
+        }
         setClientName('');
         setClientWhatsapp('');
         setClientEmail('');
         setTherapyType('');
         setTherapistName('');
-        setTimeout(() => onClose(), 2000);
+        setTimeout(() => {
+          setShowConfirmModal(false);
+          onClose();
+        }, 2000);
       } else {
-        setToast({ message: 'Failed to save booking request', type: 'error' });
+        setToast({ message: 'Failed to send booking link', type: 'error' });
+        setShowConfirmModal(false);
       }
     } catch (error) {
       console.error('Error:', error);
       setToast({ message: 'An error occurred', type: 'error' });
+      setShowConfirmModal(false);
     } finally {
       setLoading(false);
     }
@@ -636,6 +649,33 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
           type={toast.type}
           onClose={() => setToast(null)}
         />
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
+            <p className="text-gray-600 mb-6">
+              This will send a booking link to <span className="font-semibold">{clientName}</span> on WhatsApp. Would you like to proceed?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100 font-medium"
+              >
+                No
+              </button>
+              <button
+                onClick={confirmSend}
+                disabled={loading}
+                className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-medium disabled:bg-gray-400"
+              >
+                {loading ? 'Sending...' : 'Yes'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

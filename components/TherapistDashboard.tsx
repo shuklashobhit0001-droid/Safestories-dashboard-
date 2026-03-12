@@ -16,6 +16,7 @@ import { FreeConsultationDetail } from './FreeConsultationDetail';
 import { CompleteProfileModal } from './CompleteProfileModal';
 import { ProfileUnderReviewBanner } from './ProfileUnderReviewBanner';
 import { EmptyStateCard } from './EmptyStateCard';
+import { SendBookingModal } from './SendBookingModal';
 import { useUrlState } from '../hooks/useUrlState';
 
 interface TherapistDashboardProps {
@@ -107,6 +108,8 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [clientAppointments, setClientAppointments] = useState<any[]>([]);
   const [clientDateRange, setClientDateRange] = useState({ start: '', end: '' });
   const [clientSelectedMonth, setClientSelectedMonth] = useState('All Time');
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [selectedClientForBooking, setSelectedClientForBooking] = useState<any>(null);
   const [isClientDateDropdownOpen, setIsClientDateDropdownOpen] = useState(false);
   const [showClientCustomCalendar, setShowClientCustomCalendar] = useState(false);
   const [clientStartDate, setClientStartDate] = useState('');
@@ -1371,37 +1374,13 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                           <td colSpan={6} className="px-6 py-4">
                             <div className="flex justify-center">
                               <button
-                                onClick={async () => {
-                                  try {
-                                    const webhookData = {
-                                      clientName: client.client_name,
-                                      email: client.client_email || '',
-                                      phone: client.client_phone || '',
-                                      therapistName: user.therapist_name || user.name,
-                                      therapy: client.booking_resource_name || 'Individual Therapy'
-                                    };
-
-                                    const response = await fetch('/api/send-booking-link', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify(webhookData)
-                                    });
-
-                                    if (response.ok) {
-                                      const result = await response.json();
-                                      if (result.warning) {
-                                        setToast({ message: `${result.message} (${result.warning})`, type: 'success' });
-                                      } else {
-                                        setToast({ message: 'Booking link sent to client successfully!', type: 'success' });
-                                      }
-                                    } else {
-                                      setToast({ message: 'Failed to send booking link', type: 'error' });
-                                    }
-                                  } catch (error) {
-                                    console.error('Error sending booking link:', error);
-                                    setToast({ message: 'Failed to send booking link', type: 'error' });
-                                  }
-                                  setExpandedRows(new Set());
+                                onClick={() => {
+                                  setSelectedClientForBooking({
+                                    name: client.client_name,
+                                    phone: client.client_phone || '',
+                                    email: client.client_email || ''
+                                  });
+                                  setShowBookingModal(true);
                                 }}
                                 className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
                               >
@@ -3463,6 +3442,17 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           prefilledData={user.profileData}
         />
       )}
+
+      {/* Send Booking Link Modal */}
+      <SendBookingModal
+        isOpen={showBookingModal}
+        onClose={() => {
+          setShowBookingModal(false);
+          setSelectedClientForBooking(null);
+          setExpandedRows(new Set());
+        }}
+        prefilledClient={selectedClientForBooking}
+      />
       </div>
     </div>
   );
