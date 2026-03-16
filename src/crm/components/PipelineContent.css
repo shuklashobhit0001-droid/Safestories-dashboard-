@@ -139,6 +139,10 @@
   position: relative;
 }
 
+.lead-card.active-dropdown {
+  z-index: 50;
+}
+
 .lead-card.view-only {
   cursor: not-allowed;
   opacity: 0.9;
@@ -342,6 +346,7 @@
   transition: all 0.15s;
   justify-content: center;
 }
+
 .send-booking-btn:hover {
   background: #0f766e;
   color: white;
