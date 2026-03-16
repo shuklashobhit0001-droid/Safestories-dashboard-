@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell, Copy, Send, Plus, User, Eye, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, Users, UserCog, Calendar, CreditCard, LogOut, PieChart, MessageCircle, ChevronUp, ChevronDown, FileText, Bell, Copy, Send, Plus, User, Eye, AlertCircle, ExternalLink } from 'lucide-react';
 import { Logo } from './Logo';
 import { AllClients } from './AllClients';
 import { AllTherapists } from './AllTherapists';
@@ -413,6 +413,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <Bell size={20} className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'notifications' ? 'text-teal-700' : 'text-gray-700'}>Notifications</span>
           </div>
+
+          {/* Safestories CRM Link */}
+          <div
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-teal-50 border border-teal-100"
+            style={{ backgroundColor: '#f0fdfa' }}
+            onClick={() => window.location.href = '/crm'}
+          >
+            <ExternalLink size={20} className="text-teal-600 flex-shrink-0" />
+            <span className="text-teal-700 font-medium text-sm">Safestories CRM</span>
+          </div>
         </nav>
 
         <div className="px-4 mb-4 pt-4 border-t">
@@ -566,13 +576,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
               <p className="text-gray-600">Welcome Back, {user?.full_name || user?.username}!</p>
             </div>
             <div className="flex items-center gap-4">
-              <button 
-                onClick={() => window.location.href = '/crm'}
-                className="flex items-center gap-2 border rounded-lg px-4 py-2 hover:opacity-90 font-medium text-white"
-                style={{ backgroundColor: '#21615D' }}
-              >
-                Go To CRM
-              </button>
               <button className="flex items-center gap-2 border rounded-lg px-4 py-2 bg-white hover:bg-gray-50">
                 <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                 <span className="text-sm font-medium">Live Sessions: {liveSessionsCount}</span>
