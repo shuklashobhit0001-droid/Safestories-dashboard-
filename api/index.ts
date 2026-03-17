@@ -848,19 +848,54 @@ app.post('/api/leads', async (req, res) => {
     }
 
     try {
+        const normalizedPhone = phone.replace(/[\s\-\(\)\+]/g, '');
+        const normalizedEmail = email ? email.toLowerCase().trim() : '';
+
+        // Check for existing bookings to determine correct starting stage
+        const bookingCheck = await pool.query(
+            `SELECT b.booking_resource_name, b.invitee_payment_amount, u.id as user_id
+             FROM bookings b
+             LEFT JOIN therapists t ON b.booking_host_name ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
+             LEFT JOIN users u ON u.therapist_id = t.therapist_id AND u.role = 'therapist'
+             WHERE (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(b.invitee_phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = $1 
+                OR (LOWER(TRIM(b.invitee_email)) = $2 AND $2 <> ''))
+             AND b.booking_status NOT IN ('cancelled', 'canceled', 'no-show')
+             ORDER BY b.booking_start_at DESC LIMIT 1`,
+            [normalizedPhone, normalizedEmail]
+        );
+
+        let pipelineStage = 'lead-inquire';
+        let therapistId = null;
+        let timestampCol = 'stage_lead_inquire_at';
+
+        if (bookingCheck.rows.length > 0) {
+            const booking = bookingCheck.rows[0];
+            const isFree = (booking.booking_resource_name || '').toLowerCase().includes('free consultation') || 
+                           parseFloat(booking.invitee_payment_amount || '0') === 0;
+            
+            if (isFree) {
+                pipelineStage = 'pretherapy-call';
+                timestampCol = 'stage_pretherapy_call_at';
+            } else {
+                pipelineStage = 'booked-first-session';
+                timestampCol = 'stage_booked_first_session_at';
+            }
+            therapistId = booking.user_id || null;
+            console.log(`ℹ️ [Lead creation] Auto-routing ${name} to ${pipelineStage} based on booking history.`);
+        }
+
         const insertQuery = `
-      INSERT INTO leads (
-        name, phone, email, city, age, source, sales_agent_id, 
-        status, pipeline_stage, general_remarks
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, 
-        'New', 'lead-inquire', $8
-      ) RETURNING *;
-    `;
+          INSERT INTO leads (
+            name, phone, email, city, age, source, sales_agent_id, therapist_id,
+            status, pipeline_stage, ${timestampCol}, general_remarks
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, 
+            'New', $9, CURRENT_TIMESTAMP, $10
+          ) RETURNING *;
+        `;
 
         const ageVal = age ? parseInt(age) : null;
-
-        const values = [name, phone, email || null, city || null, ageVal, source, sales_agent_id, general_remarks || null];
+        const values = [name, phone, email || null, city || null, ageVal, source, sales_agent_id, therapistId, pipelineStage, general_remarks || null];
         const result = await pool.query(insertQuery, values);
 
         res.status(201).json(result.rows[0]);
@@ -3387,8 +3422,9 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
     }
 
     const bookingResult = await pool.query(
-      `SELECT b.booking_id, b.invitee_name, b.booking_resource_name, 
-              b.booking_host_name, t.therapist_id, u.id as user_id
+      `SELECT b.booking_id, b.invitee_name, b.invitee_email, b.invitee_phone, 
+              b.booking_resource_name, b.booking_host_name, b.invitee_payment_amount,
+              t.therapist_id, u.id as user_id
        FROM bookings b
        LEFT JOIN therapists t ON b.booking_host_name ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
        LEFT JOIN users u ON u.therapist_id = t.therapist_id AND u.role = 'therapist'
@@ -3401,6 +3437,99 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
     }
 
     const booking = bookingResult.rows[0];
+
+    // --- AUTOMATED LEAD MOVEMENT LOGIC ---
+    try {
+      const inviteePhone = booking.invitee_phone ? booking.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : '';
+      const inviteeEmail = booking.invitee_email ? booking.invitee_email.toLowerCase().trim() : '';
+
+      if (inviteePhone || inviteeEmail) {
+        // Determine if it's a Free Consultation
+        const isFreeConsultation = (booking.booking_resource_name || '').toLowerCase().includes('free consultation') || 
+                                   parseFloat(booking.invitee_payment_amount || '0') === 0;
+
+        // Find matching lead - normalizing phone for comparison
+        const leadResult = await pool.query(
+          `SELECT id, name, pipeline_stage FROM leads 
+           WHERE (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = $1 
+              OR LOWER(TRIM(email)) = $2)
+           ORDER BY created_at DESC LIMIT 1`,
+          [inviteePhone, inviteeEmail]
+        );
+
+        if (leadResult.rows.length > 0) {
+          const lead = leadResult.rows[0];
+          const currentStage = lead.pipeline_stage;
+          
+          let targetStage = null;
+          let timestampColumn = null;
+
+          if (isFreeConsultation) {
+            // Move to pretherapy-call if in an earlier stage
+            const earlyStages = ['lead-inquire', 'contacted', 'followup-1', 'followup-2', 'followup-3'];
+            if (earlyStages.includes(currentStage)) {
+              targetStage = 'pretherapy-call';
+              timestampColumn = 'stage_pretherapy_call_at';
+            }
+          } else {
+            // Paid session: Move to booked-first-session if in an earlier stage or in dropouts/leaks
+            const convertStages = ['lead-inquire', 'contacted', 'followup-1', 'followup-2', 'followup-3', 'pretherapy-call', 'dropouts', 'leaks'];
+            if (convertStages.includes(currentStage)) {
+              targetStage = 'booked-first-session';
+              timestampColumn = 'stage_booked_first_session_at';
+            }
+          }
+
+          if (targetStage) {
+            const dateStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
+            const remark = `\n[System ${dateStr}]: Auto-moved to ${targetStage} due to booking ${booking_id} (${isFreeConsultation ? 'Free' : 'Paid'})`;
+            
+            // Assign therapist from booking if available
+            const therapistId = booking.therapist_id || null;
+
+            await pool.query(
+              `UPDATE leads 
+               SET pipeline_stage = $1, 
+                   ${timestampColumn} = CURRENT_TIMESTAMP,
+                   remark_lead_manager = COALESCE(remark_lead_manager, '') || $2,
+                   therapist_id = COALESCE($4, therapist_id),
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE id = $3`,
+              [targetStage, remark, lead.id, therapistId]
+            );
+            console.log(`✨ [Auto-Move] Lead "${lead.name}" (${lead.id}) moved: ${currentStage} → ${targetStage} (Therapist: ${therapistId || 'N/A'})`);
+          }
+        } else {
+          // --- AUTO-CREATE LEAD ---
+          // If it's a Free Consultation and we have a phone, create a new lead automatically
+          if (isFreeConsultation && inviteePhone) {
+            // Find default lead manager (admin user) to assign
+            const defaultManager = await pool.query(
+              `SELECT id FROM users WHERE role IN ('admin', 'sales') ORDER BY id LIMIT 1`
+            );
+            const salesAgentId = defaultManager.rows[0]?.id || null;
+
+            await pool.query(
+              `INSERT INTO leads (name, phone, email, source, sales_agent_id, status, pipeline_stage, stage_pretherapy_call_at, remark_lead_manager)
+               VALUES ($1, $2, $3, $4, $5, 'New', 'pretherapy-call', CURRENT_TIMESTAMP, $6)`,
+              [
+                booking.invitee_name,
+                booking.invitee_phone,
+                booking.invitee_email || null,
+                'Free Consultation',
+                salesAgentId,
+                `Auto-created from Free Consultation booking ID: ${booking_id}`
+              ]
+            );
+            console.log(`✅ [Auto-Create] Lead for free consultation: "${booking.invitee_name}" (${booking.invitee_phone})`);
+          }
+        }
+      }
+    } catch (moveErr) {
+      console.error('❌ [Auto-Move] Error processing lead movement:', moveErr);
+      // Main webhook continues even if secondary logic fails
+    }
+    // -------------------------------------
 
     // Notify therapist
     if (booking.user_id) {

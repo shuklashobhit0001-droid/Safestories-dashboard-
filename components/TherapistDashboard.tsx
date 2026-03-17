@@ -1859,6 +1859,18 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <LayoutDashboard size={20} className={activeView === 'dashboard' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'dashboard' ? 'text-teal-700' : 'text-gray-700'}>Dashboard</span>
           </div>
+
+          <div 
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+            style={{ backgroundColor: activeView === 'resources' ? '#2D75795C' : 'transparent' }}
+            onClick={() => {
+              resetAllStates();
+              setActiveView('resources');
+            }}
+          >
+            <FileText size={20} className={activeView === 'resources' ? 'text-teal-700' : 'text-gray-700'} />
+            <span className={activeView === 'resources' ? 'text-teal-700' : 'text-gray-700'}>Resources</span>
+          </div>
           <div 
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
             style={{ backgroundColor: activeView === 'clients' ? '#2D75795C' : 'transparent' }}
