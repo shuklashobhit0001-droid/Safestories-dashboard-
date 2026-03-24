@@ -1855,19 +1855,26 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
             <span className={activeView === 'dashboard' ? 'text-teal-700' : 'text-gray-700'}>Dashboard</span>
           </div>
 
-          {(!import.meta.env.PROD || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
-            <div
-              className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
-              style={{ backgroundColor: activeView === 'resources' ? '#2D75795C' : 'transparent' }}
-              onClick={() => {
-                resetAllStates();
-                setActiveView('resources');
-              }}
-            >
-              <FileText size={20} className={activeView === 'resources' ? 'text-teal-700' : 'text-gray-700'} />
-              <span className={activeView === 'resources' ? 'text-teal-700' : 'text-gray-700'}>Resources</span>
-            </div>
-          )}
+          {(() => {
+            const isProd = import.meta.env.PROD && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+            return (
+              <div
+                className={`rounded-lg px-4 py-3 mb-2 flex items-center gap-3 ${
+                  isProd ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-gray-100'
+                }`}
+                style={{ backgroundColor: activeView === 'resources' ? '#2D75795C' : 'transparent' }}
+                onClick={() => {
+                  if (isProd) return;
+                  resetAllStates();
+                  setActiveView('resources');
+                }}
+                title={isProd ? "Resources coming soon" : "View Resources"}
+              >
+                <FileText size={20} className={activeView === 'resources' ? 'text-teal-700' : 'text-gray-700'} />
+                <span className={activeView === 'resources' ? 'text-teal-700' : 'text-gray-700'}>Resources</span>
+              </div>
+            );
+          })()}
           <div
             className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
             style={{ backgroundColor: activeView === 'clients' ? '#2D75795C' : 'transparent' }}
