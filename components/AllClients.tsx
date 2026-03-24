@@ -50,6 +50,9 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     const savedUser = localStorage.getItem('user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
+  const [showBulkBookingConfirmModal, setShowBulkBookingConfirmModal] = useState(false);
+  const [isBulkSending, setIsBulkSending] = useState(false);
 
   const formatClientName = (name: string): string => {
     if (!name) return name;
@@ -61,47 +64,47 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
 
   const formatSessionName = (sessionName: string | undefined, therapistName: string | undefined): string => {
     if (!sessionName) return 'N/A';
-    
+
     // If session name already includes "Session with", return as is
     if (sessionName.toLowerCase().includes('session with')) {
       return sessionName;
     }
-    
+
     // If we have a therapist name, append it
     if (therapistName) {
       const standardizedTherapist = standardizeTherapistName(therapistName);
       return `${sessionName} Session with ${standardizedTherapist}`;
     }
-    
+
     return sessionName;
   };
 
   const standardizeTherapistName = (name: string | undefined): string => {
     if (!name) return '';
-    
+
     // Standardize Ishika to Ishika Mahajan
     if (name.toLowerCase().trim() === 'ishika') {
       return 'Ishika Mahajan';
     }
-    
+
     return name;
   };
 
   const formatMode = (mode: string | undefined): string => {
     if (!mode) return 'N/A';
-    
+
     const modeLower = mode.toLowerCase();
-    
+
     // Check for In-person variations
     if (modeLower.includes('person') || modeLower.includes('office') || modeLower.includes('clinic')) {
       return 'In-Person';
     }
-    
+
     // Check for Google Meet variations
     if (modeLower.includes('google') || modeLower.includes('meet')) {
       return 'Google Meet';
     }
-    
+
     // Default return the original value
     return mode;
   };
@@ -111,45 +114,45 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     if (!appointments || appointments.length === 0) {
       return 'inactive';
     }
-    
+
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     // Get all client appointments (excluding cancelled)
     const clientAppointments = appointments.filter(apt => {
       const clientEmail = client.invitee_email?.toLowerCase().trim();
       const aptEmail = apt.invitee_email?.toLowerCase().trim();
       const clientPhone = client.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
       const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
-      
+
       const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
       const phoneMatch = clientPhone && aptPhone && clientPhone === aptPhone;
       const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
-      
+
       return (emailMatch || phoneMatch) && isNotCancelled;
     });
-    
+
     if (clientAppointments.length === 0) {
       return 'inactive';
     }
-    
+
     // Check if client has any appointments in the last 30 days
     const hasRecentAppointment = clientAppointments.some(apt => {
       // Use booking_start_at_raw for date comparison (raw timestamp)
       const aptDate = apt.booking_start_at_raw ? new Date(apt.booking_start_at_raw) : new Date(apt.booking_start_at);
       return aptDate >= thirtyDaysAgo;
     });
-    
+
     // Active: Has session in last 30 days
     if (hasRecentAppointment) {
       return 'active';
     }
-    
+
     // Drop-out: Only 1 session and >30 days since that session
     if (clientAppointments.length === 1) {
       return 'drop-out';
     }
-    
+
     // Inactive: More than 1 session but >30 days since last session
     return 'inactive';
   };
@@ -197,6 +200,33 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     setExpandedRows(newExpanded);
   };
 
+  const getUniqueIdentifier = (client: Client) => {
+    return `${client.invitee_email || ''}-${client.invitee_phone || ''}`;
+  };
+
+  const getFilteredIdentifiers = () => {
+    return new Set(filteredClients.map(c => getUniqueIdentifier(c)));
+  };
+
+  const toggleClientSelection = (identifier: string) => {
+    const newSelected = new Set(selectedClients);
+    if (newSelected.has(identifier)) {
+      newSelected.delete(identifier);
+    } else {
+      newSelected.add(identifier);
+    }
+    setSelectedClients(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    const allIdentifiers = getFilteredIdentifiers();
+    if (selectedClients.size >= allIdentifiers.size && Array.from(allIdentifiers).every(id => selectedClients.has(id))) {
+      setSelectedClients(new Set());
+    } else {
+      setSelectedClients(allIdentifiers);
+    }
+  };
+
   const formatBookingLinkDate = (dateString: string | undefined) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -218,19 +248,19 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
 
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'N/A';
-    
+
     // Handle the format: "Monday, Feb 9, 2026 at 1:00 PM - 1:50 PM (GMT+01:00)"
     // Extract just the date part before "at"
     const datePart = dateString.split(' at ')[0];
-    
+
     // Parse the date
     const date = new Date(datePart);
-    
+
     // Check if date is valid
     if (isNaN(date.getTime())) {
       return 'N/A';
     }
-    
+
     const day = date.getDate();
     const month = date.toLocaleString('en-US', { month: 'short' });
     const year = date.getFullYear();
@@ -245,11 +275,11 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
       (client.invitee_email || '').toLowerCase().includes(query) ||
       (client.booking_host_name || '').toLowerCase().includes(query)
     );
-    
+
     if (!matchesSearch) return false;
-    
+
     const isSafestories = (client.booking_host_name || '').toLowerCase().trim() === 'safestories';
-    
+
     // Filter by tab
     if (activeTab === 'pretherapy') {
       // Pre-Therapy: clients with Safestories as therapist (any booking count)
@@ -258,21 +288,21 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
       // Clients tab: Include both regular clients AND leads (0 bookings)
       // Exclude only Safestories pre-therapy clients
       if (isSafestories) return false;
-      
+
       // Apply status filter for Clients tab
       if (statusFilter !== 'all') {
         // Filter for invitation-sent (leads)
         if (statusFilter === 'invitation-sent') {
           return client.session_count === 0;
         }
-        
+
         // For other statuses, exclude leads (0 bookings)
         if (client.session_count === 0) return false;
-        
+
         const clientStatus = getClientStatus(client);
         return clientStatus === statusFilter;
       }
-      
+
       return true;
     }
   });
@@ -284,7 +314,7 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const exportToCSV = () => {
     let headers: string[];
     let rows: any[][];
-    
+
     if (activeTab === 'pretherapy') {
       headers = ['Client Name', 'Phone No.', 'Email ID', 'Pre-therapy Date'];
       rows = filteredClients.map(client => [
@@ -310,12 +340,12 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         ];
       });
     }
-    
+
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.join(','))
     ].join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -329,9 +359,9 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     if (isTransferDisabled(client)) {
       return;
     }
-    
-    const actualTherapist = client.therapists && client.therapists.length > 0 
-      ? client.therapists[0].booking_host_name 
+
+    const actualTherapist = client.therapists && client.therapists.length > 0
+      ? client.therapists[0].booking_host_name
       : client.booking_host_name;
     setSelectedClient({ ...client, booking_host_name: actualTherapist });
     setIsTransferModalOpen(true);
@@ -410,6 +440,68 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     setSelectedClientForBookingLink(null);
   };
 
+  const confirmBulkSendBookingLink = async () => {
+    if (selectedClients.size === 0) return;
+    setIsBulkSending(true);
+
+    const selectedIdentifiers = Array.from(selectedClients);
+    const selectedClientObjects = clients.filter(c => selectedIdentifiers.includes(getUniqueIdentifier(c)));
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Helper to send a single link
+    const sendLink = async (client: Client) => {
+      try {
+        let therapyType = 'Individual Therapy';
+        const typeRes = await fetch(`/api/client-therapy-type?email=${encodeURIComponent(client.invitee_email)}&phone=${encodeURIComponent(client.invitee_phone)}`);
+        if (typeRes.ok) {
+          const data = await typeRes.json();
+          therapyType = data.therapy_type || 'Individual Therapy';
+        }
+
+        const cleanTherapyType = (therapy: string) => {
+          let cleaned = therapy.replace(/\s+with\s+[A-Za-z\s]+$/i, '').trim();
+          cleaned = cleaned.replace(/\s+Session$/i, '').trim();
+          return cleaned;
+        };
+
+        const isFreeConsultation = therapyType.toLowerCase().includes('free consultation');
+        const webhookData = {
+          clientName: client.invitee_name,
+          email: client.invitee_email,
+          phone: client.invitee_phone,
+          therapistName: isFreeConsultation ? 'Safestories' : (client.booking_host_name || 'Unknown'),
+          therapy: isFreeConsultation ? 'Free Consultation' : cleanTherapyType(therapyType)
+        };
+
+        const response = await fetch('/api/send-booking-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookData)
+        });
+
+        if (response.ok) successCount++;
+        else errorCount++;
+      } catch (err) {
+        console.error('Error sending bulk link:', err);
+        errorCount++;
+      }
+    };
+
+    // Send all links in parallel
+    await Promise.all(selectedClientObjects.map(client => sendLink(client)));
+
+    setToast({
+      message: `Finished: ${successCount} sent successfully. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+      type: errorCount === 0 ? 'success' : 'error'
+    });
+
+    setIsBulkSending(false);
+    setShowBulkBookingConfirmModal(false);
+    setSelectedClients(new Set());
+  };
+
   const handleTransferSuccess = () => {
     fetch('/api/clients')
       .then(res => res.json())
@@ -445,11 +537,10 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
             setStatusFilter('all');
             setCurrentPage(1);
           }}
-          className={`pb-2 font-medium ${
-            activeTab === 'clients'
+          className={`pb-2 font-medium ${activeTab === 'clients'
               ? 'text-teal-700 border-b-2 border-teal-700'
               : 'text-gray-400'
-          }`}
+            }`}
         >
           Clients
         </button>
@@ -459,12 +550,12 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
               setActiveTab('pretherapy');
               setStatusFilter('all');
               setCurrentPage(1);
+              setSelectedClients(new Set());
             }}
-            className={`pb-2 font-medium ${
-              activeTab === 'pretherapy'
+            className={`pb-2 font-medium ${activeTab === 'pretherapy'
                 ? 'text-teal-700 border-b-2 border-teal-700'
                 : 'text-gray-400'
-            }`}
+              }`}
           >
             Pre-Therapy
           </button>
@@ -490,6 +581,16 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
           <Download size={16} />
           Export CSV
         </button>
+        {selectedClients.size > 0 && (
+          <button
+            onClick={() => setShowBulkBookingConfirmModal(true)}
+            className="text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:opacity-90 transition-opacity whitespace-nowrap text-sm ml-auto"
+            style={{ backgroundColor: '#21615D' }}
+          >
+            <Send size={16} />
+            Send to Selected ({selectedClients.size})
+          </button>
+        )}
       </div>
 
       {/* Status Filter Pills - Only for Clients Tab */}
@@ -501,11 +602,10 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
               setStatusFilter('all');
               setCurrentPage(1);
             }}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-              statusFilter === 'all'
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${statusFilter === 'all'
                 ? 'bg-gray-800 text-white ring-2 ring-gray-400'
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
+              }`}
           >
             All
           </button>
@@ -514,9 +614,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
               setStatusFilter('active');
               setCurrentPage(1);
             }}
-            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
-              statusFilter === 'active' ? 'ring-2 ring-teal-800' : ''
-            }`}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${statusFilter === 'active' ? 'ring-2 ring-teal-800' : ''
+              }`}
             style={{ backgroundColor: '#21615D' }}
           >
             Active
@@ -526,9 +625,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
               setStatusFilter('inactive');
               setCurrentPage(1);
             }}
-            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
-              statusFilter === 'inactive' ? 'ring-2 ring-gray-500' : ''
-            }`}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${statusFilter === 'inactive' ? 'ring-2 ring-gray-500' : ''
+              }`}
             style={{ backgroundColor: '#9CA3AF' }}
           >
             Inactive
@@ -538,9 +636,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
               setStatusFilter('drop-out');
               setCurrentPage(1);
             }}
-            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
-              statusFilter === 'drop-out' ? 'ring-2 ring-red-800' : ''
-            }`}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${statusFilter === 'drop-out' ? 'ring-2 ring-red-800' : ''
+              }`}
             style={{ backgroundColor: '#B91C1C' }}
           >
             Drop-out
@@ -550,9 +647,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
               setStatusFilter('invitation-sent');
               setCurrentPage(1);
             }}
-            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${
-              statusFilter === 'invitation-sent' ? 'ring-2 ring-blue-800' : ''
-            }`}
+            className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${statusFilter === 'invitation-sent' ? 'ring-2 ring-blue-800' : ''
+              }`}
             style={{ backgroundColor: '#3B82F6' }}
           >
             Invitation Sent
@@ -564,237 +660,259 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
       {loading ? (
         <Loader />
       ) : (
-      <div className="bg-white rounded-lg border flex-1 flex flex-col" ref={tableRef}>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
-                {activeTab === 'clients' && (
-                  <>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Last Session Booked</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
-                  </>
-                )}
-                {activeTab === 'pretherapy' && (
-                  <>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Pre-therapy Date</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
-                    <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+        <div className="bg-white rounded-lg border flex-1 flex flex-col" ref={tableRef}>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
                 <tr>
-                  <td colSpan={activeTab === 'pretherapy' ? 5 : 9} className="text-center text-gray-400 py-8">
-                    Loading...
-                  </td>
+                  {activeTab === 'clients' && (
+                    <th className="px-6 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={filteredClients.length > 0 && Array.from(getFilteredIdentifiers()).every(id => selectedClients.has(id))}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 rounded border-gray-300 focus:ring-[#21615D]"
+                        style={{ accentColor: '#21615D' }}
+                      />
+                    </th>
+                  )}
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
+                  {activeTab === 'clients' && (
+                    <>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Last Session Booked</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                    </>
+                  )}
+                  {activeTab === 'pretherapy' && (
+                    <>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Pre-therapy Date</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                      <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
+                    </>
+                  )}
                 </tr>
-              ) : filteredClients.length === 0 ? (
-                <tr>
-                  <td colSpan={activeTab === 'pretherapy' ? 5 : 9} className="text-center text-gray-400 py-8">
-                    No {activeTab === 'clients' ? 'clients' : 'pre-therapy clients'} found
-                  </td>
-                </tr>
-              ) : (
-                paginatedClients.map((client, index) => {
-                  const isLead = client.session_count === 0;
-                  return (
-                  <React.Fragment key={index}>
-                    <tr 
-                      className={`border-b hover:bg-gray-50 ${activeTab === 'clients' ? 'cursor-pointer' : ''}`}
-                      onClick={activeTab === 'clients' ? () => toggleRow(index) : undefined}
-                    >
-                      <td className="px-6 py-4 text-sm whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (onClientClick) {
-                                  onClientClick({
-                                    invitee_name: client.invitee_name,
-                                    invitee_email: client.invitee_email,
-                                    invitee_phone: client.invitee_phone
-                                  });
-                                }
-                              }}
-                              className="text-teal-700 hover:underline font-medium"
-                            >
-                              {formatClientName(client.invitee_name)}
-                            </button>
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <div>{client.invitee_phone}</div>
-                        <div className="text-gray-500 text-xs">{client.invitee_email}</div>
-                      </td>
-                      {activeTab === 'clients' && (
-                        <>
-                          <td className="px-6 py-4 text-sm">{client.session_count}</td>
-                          <td className="px-6 py-4 text-sm">{formatSessionName(client.booking_resource_name, client.booking_host_name)}</td>
-                          <td className="px-6 py-4 text-sm">
-                            {isLead ? 'N/A' : formatMode(client.booking_mode)}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            {standardizeTherapistName(client.booking_host_name)}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {isLead ? formatBookingLinkDate(client.booking_link_sent_at) : (client.last_session_date ? formatDate(client.last_session_date) : 'N/A')}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            {isLead ? (
-                              <span 
-                                className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
-                                style={{ backgroundColor: '#3B82F6' }}
-                              >
-                                Invitation Sent
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={activeTab === 'pretherapy' ? 6 : 9} className="text-center text-gray-400 py-8">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : filteredClients.length === 0 ? (
+                  <tr>
+                    <td colSpan={activeTab === 'pretherapy' ? 6 : 9} className="text-center text-gray-400 py-8">
+                      No {activeTab === 'clients' ? 'clients' : 'pre-therapy clients'} found
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedClients.map((client, index) => {
+                    const isLead = client.session_count === 0;
+                    return (
+                      <React.Fragment key={index}>
+                        <tr
+                          className={`border-b hover:bg-gray-50 ${activeTab === 'clients' ? 'cursor-pointer' : ''}`}
+                          onClick={activeTab === 'clients' ? () => toggleRow(index) : undefined}
+                        >
+                          {activeTab === 'clients' && (
+                            <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedClients.has(getUniqueIdentifier(client))}
+                                onChange={() => toggleClientSelection(getUniqueIdentifier(client))}
+                                className="w-4 h-4 rounded border-gray-300 focus:ring-[#21615D]"
+                                style={{ accentColor: '#21615D' }}
+                              />
+                            </td>
+                          )}
+                          <td className="px-6 py-4 text-sm whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onClientClick) {
+                                      onClientClick({
+                                        invitee_name: client.invitee_name,
+                                        invitee_email: client.invitee_email,
+                                        invitee_phone: client.invitee_phone
+                                      });
+                                    }
+                                  }}
+                                  className="text-teal-700 hover:underline font-medium"
+                                >
+                                  {formatClientName(client.invitee_name)}
+                                </button>
                               </span>
-                            ) : (
-                              (() => {
-                                const status = getClientStatus(client);
-                                return (
-                                  <span 
-                                    className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
-                                    style={{ 
-                                      backgroundColor: 
-                                        status === 'active' ? '#21615D' : 
-                                        status === 'drop-out' ? '#B91C1C' : 
-                                        '#9CA3AF' 
-                                    }}
-                                  >
-                                    {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
-                                  </span>
-                                );
-                              })()
-                            )}
-                          </td>
-                        </>
-                      )}
-                      {activeTab === 'pretherapy' && (
-                        <>
-                          <td className="px-6 py-4 text-sm">{formatPreTherapyDate(client.latest_booking_date)}</td>
-                          <td className="px-6 py-4 text-sm">
-                            {standardizeTherapistName(client.booking_host_name)}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <div className="flex justify-center">
-                              <button
-                                onClick={() => handleAssignTherapist(client)}
-                                className="flex items-center gap-1 text-sm font-medium text-teal-600 hover:text-teal-700"
-                              >
-                                <Plus size={16} />
-                                Assign a Therapist
-                              </button>
                             </div>
                           </td>
-                        </>
-                      )}
-                    </tr>
-                    
-                    {/* Expanded Actions Row - Only for Clients tab */}
-                    {activeTab === 'clients' && expandedRows.has(index) && (
-                      <tr className="bg-gray-50 border-b">
-                        <td colSpan={9} className="px-6 py-4">
-                          <div className="flex gap-4 justify-center">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSendBookingLink(client);
-                              }}
-                              className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-                            >
-                              <Send size={16} />
-                              Send Booking Link
-                            </button>
-                            {!isLead && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleTransferClick(client);
-                                }}
-                                disabled={isTransferDisabled(client)}
-                                className={`flex items-center gap-1 text-sm font-medium ${
-                                  isTransferDisabled(client)
-                                    ? 'text-gray-400 cursor-not-allowed'
-                                    : 'text-orange-600 hover:text-orange-700'
-                                }`}
-                              >
-                                <ArrowRightLeft size={16} />
-                                Transfer
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    
-                    {/* Multi-therapist rows */}
-                    {expandedRows.has(index) && client.therapists && client.therapists.length > 1 && (
-                      client.therapists.map((therapist, tIndex) => (
-                        <tr key={`${index}-${tIndex}`} className="bg-gray-50 border-b">
-                          <td className="px-6 py-4 text-sm pl-16 text-gray-600">{therapist.invitee_name}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            <div>{therapist.invitee_phone}</div>
-                            <div className="text-gray-400 text-xs">{client.invitee_email}</div>
+                          <td className="px-6 py-4 text-sm">
+                            <div>{client.invitee_phone}</div>
+                            <div className="text-gray-500 text-xs">{client.invitee_email}</div>
                           </td>
                           {activeTab === 'clients' && (
                             <>
-                              <td className="px-6 py-4 text-sm text-gray-600">{therapist.session_count}</td>
-                              <td className="px-6 py-4 text-sm text-gray-600">{therapist.booking_host_name}</td>
-                              <td></td>
-                              <td></td>
-                              <td></td>
-                              <td></td>
+                              <td className="px-6 py-4 text-sm">{client.session_count}</td>
+                              <td className="px-6 py-4 text-sm">{formatSessionName(client.booking_resource_name, client.booking_host_name)}</td>
+                              <td className="px-6 py-4 text-sm">
+                                {isLead ? 'N/A' : formatMode(client.booking_mode)}
+                              </td>
+                              <td className="px-6 py-4 text-sm">
+                                {standardizeTherapistName(client.booking_host_name)}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-900">
+                                {isLead ? formatBookingLinkDate(client.booking_link_sent_at) : (client.last_session_date ? formatDate(client.last_session_date) : 'N/A')}
+                              </td>
+                              <td className="px-6 py-4 text-sm">
+                                {isLead ? (
+                                  <span
+                                    className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
+                                    style={{ backgroundColor: '#3B82F6' }}
+                                  >
+                                    Invitation Sent
+                                  </span>
+                                ) : (
+                                  (() => {
+                                    const status = getClientStatus(client);
+                                    return (
+                                      <span
+                                        className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
+                                        style={{
+                                          backgroundColor:
+                                            status === 'active' ? '#21615D' :
+                                              status === 'drop-out' ? '#B91C1C' :
+                                                '#9CA3AF'
+                                        }}
+                                      >
+                                        {status === 'active' ? 'Active' : status === 'drop-out' ? 'Drop-out' : 'Inactive'}
+                                      </span>
+                                    );
+                                  })()
+                                )}
+                              </td>
                             </>
                           )}
                           {activeTab === 'pretherapy' && (
                             <>
-                              <td className="px-6 py-4 text-sm text-gray-600"></td>
-                              <td></td>
+                              <td className="px-6 py-4 text-sm">{formatPreTherapyDate(client.latest_booking_date)}</td>
+                              <td className="px-6 py-4 text-sm">
+                                {standardizeTherapistName(client.booking_host_name)}
+                              </td>
+                              <td className="px-6 py-4 text-sm">
+                                <div className="flex justify-center">
+                                  <button
+                                    onClick={() => handleAssignTherapist(client)}
+                                    className="flex items-center gap-1 text-sm font-medium text-teal-600 hover:text-teal-700"
+                                  >
+                                    <Plus size={16} />
+                                    Assign a Therapist
+                                  </button>
+                                </div>
+                              </td>
                             </>
                           )}
                         </tr>
-                      ))
-                    )}
-                  </React.Fragment>
-                );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredClients.length)} of {filteredClients.length} client{filteredClients.length !== 1 ? 's' : ''}</span>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              ←
-            </button>
-            <button 
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              →
-            </button>
+
+                        {/* Expanded Actions Row - Only for Clients tab */}
+                        {activeTab === 'clients' && expandedRows.has(index) && (
+                          <tr className="bg-gray-50 border-b">
+                            <td colSpan={9} className="px-6 py-4">
+                              <div className="flex gap-4 justify-center">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSendBookingLink(client);
+                                  }}
+                                  className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                                >
+                                  <Send size={16} />
+                                  Send Booking Link
+                                </button>
+                                {!isLead && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleTransferClick(client);
+                                    }}
+                                    disabled={isTransferDisabled(client)}
+                                    className={`flex items-center gap-1 text-sm font-medium ${isTransferDisabled(client)
+                                        ? 'text-gray-400 cursor-not-allowed'
+                                        : 'text-orange-600 hover:text-orange-700'
+                                      }`}
+                                  >
+                                    <ArrowRightLeft size={16} />
+                                    Transfer
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* Multi-therapist rows */}
+                        {expandedRows.has(index) && client.therapists && client.therapists.length > 1 && (
+                          client.therapists.map((therapist, tIndex) => (
+                            <tr key={`${index}-${tIndex}`} className="bg-gray-50 border-b">
+                              <td></td>
+                              <td className="px-6 py-4 text-sm pl-16 text-gray-600">{therapist.invitee_name}</td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                <div>{therapist.invitee_phone}</div>
+                                <div className="text-gray-400 text-xs">{client.invitee_email}</div>
+                              </td>
+                              {activeTab === 'clients' && (
+                                <>
+                                  <td className="px-6 py-4 text-sm text-gray-600">{therapist.session_count}</td>
+                                  <td className="px-6 py-4 text-sm text-gray-600">{therapist.booking_host_name}</td>
+                                  <td></td>
+                                  <td></td>
+                                  <td></td>
+                                  <td></td>
+                                </>
+                              )}
+                              {activeTab === 'pretherapy' && (
+                                <>
+                                  <td className="px-6 py-4 text-sm text-gray-600"></td>
+                                  <td></td>
+                                </>
+                              )}
+                            </tr>
+                          ))
+                        )}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-6 py-4 border-t flex justify-between items-center">
+            <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredClients.length)} of {filteredClients.length} client{filteredClients.length !== 1 ? 's' : ''}</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ←
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                →
+              </button>
+            </div>
           </div>
         </div>
-      </div>
       )}
-      <SendBookingModal 
-        isOpen={isModalOpen} 
+      <SendBookingModal
+        isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
           setPrefilledClientData(undefined);
@@ -837,6 +955,42 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                   setSelectedClientForBookingLink(null);
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                No, Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Booking Link Confirmation Modal */}
+      {showBulkBookingConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-bold mb-4">Send Bulk Booking Links</h3>
+            <p className="text-gray-600 mb-6">
+              This will send booking link reminders to <span className="font-semibold">{selectedClients.size}</span> selected clients. Would you like to proceed?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={confirmBulkSendBookingLink}
+                disabled={isBulkSending}
+                className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 transition-opacity font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                style={{ backgroundColor: '#21615D' }}
+              >
+                {isBulkSending ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Sending...
+                  </>
+                ) : (
+                  'Yes, Send All'
+                )}
+              </button>
+              <button
+                onClick={() => setShowBulkBookingConfirmModal(false)}
+                disabled={isBulkSending}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
               >
                 No, Cancel
               </button>

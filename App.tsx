@@ -7,6 +7,7 @@ import { Dashboard } from './components/Dashboard';
 import { TherapistDashboard } from './components/TherapistDashboard';
 import { MaintenancePage } from './components/MaintenancePage';
 import { SOSDocumentationView } from './components/SOSDocumentationView';
+import { PublicBookingContainer } from './components/PublicBookingContainer';
 import CRMApp from './src/crm/App';
 import { Monitor } from 'lucide-react';
 
@@ -18,6 +19,14 @@ const App: React.FC = () => {
   if (sosViewMatch) {
     const token = sosViewMatch[1];
     return <SOSDocumentationView token={token} />;
+  }
+
+  // Check if this is a public booking page view
+  const bookingMatch = path.match(/^\/book\/(.+)$/);
+  
+  if (bookingMatch) {
+    const slug = bookingMatch[1];
+    return <PublicBookingContainer slug={slug} />;
   }
 
   // Show maintenance page only on Vercel (production)

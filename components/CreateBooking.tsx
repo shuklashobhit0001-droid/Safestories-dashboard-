@@ -5,9 +5,10 @@ import paymentSentAnimation from '../payment-sent.json';
 
 interface CreateBookingProps {
   onBack: () => void;
+  isDirectBooking?: boolean;
 }
 
-export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
+export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack, isDirectBooking = false }) => {
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [clientWhatsApp, setClientWhatsApp] = useState('');
@@ -322,7 +323,7 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
     };
     
     try {
-      const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/b5ab584c-1203-41c0-b296-3107e2e6035e', {
+      const response = await fetch('/api/fetch-slots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -411,11 +412,15 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
       clientEmail,
       clientWhatsApp: `${countryCode}${clientWhatsApp}`,
       sessionMode,
-      timezone: selectedTimezone
+      timezone: selectedTimezone,
+      skipPayment: isDirectBooking
     };
     
     try {
-      const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/7ce18907-f7f2-425e-9d67-6751156172c7', {
+      const webhookUrl = isDirectBooking
+        ? '/api/create-booking'
+        : 'https://n8n.srv1169280.hstgr.cloud/webhook/7ce18907-f7f2-425e-9d67-6751156172c7';
+      const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -450,10 +455,12 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
               />
             </div>
             <h2 className="text-xl font-bold mb-4 text-gray-800 text-center">
-              {grandTotal === 0 ? 'Session Booked' : 'Payment Link Sent'}
+              {(grandTotal === 0 || isDirectBooking) ? 'Session Booked' : 'Payment Link Sent'}
             </h2>
             <p className="text-gray-600 mb-6 text-center">
-              {grandTotal === 0 
+              {isDirectBooking 
+                ? 'The session has been created successfully. The client will receive a confirmation email with the session details and joining link.'
+                : grandTotal === 0
                 ? 'The free consultation session has been booked successfully. The client will receive a confirmation email with the session details and joining link.'
                 : 'The payment link has been sent to the client. Once the payment is confirmed by the client, their session will be booked automatically.'
               }
@@ -473,7 +480,7 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
         <button onClick={onBack} className="text-2xl text-gray-600 hover:text-gray-900">
           ←
         </button>
-        <h1 className="text-3xl font-bold">Book a Session for Client</h1>
+        <h1 className="text-3xl font-bold">{isDirectBooking ? 'Create New Booking' : 'Book a Session for Client'}</h1>
       </div>
 
       {/* Form Content */}
@@ -663,16 +670,18 @@ export const CreateBooking: React.FC<CreateBookingProps> = ({ onBack }) => {
 
           {/* Grand Total and Payment */}
           <div className="pt-6 border-t">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-lg font-medium text-gray-600">Session Charges:</span>
-              <span className="text-2xl font-bold">Rs. {grandTotal}/-</span>
-            </div>
+            {!isDirectBooking && (
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-lg font-medium text-gray-600">Session Charges:</span>
+                <span className="text-2xl font-bold">Rs. {grandTotal}/-</span>
+              </div>
+            )}
             <button
               onClick={handleSendPaymentLink}
               disabled={!isPaymentLinkEnabled()}
               className="w-full bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {grandTotal === 0 ? 'Book Session' : 'Send Payment Link'}
+              {isDirectBooking ? 'Create booking' : grandTotal === 0 ? 'Book Session' : 'Send Payment Link'}
             </button>
           </div>
         </div>

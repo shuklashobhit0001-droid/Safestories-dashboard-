@@ -857,7 +857,7 @@ app.post('/api/leads', async (req, res) => {
              FROM bookings b
              LEFT JOIN therapists t ON b.booking_host_name ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
              LEFT JOIN users u ON u.therapist_id = t.therapist_id AND u.role = 'therapist'
-             WHERE (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(b.invitee_phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = $1 
+             WHERE (RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(b.invitee_phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10) = RIGHT($1, 10) 
                 OR (LOWER(TRIM(b.invitee_email)) = $2 AND $2 <> ''))
              AND b.booking_status NOT IN ('cancelled', 'canceled', 'no-show')
              ORDER BY b.booking_start_at DESC LIMIT 1`,
@@ -1801,6 +1801,54 @@ app.get('/api/clients', async (req, res) => {
 });
 
 // Get all appointments
+const DAYSCHEDULE_API_KEY = 'g1NeHQjuCwM9hDTmP9Jz5GflNSRNwCL4';
+
+// DaySchedule Proxy Endpoints
+app.get('/api/dayschedule/schedules/:id', async (req, res) => {
+  console.log(`[DEBUG API] Received GET request for schedule: ${req.params.id}`);
+  try {
+    const { id } = req.params;
+    const response = await fetch(`https://api.dayschedule.com/v1/schedules/${id}`, {
+      headers: { 'Authorization': `Bearer ${DAYSCHEDULE_API_KEY}` }
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching DaySchedule schedule:', error);
+    res.status(500).json({ error: 'Failed to fetch schedule from DaySchedule' });
+  }
+});
+
+app.put('/api/dayschedule/schedules/:id', async (req, res) => {
+  console.log(`[DEBUG API] Received PUT request for schedule: ${req.params.id}`);
+  console.log(`[DEBUG API] PUT Body: ${JSON.stringify(req.body, null, 2)}`);
+  try {
+    const { id } = req.params;
+    const body = req.body;
+    
+    const response = await fetch(`https://api.dayschedule.com/v1/schedules/${id}`, {
+      method: 'PUT',
+      headers: { 
+        'Authorization': `Bearer ${DAYSCHEDULE_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error('DaySchedule API Error:', data);
+      return res.status(response.status).json(data);
+    }
+    
+    res.json(data);
+  } catch (error) {
+    console.error('Error updating DaySchedule schedule:', error);
+    res.status(500).json({ error: 'Failed to update schedule in DaySchedule' });
+  }
+});
+
 app.get('/api/appointments', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -3451,7 +3499,7 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
         // Find matching lead - normalizing phone for comparison
         const leadResult = await pool.query(
           `SELECT id, name, pipeline_stage FROM leads 
-           WHERE (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') = $1 
+           WHERE (RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10) = RIGHT($1, 10) 
               OR LOWER(TRIM(email)) = $2)
            ORDER BY created_at DESC LIMIT 1`,
           [inviteePhone, inviteeEmail]
@@ -3485,7 +3533,7 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
             const remark = `\n[System ${dateStr}]: Auto-moved to ${targetStage} due to booking ${booking_id} (${isFreeConsultation ? 'Free' : 'Paid'})`;
             
             // Assign therapist from booking if available
-            const therapistId = booking.therapist_id || null;
+            const therapistId = booking.user_id || null;
 
             await pool.query(
               `UPDATE leads 
@@ -3617,6 +3665,102 @@ app.post('/api/send-booking-link', async (req, res) => {
     }
   } catch (error) {
     console.error('❌ Error in booking link endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Fetch Available Slots webhook proxy
+app.post('/api/fetch-slots', async (req, res) => {
+  try {
+    const payload = req.body;
+    
+    // Validate required fields (at least date and timezone)
+    if (!payload.selectedDate || !payload.timezone) {
+      return res.status(400).json({ error: 'Missing required fields: date and timezone are required' });
+    }
+
+    try {
+      // Send to n8n webhook
+      const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/ebc7a183-926b-4cdb-ad3b-27f335a02e17';
+      
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'User-Agent': 'SafeStories-Backend/1.0'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const responseText = await response.text();
+
+      if (response.ok) {
+        let jsonResponse;
+        try {
+          jsonResponse = JSON.parse(responseText);
+        } catch (e) {
+          jsonResponse = responseText;
+        }
+        res.status(200).json(jsonResponse);
+      } else {
+        console.error('❌ Slots Webhook failed:', response.status, response.statusText);
+        console.error('❌ Error response:', responseText);
+        res.status(response.status).json({ 
+          error: 'Webhook service unavailable',
+          details: responseText
+        });
+      }
+    } catch (fetchError) {
+      console.error('❌ Network error calling slots webhook:', fetchError);
+      res.status(503).json({ error: 'Could not reach webhook service' });
+    }
+  } catch (error) {
+    console.error('❌ Error in fetch-slots endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create Direct Booking webhook proxy
+app.post('/api/create-booking', async (req, res) => {
+  try {
+    const payload = req.body;
+    
+    try {
+      // Send to n8n webhook
+      const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/568038fa-d320-47da-8001-ea1ffeabde00';
+      
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'User-Agent': 'SafeStories-Backend/1.0'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const responseText = await response.text();
+
+      if (response.ok) {
+        let jsonResponse;
+        try {
+          jsonResponse = JSON.parse(responseText);
+        } catch (e) {
+          jsonResponse = { success: true, message: responseText };
+        }
+        res.status(200).json(jsonResponse);
+      } else {
+        console.error('❌ Create Booking Webhook failed:', response.status, response.statusText);
+        res.status(response.status).json({ 
+          error: 'Webhook service unavailable',
+          details: responseText
+        });
+      }
+    } catch (fetchError) {
+      console.error('❌ Network error calling create booking webhook:', fetchError);
+      res.status(503).json({ error: 'Could not reach webhook service' });
+    }
+  } catch (error) {
+    console.error('❌ Error in create-booking endpoint:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

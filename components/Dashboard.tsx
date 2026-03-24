@@ -526,11 +526,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         ) : activeView === 'create' ? (
           <CreatePage 
             onCreateBooking={() => setActiveView('createBooking')} 
+            onCreateDirectBooking={() => setActiveView('createBookingDirect')}
             onSendBookingLink={() => setIsModalOpen(true)}
             onAddNewTherapist={() => setActiveView('newTherapist')}
           />
         ) : activeView === 'createBooking' ? (
           <CreateBooking onBack={() => setActiveView('create')} />
+        ) : activeView === 'createBookingDirect' ? (
+          <CreateBooking onBack={() => setActiveView('create')} isDirectBooking={true} />
         ) : activeView === 'newTherapist' ? (
           <NewTherapist onBack={() => setActiveView('create')} />
         ) : activeView === 'clients' ? (

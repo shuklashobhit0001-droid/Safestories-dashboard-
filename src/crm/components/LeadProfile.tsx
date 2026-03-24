@@ -211,7 +211,7 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
     const [therapists, setTherapists] = useState<{ id: number, name: string }[]>([])
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
-    const [prefilledClientData, setPrefilledClientData] = useState<{name: string, phone: string, email: string} | undefined>()
+    const [prefilledClientData, setPrefilledClientData] = useState<{ name: string, phone: string, email: string } | undefined>()
 
     // Custom dropdown states
     const [isSourceOpen, setIsSourceOpen] = useState(false)
@@ -308,7 +308,7 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
 
         // Final safety: remove any undefined keys and check if anything remains
         Object.keys(changes).forEach(key => (changes[key as keyof Lead] === undefined) && delete changes[key as keyof Lead])
-        
+
         const body = JSON.stringify(changes)
         if (body === '{}') {
             setToast({ message: 'No changes detected to save.', type: 'error' })
@@ -394,7 +394,7 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                                     setIsModalOpen(true)
                                 }}
                             >
-                                Send Booking Link
+                                Send follow up session link
                             </button>
                         )}
                         {!canAct && (
@@ -445,9 +445,9 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                             <span className="lp-detail-label">Source</span>
                             {isEditing ? (
                                 <div className="custom-dropdown w-full" ref={sourceRef}>
-                                    <button 
-                                        type="button" 
-                                        className="dropdown-trigger w-full" 
+                                    <button
+                                        type="button"
+                                        className="dropdown-trigger w-full"
                                         onClick={() => setIsSourceOpen(!isSourceOpen)}
                                     >
                                         <span>{editForm.source || 'Select Source'}</span>
@@ -459,8 +459,8 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                                         <div className="dropdown-menu w-full">
                                             <div className="dropdown-item" onClick={() => { setEditForm({ ...editForm, source: '' }); setIsSourceOpen(false); }}>-- Select Source --</div>
                                             {SOURCE_OPTIONS.map(opt => (
-                                                <div 
-                                                    key={opt} 
+                                                <div
+                                                    key={opt}
                                                     className={`dropdown-item ${editForm.source === opt ? 'selected' : ''}`}
                                                     onClick={() => { setEditForm({ ...editForm, source: opt }); setIsSourceOpen(false); }}
                                                 >
@@ -478,9 +478,9 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                             <span className="lp-detail-label">Lead Manager</span>
                             {isEditing ? (
                                 <div className="custom-dropdown w-full" ref={managerRef}>
-                                    <button 
-                                        type="button" 
-                                        className="dropdown-trigger w-full" 
+                                    <button
+                                        type="button"
+                                        className="dropdown-trigger w-full"
                                         onClick={() => setIsManagerOpen(!isManagerOpen)}
                                     >
                                         <span>{leadManagers.find(m => m.id === editForm.sales_agent_id)?.name || 'Unassigned'}</span>
@@ -492,8 +492,8 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                                         <div className="dropdown-menu w-full">
                                             <div className="dropdown-item" onClick={() => { setEditForm({ ...editForm, sales_agent_id: null }); setIsManagerOpen(false); }}>Unassigned</div>
                                             {leadManagers.map(m => (
-                                                <div 
-                                                    key={m.id} 
+                                                <div
+                                                    key={m.id}
                                                     className={`dropdown-item ${editForm.sales_agent_id === m.id ? 'selected' : ''}`}
                                                     onClick={() => { setEditForm({ ...editForm, sales_agent_id: m.id }); setIsManagerOpen(false); }}
                                                 >
@@ -511,9 +511,9 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                             <span className="lp-detail-label">Assigned Therapist</span>
                             {isEditing ? (
                                 <div className="custom-dropdown w-full" ref={therapistRef}>
-                                    <button 
-                                        type="button" 
-                                        className="dropdown-trigger w-full" 
+                                    <button
+                                        type="button"
+                                        className="dropdown-trigger w-full"
                                         onClick={() => setIsTherapistOpen(!isTherapistOpen)}
                                     >
                                         <span>{therapists.find(t => t.id === editForm.therapist_id)?.name || 'Unassigned'}</span>
@@ -525,8 +525,8 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                                         <div className="dropdown-menu w-full">
                                             <div className="dropdown-item" onClick={() => { setEditForm({ ...editForm, therapist_id: null }); setIsTherapistOpen(false); }}>Unassigned</div>
                                             {therapists.map(t => (
-                                                <div 
-                                                    key={t.id} 
+                                                <div
+                                                    key={t.id}
                                                     className={`dropdown-item ${editForm.therapist_id === t.id ? 'selected' : ''}`}
                                                     onClick={() => { setEditForm({ ...editForm, therapist_id: t.id }); setIsTherapistOpen(false); }}
                                                 >
@@ -544,9 +544,9 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                             <span className="lp-detail-label">Therapy</span>
                             {isEditing ? (
                                 <div className="custom-dropdown w-full" ref={therapyRef}>
-                                    <button 
-                                        type="button" 
-                                        className="dropdown-trigger w-full" 
+                                    <button
+                                        type="button"
+                                        className="dropdown-trigger w-full"
                                         onClick={() => setIsTherapyOpen(!isTherapyOpen)}
                                     >
                                         <span>{editForm.therapy || 'Select Therapy'}</span>
@@ -558,8 +558,8 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                                         <div className="dropdown-menu w-full">
                                             <div className="dropdown-item" onClick={() => { setEditForm({ ...editForm, therapy: '' }); setIsTherapyOpen(false); }}>-- Select Therapy --</div>
                                             {THERAPY_OPTIONS.map(opt => (
-                                                <div 
-                                                    key={opt} 
+                                                <div
+                                                    key={opt}
                                                     className={`dropdown-item ${editForm.therapy === opt ? 'selected' : ''}`}
                                                     onClick={() => { setEditForm({ ...editForm, therapy: opt }); setIsTherapyOpen(false); }}
                                                 >
@@ -593,9 +593,9 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                             <span className="lp-detail-label">Preferred Mode</span>
                             {isEditing ? (
                                 <div className="custom-dropdown w-full" ref={modeRef}>
-                                    <button 
-                                        type="button" 
-                                        className="dropdown-trigger w-full" 
+                                    <button
+                                        type="button"
+                                        className="dropdown-trigger w-full"
                                         onClick={() => setIsModeOpen(!isModeOpen)}
                                     >
                                         <span>{editForm.preferred_mode_of_session || 'Select Mode'}</span>
@@ -689,8 +689,8 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                     )}
                 </div>
             </div>
-            <SendBookingModal 
-                isOpen={isModalOpen} 
+            <SendBookingModal
+                isOpen={isModalOpen}
                 onClose={() => {
                     setIsModalOpen(false);
                     setPrefilledClientData(undefined);

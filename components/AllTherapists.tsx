@@ -25,6 +25,7 @@ interface Client {
   invitee_occupation?: string;
   invitee_marital_status?: string;
   clinical_profile?: string;
+  remarks?: string;
 }
 
 interface Appointment {
@@ -105,6 +106,28 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   // Pagination for assigned clients
   const [clientsPage, setClientsPage] = useState(1);
   const clientsPerPage = 8;
+
+  // Multi-select for assigned clients
+  const [selectedTherapistClients, setSelectedTherapistClients] = useState<Set<string>>(new Set());
+  const [showTherapistBulkConfirmModal, setShowTherapistBulkConfirmModal] = useState(false);
+  const [isTherapistBulkSending, setIsTherapistBulkSending] = useState(false);
+
+  const getTherapistClientId = (client: Client) =>
+    `${client.invitee_email || ''}-${client.invitee_phone || ''}`;
+
+  const toggleTherapistClientSelection = (id: string) => {
+    setSelectedTherapistClients(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleTherapistSelectAll = (filteredClients: Client[]) => {
+    const allIds = new Set(filteredClients.map(getTherapistClientId));
+    const allSelected = filteredClients.every(c => selectedTherapistClients.has(getTherapistClientId(c)));
+    setSelectedTherapistClients(allSelected ? new Set() : allIds);
+  };
 
   // Calendar view state
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
@@ -363,6 +386,68 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     setShowBookingLinkConfirmModal(false);
     setSelectedClientForBookingLink(null);
     setSelectedClientForAction(null);
+  };
+
+  const confirmBulkSendFromTherapistView = async (filteredClients: Client[]) => {
+    const selected = filteredClients.filter(c => selectedTherapistClients.has(getTherapistClientId(c)));
+    if (selected.length === 0) return;
+    setIsTherapistBulkSending(true);
+
+    const cleanTherapyType = (therapy: string) => {
+      let cleaned = therapy.replace(/\s+with\s+[A-Za-z\s]+$/i, '').trim();
+      cleaned = cleaned.replace(/\s+Session$/i, '').trim();
+      return cleaned;
+    };
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    await Promise.all(selected.map(async (client) => {
+      try {
+        let therapyType = 'Individual Therapy Session';
+        try {
+          const params = new URLSearchParams();
+          if (client.invitee_email) params.append('email', client.invitee_email);
+          if (client.invitee_phone) {
+            client.invitee_phone.split(', ').forEach(p => params.append('phone', p.trim()));
+          }
+          const res = await fetch(`/api/client-details?${params.toString()}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.appointments?.length > 0) {
+              therapyType = data.appointments[0].booking_resource_name || therapyType;
+            }
+          }
+        } catch {}
+
+        const isFreeConsultation = therapyType.toLowerCase().includes('free consultation');
+        const webhookData = {
+          clientName: client.invitee_name,
+          email: client.invitee_email,
+          phone: client.invitee_phone,
+          therapistName: isFreeConsultation ? 'Safestories' : (selectedTherapist?.name || 'Unknown'),
+          therapy: isFreeConsultation ? 'Free Consultation' : cleanTherapyType(therapyType)
+        };
+
+        const response = await fetch('/api/send-booking-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookData)
+        });
+        if (response.ok) successCount++;
+        else errorCount++;
+      } catch {
+        errorCount++;
+      }
+    }));
+
+    setToast({
+      message: `Finished: ${successCount} sent successfully.${errorCount > 0 ? ` ${errorCount} failed.` : ''}`,
+      type: errorCount === 0 ? 'success' : 'error'
+    });
+    setIsTherapistBulkSending(false);
+    setShowTherapistBulkConfirmModal(false);
+    setSelectedTherapistClients(new Set());
   };
 
   const handleCaseHistoryView = () => {
@@ -1504,6 +1589,34 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               </div>
             </div>
         )}
+
+        {/* Bulk Send Booking Link Confirmation Modal */}
+        {showTherapistBulkConfirmModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
+              <h3 className="text-xl font-bold mb-4">Send Booking Link to Multiple Clients</h3>
+              <p className="text-gray-600 mb-6">
+                This will send a booking link reminder to {selectedTherapistClients.size} selected clients. Would you like to proceed?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => confirmBulkSendFromTherapistView(clients)}
+                  className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-medium"
+                >
+                  Yes, Send to All
+                </button>
+                <button
+                  onClick={() => {
+                    setShowTherapistBulkConfirmModal(false);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  No, Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1638,7 +1751,19 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             {/* Clients List */}
             <div>
               <div className="mb-3">
-                <h3 className="text-lg font-semibold mb-3">Assigned Clients ({clients.length})</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold">Assigned Clients ({clients.length})</h3>
+                  {selectedTherapistClients.size > 0 && (
+                    <button
+                      onClick={() => setShowTherapistBulkConfirmModal(true)}
+                      className="flex items-center gap-2 px-3 py-2 text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
+                      style={{ backgroundColor: '#21615D' }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                      Send to Selected ({selectedTherapistClients.size})
+                    </button>
+                  )}
+                </div>
                 <div className="relative mb-3">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                   <input
@@ -1708,13 +1833,32 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 <div className="max-h-[480px] overflow-y-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b sticky top-0">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
-                      </tr>
+                      {(() => {
+                        const fc = clients.filter(c =>
+                          (c.invitee_name?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
+                           c.invitee_email?.toLowerCase().includes(assignedClientSearch.toLowerCase()) ||
+                           c.invitee_phone?.toLowerCase().includes(assignedClientSearch.toLowerCase())) &&
+                          (assignedClientStatusFilter === 'all' || getClientStatus(c) === assignedClientStatusFilter)
+                        );
+                        return (
+                          <tr>
+                            <th className="px-4 py-3 text-left">
+                              <input
+                                type="checkbox"
+                                checked={fc.length > 0 && fc.every(c => selectedTherapistClients.has(getTherapistClientId(c)))}
+                                onChange={() => toggleTherapistSelectAll(fc)}
+                                className="w-4 h-4 rounded border-gray-300"
+                                style={{ accentColor: '#21615D' }}
+                              />
+                            </th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                          </tr>
+                        );
+                      })()}
                     </thead>
                     <tbody>
                       {(() => {
@@ -1734,7 +1878,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                         if (filteredClients.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={5} className="text-center py-4 text-gray-400 text-sm">
+                              <td colSpan={6} className="text-center py-4 text-gray-400 text-sm">
                                 {assignedClientSearch ? 'No clients found matching your search' : 'No clients found'}
                               </td>
                             </tr>
@@ -1766,6 +1910,15 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                   }`}
                                   onClick={() => toggleClientActions(actualIndex)}
                                 >
+                                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedTherapistClients.has(getTherapistClientId(client))}
+                                      onChange={() => toggleTherapistClientSelection(getTherapistClientId(client))}
+                                      className="w-4 h-4 rounded border-gray-300"
+                                      style={{ accentColor: '#21615D' }}
+                                    />
+                                  </td>
                                   <td className="px-4 py-3 text-sm">
                                     <div className="flex items-center gap-2">
                                       {hasMultiplePhones && (
