@@ -25,7 +25,7 @@ export const bucketName = process.env.MINIO_BUCKET_NAME || 'safestories-panel';
 export async function uploadFile(
   file: Buffer,
   fileName: string,
-  folder: 'profile-pictures' | 'qualification-pdfs',
+  folder: 'profile-pictures' | 'qualification-pdfs' | 'issue-screenshots',
   contentType: string
 ): Promise<string> {
   try {
