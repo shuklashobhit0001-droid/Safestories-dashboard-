@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, User, CalendarIcon, ArrowLeft, Mail, Eye, EyeOff, Edit, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, User, CalendarIcon, ArrowLeft, Mail, Eye, EyeOff, Edit, ExternalLink, Download } from 'lucide-react';
 import { Logo } from './Logo';
 import { Notifications } from './Notifications';
 import { Toast } from './Toast';
@@ -1244,92 +1244,89 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="mb-6">
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            {/* Search Bar, Export and Bulk Actions */}
+            <div className="relative mb-6 flex gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                 <input
                   type="text"
                   placeholder="Search users by name, phone no or email id..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
 
-              {/* Status Filter Pills */}
-              <div className="flex gap-2 items-center">
-                <span className="text-sm text-gray-600 mr-1">Filter:</span>
+              {/* Export Button */}
+              <button
+                onClick={handleExportCSV}
+                className="bg-teal-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800 whitespace-nowrap text-sm"
+              >
+                <Download size={16} />
+                Export CSV
+              </button>
+              
+              {selectedClients.size > 0 && (
                 <button
-                  onClick={() => {
-                    setClientStatusFilter('all');
-                    setCurrentPage(1);
-                  }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${clientStatusFilter === 'all'
-                      ? 'bg-gray-800 text-white ring-2 ring-gray-400'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => {
-                    setClientStatusFilter('active');
-                    setCurrentPage(1);
-                  }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${clientStatusFilter === 'active' ? 'ring-2 ring-teal-800' : ''
-                    }`}
+                  onClick={() => setShowBulkSendModal(true)}
+                  className="text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:opacity-90 transition-opacity whitespace-nowrap text-sm ml-auto"
                   style={{ backgroundColor: '#21615D' }}
                 >
-                  Active
+                  <Send size={16} />
+                  Send to Selected ({selectedClients.size})
                 </button>
-                <button
-                  onClick={() => {
-                    setClientStatusFilter('inactive');
-                    setCurrentPage(1);
-                  }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${clientStatusFilter === 'inactive' ? 'ring-2 ring-gray-500' : ''
-                    }`}
-                  style={{ backgroundColor: '#9CA3AF' }}
-                >
-                  Inactive
-                </button>
-                <button
-                  onClick={() => {
-                    setClientStatusFilter('drop-out');
-                    setCurrentPage(1);
-                  }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${clientStatusFilter === 'drop-out' ? 'ring-2 ring-red-800' : ''
-                    }`}
-                  style={{ backgroundColor: '#B91C1C' }}
-                >
-                  Drop-out
-                </button>
-              </div>
+              )}
             </div>
 
-            {selectedClients.size > 0 && (
-              <div className="mb-4 p-4 bg-teal-50 border border-teal-100 rounded-lg flex items-center justify-between">
-                <span className="text-sm text-teal-800 font-medium">
-                  {selectedClients.size} client{selectedClients.size !== 1 ? 's' : ''} selected
-                </span>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setSelectedClients(new Set())}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium"
-                  >
-                    Clear Selection
-                  </button>
-                  <button
-                    onClick={() => setShowBulkSendModal(true)}
-                    className="px-4 py-2 bg-[#21615D] text-white text-sm font-medium rounded-lg hover:bg-[#1a4f4c] shadow-sm flex items-center gap-2"
-                  >
-                    <Send size={16} />
-                    Send to Selected
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* Status Filter Pills */}
+            <div className="mb-4 flex gap-2 items-center">
+              <span className="text-sm text-gray-600 mr-1">Filter:</span>
+              <button
+                onClick={() => {
+                  setClientStatusFilter('all');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${clientStatusFilter === 'all'
+                    ? 'bg-gray-800 text-white ring-2 ring-gray-400'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => {
+                  setClientStatusFilter('active');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${clientStatusFilter === 'active' ? 'ring-2 ring-teal-800' : ''
+                  }`}
+                style={{ backgroundColor: '#21615D' }}
+              >
+                Active
+              </button>
+              <button
+                onClick={() => {
+                  setClientStatusFilter('inactive');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${clientStatusFilter === 'inactive' ? 'ring-2 ring-gray-500' : ''
+                  }`}
+                style={{ backgroundColor: '#9CA3AF' }}
+              >
+                Inactive
+              </button>
+              <button
+                onClick={() => {
+                  setClientStatusFilter('drop-out');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-medium text-white transition-all ${clientStatusFilter === 'drop-out' ? 'ring-2 ring-red-800' : ''
+                  }`}
+                style={{ backgroundColor: '#B91C1C' }}
+              >
+                Drop-out
+              </button>
+            </div>
             
             <div className="bg-white rounded-lg border">
               <div className="overflow-x-auto">
@@ -1671,6 +1668,41 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
       console.error('Error sending bulk booking links:', error);
       setToast({ message: 'Failed to send bulk booking links', type: 'error' });
     }
+  };
+
+  const handleExportCSV = () => {
+    if (clients.length === 0) {
+      setToast({ message: 'No clients available to export', type: 'error' });
+      return;
+    }
+
+    const headers = ['Client Name', 'Email', 'Phone', 'Session Name', 'Mode', 'No. of Bookings', 'Last Session Booked', 'Status'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredClients.map(client => {
+        return [
+          `"${formatClientName(client.client_name).replace(/"/g, '""')}"`,
+          `"${(client.client_email || '').replace(/"/g, '""')}"`,
+          `"${(client.client_phone || '').replace(/"/g, '""')}"`,
+          `"${(client.booking_resource_name || 'N/A').replace(/"/g, '""')}"`,
+          `"${formatMode(client.booking_mode).replace(/"/g, '""')}"`,
+          `"${client.total_sessions}"`,
+          `"${formatLastSessionDate(client.last_session_date)}"`,
+          `"${getClientStatus(client)}"`
+        ].join(',');
+      })
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `my_clients_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const renderMyAppointments = () => {
