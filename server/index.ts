@@ -3684,7 +3684,7 @@ app.post('/api/fetch-slots', async (req, res) => {
     try {
       // Send to n8n webhook based on booking type
       const webhookUrl = payload.isDirectBooking 
-        ? 'https://n8n.srv1169280.hstgr.cloud/webhook/ebc7a183-926b-4cdb-ad3b-27f335a02e17'
+        ? 'https://n8n.srv1169280.hstgr.cloud/webhook-test/ebc7a183-926b-4cdb-ad3b-27f335a02e17'
         : 'https://n8n.srv1169280.hstgr.cloud/webhook/b5ab584c-1203-41c0-b296-3107e2e6035e';
       
       const response = await fetch(webhookUrl, {
@@ -3735,7 +3735,7 @@ app.post('/api/create-booking', async (req, res) => {
     
     try {
       // Send to n8n webhook
-      const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/568038fa-d320-47da-8001-ea1ffeabde00';
+      const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook-test/568038fa-d320-47da-8001-ea1ffeabde00';
       
       const response = await fetch(webhookUrl, {
         method: 'POST',

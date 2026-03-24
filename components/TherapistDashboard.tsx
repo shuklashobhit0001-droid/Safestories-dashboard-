@@ -120,6 +120,10 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents' | 'caseHistory' | 'progressNotes' | 'goalTracking'>('overview');
   const [isCaseHistoryVisible, setIsCaseHistoryVisible] = useState(false);
   const [showCaseHistoryPasswordModal, setShowCaseHistoryPasswordModal] = useState(false);
+  
+  // Bulk action states
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
+  const [showBulkSendModal, setShowBulkSendModal] = useState(false);
   const [caseHistoryPassword, setCaseHistoryPassword] = useState('');
   const [caseHistoryPasswordError, setCaseHistoryPasswordError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -1304,11 +1308,43 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
               </div>
             </div>
 
+            {selectedClients.size > 0 && (
+              <div className="mb-4 p-4 bg-teal-50 border border-teal-100 rounded-lg flex items-center justify-between">
+                <span className="text-sm text-teal-800 font-medium">
+                  {selectedClients.size} client{selectedClients.size !== 1 ? 's' : ''} selected
+                </span>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setSelectedClients(new Set())}
+                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium"
+                  >
+                    Clear Selection
+                  </button>
+                  <button
+                    onClick={() => setShowBulkSendModal(true)}
+                    className="px-4 py-2 bg-[#21615D] text-white text-sm font-medium rounded-lg hover:bg-[#1a4f4c] shadow-sm flex items-center gap-2"
+                  >
+                    <Send size={16} />
+                    Send to Selected
+                  </button>
+                </div>
+              </div>
+            )}
+            
             <div className="bg-white rounded-lg border">
               <div className="overflow-x-auto">
                 <table className="w-full" ref={bookingActionsRef}>
                   <thead className="bg-gray-50 border-b">
                     <tr>
+                      <th className="px-6 py-3 text-left w-12">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-gray-300 focus:ring-[#21615D] cursor-pointer"
+                          style={{ accentColor: '#21615D' }}
+                          checked={paginatedClients.length > 0 && paginatedClients.every(c => selectedClients.has(c.client_name))}
+                          onChange={(e) => handleSelectAllClients(e, paginatedClients)}
+                        />
+                      </th>
                       <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
                       <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
                       <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
@@ -1337,9 +1373,20 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                         return (
                           <React.Fragment key={index}>
                             <tr
-                              className="border-b hover:bg-gray-50 cursor-pointer"
+                              className={`border-b hover:bg-gray-50 transition-colors cursor-pointer ${
+                                selectedClients.has(client.client_name) ? 'bg-teal-50/50' : ''
+                              }`}
                               onClick={() => toggleRow(index)}
                             >
+                              <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded border-gray-300 focus:ring-[#21615D] cursor-pointer"
+                                  style={{ accentColor: '#21615D' }}
+                                  checked={selectedClients.has(client.client_name)}
+                                  onChange={(e) => handleSelectClient(e, client.client_name)}
+                                />
+                              </td>
                               <td className="px-6 py-4 text-sm">
                                 <span
                                   onClick={(e) => {
@@ -1373,7 +1420,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                             </tr>
                             {isExpanded && (
                               <tr className="bg-gray-50 border-b">
-                                <td colSpan={6} className="px-6 py-4">
+                                <td colSpan={7} className="px-6 py-4">
                                   <div className="flex justify-center">
                                     <button
                                       onClick={() => {
@@ -1387,7 +1434,7 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
                                       className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
                                     >
                                       <Send size={16} />
-                                      Send follow up session link
+                                      Send Booking Link
                                     </button>
                                   </div>
                                 </td>
@@ -1567,6 +1614,64 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
   useEffect(() => {
     setAppointmentCurrentPage(1);
   }, [activeAppointmentTab, appointmentSearchTerm]);
+
+  // Bulk Booking Handlers
+  const handleSelectAllClients = (e: React.ChangeEvent<HTMLInputElement>, currentClients: any[]) => {
+    if (e.target.checked) {
+      const newSelected = new Set(selectedClients);
+      currentClients.forEach(client => {
+        if (client.client_name) newSelected.add(client.client_name);
+      });
+      setSelectedClients(newSelected);
+    } else {
+      const newSelected = new Set(selectedClients);
+      currentClients.forEach(client => {
+        if (client.client_name) newSelected.delete(client.client_name);
+      });
+      setSelectedClients(newSelected);
+    }
+  };
+
+  const handleSelectClient = (e: React.ChangeEvent<HTMLInputElement>, clientId: string) => {
+    e.stopPropagation();
+    const newSelected = new Set(selectedClients);
+    if (e.target.checked) {
+      newSelected.add(clientId);
+    } else {
+      newSelected.delete(clientId);
+    }
+    setSelectedClients(newSelected);
+  };
+
+  const confirmBulkSendBookingLink = async () => {
+    const clientsToSend = clients.filter(c => selectedClients.has(c.client_name)).map(c => ({
+      name: c.client_name,
+      phone: c.client_phone || '',
+      email: c.client_email || ''
+    }));
+
+    if (clientsToSend.length === 0) return;
+
+    try {
+      const response = await fetch('/api/send-booking-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          clients: clientsToSend,
+          therapistName: user.full_name || user.username
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to bulk send booking links');
+
+      setToast({ message: `Successfully queued booking links for ${clientsToSend.length} clients`, type: 'success' });
+      setShowBulkSendModal(false);
+      setSelectedClients(new Set());
+    } catch (error) {
+      console.error('Error sending bulk booking links:', error);
+      setToast({ message: 'Failed to send bulk booking links', type: 'error' });
+    }
+  };
 
   const renderMyAppointments = () => {
     if (isProfileUnderReview) {
@@ -3484,6 +3589,32 @@ export const TherapistDashboard: React.FC<TherapistDashboardProps> = ({ onLogout
           }}
           prefilledClient={selectedClientForBooking}
         />
+
+        {/* Bulk Send Booking Link Modal */}
+        {showBulkSendModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+              <h2 className="text-xl font-bold mb-4">Send Booking Links</h2>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to send session booking links to {selectedClients.size} selected client{selectedClients.size !== 1 ? 's' : ''}?
+              </p>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowBulkSendModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBulkSendBookingLink}
+                  className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-colors"
+                >
+                  Confirm Send
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
