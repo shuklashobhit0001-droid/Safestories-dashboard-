@@ -731,10 +731,7 @@ app.patch('/api/leads/:id/stage', async (req, res) => {
 
     const REMARK_COLUMN_MAP: Record<string, string> = {
         'lead-inquire': 'remark_lead_inquire',
-        'contacted': 'remark_contacted',
         'followup-1': 'remark_followup_1',
-        'followup-2': 'remark_followup_2',
-        'followup-3': 'remark_followup_3',
         'pretherapy-call': 'remark_pretherapy_call',
         'booked-first-session': 'remark_booked_first_session',
         'dropouts': 'remark_dropouts',
@@ -743,10 +740,7 @@ app.patch('/api/leads/:id/stage', async (req, res) => {
 
     const TIMESTAMP_COLUMN_MAP: Record<string, string> = {
         'lead-inquire': 'stage_lead_inquire_at',
-        'contacted': 'stage_contacted_at',
         'followup-1': 'stage_followup_1_at',
-        'followup-2': 'stage_followup_2_at',
-        'followup-3': 'stage_followup_3_at',
         'pretherapy-call': 'stage_pretherapy_call_at',
         'booked-first-session': 'stage_booked_first_session_at',
         'dropouts': 'stage_dropouts_at',
@@ -905,6 +899,70 @@ app.post('/api/leads', async (req, res) => {
     }
 });
 
+app.post('/api/pretherapy-form', async (req, res) => {
+  try {
+    const {
+      lead_id, submitted_by,
+      age, language, language_other, location, location_manual,
+      mode_of_session, previous_therapy, concerns, concerns_other,
+      clinical_concerns_observed, clinical_concerns, psychiatric_treatment,
+      suicidal_thoughts, suicidal_current, suicidal_ideation_1m, suicidal_attempt_1m,
+      preferred_therapy_approach, preferred_therapy_text,
+      consent_explained, consent_no_reason, scope_explained, preferred_price, preferred_price_other,
+      readiness, readiness_other, consented_followup, followup_mode,
+      client_questions, source, source_other, consultation_outcome, close_reason
+    } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO pretherapy_call_forms (
+        lead_id, submitted_by,
+        age, language, language_other, location, location_manual,
+        mode_of_session, previous_therapy, concerns, concerns_other,
+        clinical_concerns_observed, clinical_concerns, psychiatric_treatment,
+        suicidal_thoughts, suicidal_current, suicidal_ideation_1m, suicidal_attempt_1m,
+        preferred_therapy_approach, preferred_therapy_text,
+        consent_explained, consent_no_reason, scope_explained, preferred_price, preferred_price_other,
+        readiness, readiness_other, consented_followup, followup_mode,
+        client_questions, source, source_other, consultation_outcome, close_reason
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34
+      ) RETURNING *`,
+      [
+        lead_id, submitted_by || null,
+        age || null, language || null, language_other || null, location || null, location_manual || null,
+        mode_of_session || null, previous_therapy || null, concerns || null, concerns_other || null,
+        clinical_concerns_observed || null, clinical_concerns || null, psychiatric_treatment || null,
+        suicidal_thoughts || null, suicidal_current || null, suicidal_ideation_1m || null, suicidal_attempt_1m || null,
+        preferred_therapy_approach || null, preferred_therapy_text || null,
+        consent_explained || null, consent_no_reason || null, scope_explained || null, preferred_price || null, preferred_price_other || null,
+        readiness || null, readiness_other || null, consented_followup || null, followup_mode || null,
+        client_questions || null, source || null, source_other || null, consultation_outcome || null, close_reason || null
+      ]
+    );
+    res.status(201).json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error('Error saving pretherapy form:', err);
+    res.status(500).json({ error: 'Failed to save pre-therapy call form' });
+  }
+});
+
+app.get('/api/pretherapy-form/:leadId', async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const result = await pool.query(
+      `SELECT * FROM pretherapy_call_forms WHERE lead_id = $1 ORDER BY submitted_at DESC LIMIT 1`,
+      [leadId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'No form found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching pretherapy form:', err);
+    res.status(500).json({ error: 'Failed to fetch pre-therapy call form' });
+  }
+});
+
 app.get('/api/lead-managers', async (req, res) => {
     try {
         const result = await pool.query(
@@ -981,6 +1039,32 @@ app.get('/api/analytics', async (req, res) => {
         console.error('Error fetching analytics:', err);
         res.status(500).json({ error: 'Failed to fetch analytics', details: (err as Error).message });
     }
+});
+
+app.get('/api/crm/todo', async (req, res) => {
+  try {
+    const consultationCalls = await pool.query(`
+      SELECT id, name, phone, email, follow_up_1_date, follow_up_1_notes, remark_pretherapy_call as next_step
+      FROM leads 
+      WHERE pipeline_stage = 'pretherapy-call'
+      ORDER BY created_at DESC
+    `);
+
+    const followups = await pool.query(`
+      SELECT id, name, phone, email, follow_up_1_date, follow_up_1_notes, remark_followup_1 as next_step
+      FROM leads 
+      WHERE pipeline_stage = 'followup-1'
+      ORDER BY follow_up_1_date ASC NULLS LAST
+    `);
+
+    res.json({
+      consultationCalls: consultationCalls.rows,
+      followups: followups.rows
+    });
+  } catch (err) {
+    console.error('Error fetching todo list:', err);
+    res.status(500).json({ error: 'Failed to fetch todo list' });
+  }
 });
 
 // Update password
