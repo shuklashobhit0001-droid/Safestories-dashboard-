@@ -1449,7 +1449,7 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
                               <td className="px-6 py-4 text-sm">{formatLastSessionDate(client.last_session_date)}</td>
                               <td className="px-6 py-4 text-sm">
                                 <span
-                                  className="px-3 py-1 rounded-full text-xs font-medium text-white"
+                                  className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
                                   style={{
                                     backgroundColor:
                                       status === 'active' ? '#21615D' :

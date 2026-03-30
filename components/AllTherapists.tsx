@@ -1597,22 +1597,30 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         {showTherapistBulkConfirmModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
             <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
-              <h3 className="text-xl font-bold mb-4">Send Booking Link to Multiple Clients</h3>
+              <h3 className="text-xl font-bold mb-4">Send Bulk Booking Links</h3>
               <p className="text-gray-600 mb-6">
-                This will send a booking link reminder to {selectedTherapistClients.size} selected clients. Would you like to proceed?
+                This will send booking link reminders to <span className="font-semibold">{selectedTherapistClients.size}</span> selected clients. Would you like to proceed?
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => confirmBulkSendFromTherapistView(clients)}
-                  className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-medium"
+                  disabled={isTherapistBulkSending}
+                  className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 transition-opacity font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: '#21615D' }}
                 >
-                  Yes, Send to All
+                  {isTherapistBulkSending ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    'Yes, Send All'
+                  )}
                 </button>
                 <button
-                  onClick={() => {
-                    setShowTherapistBulkConfirmModal(false);
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                  onClick={() => setShowTherapistBulkConfirmModal(false)}
+                  disabled={isTherapistBulkSending}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
                 >
                   No, Cancel
                 </button>
