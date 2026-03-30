@@ -125,6 +125,7 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
   // Bulk action states
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
   const [showBulkSendModal, setShowBulkSendModal] = useState(false);
+  const [isBulkSending, setIsBulkSending] = useState(false);
   const [caseHistoryPassword, setCaseHistoryPassword] = useState('');
   const [caseHistoryPasswordError, setCaseHistoryPasswordError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -1686,33 +1687,65 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
   };
 
   const confirmBulkSendBookingLink = async () => {
-    const clientsToSend = clients.filter(c => selectedClients.has(c.client_name)).map(c => ({
-      name: c.client_name,
-      phone: c.client_phone || '',
-      email: c.client_email || ''
-    }));
+    if (selectedClients.size === 0) return;
+    setIsBulkSending(true);
 
-    if (clientsToSend.length === 0) return;
+    const selectedClientNames = Array.from(selectedClients);
+    const selectedClientObjects = clients.filter(c => selectedClientNames.includes(c.client_name));
 
-    try {
-      const response = await fetch('/api/send-booking-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clients: clientsToSend,
-          therapistName: user.full_name || user.username
-        })
-      });
+    let successCount = 0;
+    let errorCount = 0;
 
-      if (!response.ok) throw new Error('Failed to bulk send booking links');
+    // Helper to send a single link
+    const sendLink = async (client: any) => {
+      try {
+        let therapyType = 'Individual Therapy';
+        const typeRes = await fetch(`/api/client-therapy-type?email=${encodeURIComponent(client.client_email || '')}&phone=${encodeURIComponent(client.client_phone || '')}`);
+        if (typeRes.ok) {
+          const data = await typeRes.json();
+          therapyType = data.therapy_type || 'Individual Therapy';
+        }
 
-      setToast({ message: `Successfully queued booking links for ${clientsToSend.length} clients`, type: 'success' });
-      setShowBulkSendModal(false);
-      setSelectedClients(new Set());
-    } catch (error) {
-      console.error('Error sending bulk booking links:', error);
-      setToast({ message: 'Failed to send bulk booking links', type: 'error' });
-    }
+        const cleanTherapyType = (therapy: string) => {
+          let cleaned = therapy.replace(/\s+with\s+[A-Za-z\s]+$/i, '').trim();
+          cleaned = cleaned.replace(/\s+Session$/i, '').trim();
+          return cleaned;
+        };
+
+        const isFreeConsultation = therapyType.toLowerCase().includes('free consultation');
+        const webhookData = {
+          clientName: client.client_name,
+          email: client.client_email || '',
+          phone: client.client_phone || '',
+          therapistName: isFreeConsultation ? 'Safestories' : (user.full_name || user.username || 'Unknown'),
+          therapy: isFreeConsultation ? 'Free Consultation' : cleanTherapyType(therapyType)
+        };
+
+        const response = await fetch('/api/send-booking-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookData)
+        });
+
+        if (response.ok) successCount++;
+        else errorCount++;
+      } catch (err) {
+        console.error('Error sending bulk link:', err);
+        errorCount++;
+      }
+    };
+
+    // Send all links in parallel
+    await Promise.all(selectedClientObjects.map(client => sendLink(client)));
+
+    setToast({
+      message: `Finished: ${successCount} sent successfully. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+      type: errorCount === 0 ? 'success' : 'error'
+    });
+
+    setIsBulkSending(false);
+    setShowBulkSendModal(false);
+    setSelectedClients(new Set());
   };
 
   const handleExportCSV = () => {
@@ -3694,16 +3727,25 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
               </p>
               <div className="flex gap-3 mt-6">
                 <button
-                  onClick={() => setShowBulkSendModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-colors"
+                  onClick={confirmBulkSendBookingLink}
+                  disabled={isBulkSending}
+                  className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Cancel
+                  {isBulkSending ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    'Confirm Send'
+                  )}
                 </button>
                 <button
-                  onClick={confirmBulkSendBookingLink}
-                  className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-colors"
+                  onClick={() => setShowBulkSendModal(false)}
+                  disabled={isBulkSending}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-colors disabled:opacity-50"
                 >
-                  Confirm Send
+                  Cancel
                 </button>
               </div>
             </div>
