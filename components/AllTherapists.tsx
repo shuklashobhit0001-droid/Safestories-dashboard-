@@ -318,28 +318,15 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     if (!selectedClientForBookingLink) return;
 
     const client = selectedClientForBookingLink;
-    
+
     try {
-      // First, get the client's therapy type from their appointments
-      let therapyType = 'Individual Therapy Session'; // fallback default
-      
+      // Get the most recent therapy type for this client - same as AllClients.tsx
+      let therapyType = 'Individual Therapy';
       try {
-        const params = new URLSearchParams();
-        if (client.invitee_email) params.append('email', client.invitee_email);
-        if (client.invitee_phone) {
-          // Handle multiple phone numbers
-          const phones = client.invitee_phone.split(', ');
-          phones.forEach(phone => params.append('phone', phone.trim()));
-        }
-        
-        const clientResponse = await fetch(`/api/client-details?${params.toString()}`);
-        if (clientResponse.ok) {
-          const clientData = await clientResponse.json();
-          if (clientData.appointments && clientData.appointments.length > 0) {
-            // Get the most recent appointment's therapy type
-            const recentAppointment = clientData.appointments[0];
-            therapyType = recentAppointment.booking_resource_name || therapyType;
-          }
+        const response = await fetch(`/api/client-therapy-type?email=${encodeURIComponent(client.invitee_email || '')}&phone=${encodeURIComponent(client.invitee_phone || '')}`);
+        if (response.ok) {
+          const data = await response.json();
+          therapyType = data.therapy_type || 'Individual Therapy';
         }
       } catch (error) {
         console.warn('Could not fetch client therapy type, using default:', error);
@@ -347,9 +334,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
 
       // Clean therapy type to remove therapist name and "Session"
       const cleanTherapyType = (therapy: string) => {
-        // Remove "with [Therapist Name]" pattern
         let cleaned = therapy.replace(/\s+with\s+[A-Za-z\s]+$/i, '').trim();
-        // Remove "Session" from the end
         cleaned = cleaned.replace(/\s+Session$/i, '').trim();
         return cleaned;
       };
@@ -363,7 +348,6 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         therapy: isFreeConsultation ? 'Free Consultation' : cleanTherapyType(therapyType)
       };
 
-      // Use our backend API endpoint instead of direct webhook call
       const response = await fetch('/api/send-booking-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -384,7 +368,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       console.error('Error sending booking link:', error);
       setToast({ message: 'Failed to send booking link to client', type: 'error' });
     }
-    
+
     // Close the modal and action row
     setShowBookingLinkConfirmModal(false);
     setSelectedClientForBookingLink(null);
@@ -407,19 +391,12 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
 
     await Promise.all(selected.map(async (client) => {
       try {
-        let therapyType = 'Individual Therapy Session';
+        let therapyType = 'Individual Therapy';
         try {
-          const params = new URLSearchParams();
-          if (client.invitee_email) params.append('email', client.invitee_email);
-          if (client.invitee_phone) {
-            client.invitee_phone.split(', ').forEach(p => params.append('phone', p.trim()));
-          }
-          const res = await fetch(`/api/client-details?${params.toString()}`);
+          const res = await fetch(`/api/client-therapy-type?email=${encodeURIComponent(client.invitee_email || '')}&phone=${encodeURIComponent(client.invitee_phone || '')}`);
           if (res.ok) {
             const data = await res.json();
-            if (data.appointments?.length > 0) {
-              therapyType = data.appointments[0].booking_resource_name || therapyType;
-            }
+            therapyType = data.therapy_type || 'Individual Therapy';
           }
         } catch {}
 
@@ -1568,29 +1545,32 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         {showBookingLinkConfirmModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
             <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
-                <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
-                <p className="text-gray-600 mb-6">
-                  This will send a booking link reminder to the client. Would you like to proceed?
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={confirmSendBookingLink}
-                    className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-medium"
-                  >
-                    Yes, Send
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowBookingLinkConfirmModal(false);
-                      setSelectedClientForBookingLink(null);
-                    }}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
-                  >
-                    No, Cancel
-                  </button>
-                </div>
+              <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
+              <p className="text-gray-600 mb-6">
+                This will send a booking link reminder to{' '}
+                <span className="font-semibold">{selectedClientForBookingLink?.invitee_name}</span>.
+                Would you like to proceed?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={confirmSendBookingLink}
+                  className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 transition-opacity font-medium"
+                  style={{ backgroundColor: '#21615D' }}
+                >
+                  Yes, Send
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBookingLinkConfirmModal(false);
+                    setSelectedClientForBookingLink(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  No, Cancel
+                </button>
               </div>
             </div>
+          </div>
         )}
 
         {/* Bulk Send Booking Link Confirmation Modal */}
@@ -2229,29 +2209,69 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         {showBookingLinkConfirmModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
             <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
-                <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
-                <p className="text-gray-600 mb-6">
-                  This will send a booking link reminder to the client. Would you like to proceed?
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={confirmSendBookingLink}
-                    className="flex-1 px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-medium"
-                  >
-                    Yes, Send
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowBookingLinkConfirmModal(false);
-                      setSelectedClientForBookingLink(null);
-                    }}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
-                  >
-                    No, Cancel
-                  </button>
-                </div>
+              <h3 className="text-xl font-bold mb-4">Send Booking Link</h3>
+              <p className="text-gray-600 mb-6">
+                This will send a booking link reminder to{' '}
+                <span className="font-semibold">{selectedClientForBookingLink?.invitee_name}</span>.
+                Would you like to proceed?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={confirmSendBookingLink}
+                  className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 transition-opacity font-medium"
+                  style={{ backgroundColor: '#21615D' }}
+                >
+                  Yes, Send
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBookingLinkConfirmModal(false);
+                    setSelectedClientForBookingLink(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  No, Cancel
+                </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Bulk Send Booking Link Confirmation Modal */}
+        {showTherapistBulkConfirmModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
+              <h3 className="text-xl font-bold mb-4">Send Bulk Booking Links</h3>
+              <p className="text-gray-600 mb-6">
+                This will send booking link reminders to{' '}
+                <span className="font-semibold">{selectedTherapistClients.size}</span> selected clients. Would you like to proceed?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => confirmBulkSendFromTherapistView(clients)}
+                  disabled={isTherapistBulkSending}
+                  className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 transition-opacity font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: '#21615D' }}
+                >
+                  {isTherapistBulkSending ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    'Yes, Send All'
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowTherapistBulkConfirmModal(false)}
+                  disabled={isTherapistBulkSending}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
+                >
+                  No, Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     );
