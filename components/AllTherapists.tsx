@@ -139,6 +139,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [selectedTherapistFilters, setSelectedTherapistFilters] = useState<string[]>([]);
   const [selectedModeFilter, setSelectedModeFilter] = useState<'all' | 'online' | 'in-person'>('all');
   const [selectedSessionTypeFilter, setSelectedSessionTypeFilter] = useState<'all' | 'individual' | 'couples' | 'free_consultation'>('all');
+  const [openBookingLinksId, setOpenBookingLinksId] = useState<string | null>(null);
 
   const toggleTherapistFilter = (therapistName: string) => {
     setSelectedTherapistFilters(prev => 
@@ -164,6 +165,9 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         setIsClientDateDropdownOpen(false);
         setShowClientCustomCalendar(false);
       }
+      // Always close booking links dropdown on any click outside
+      // The button itself will stop propagation to prevent immediate closing
+      setOpenBookingLinksId(null);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -2519,12 +2523,8 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                               <button 
                                 className="w-full flex items-center justify-center gap-2 px-3 py-1.5 border border-teal-600 text-teal-700 rounded-lg hover:bg-teal-50 transition-colors text-xs font-semibold"
                                 onClick={(e) => {
-                                  const dropdownId = `dropdown-${therapist.therapist_id}`;
-                                  const dropdown = document.getElementById(dropdownId);
-                                  document.querySelectorAll('[id^="dropdown-"]').forEach(d => {
-                                    if (d.id !== dropdownId) d.classList.add('hidden');
-                                  });
-                                  if (dropdown) dropdown.classList.toggle('hidden');
+                                  e.stopPropagation();
+                                  setOpenBookingLinksId(openBookingLinksId === therapist.therapist_id ? null : therapist.therapist_id);
                                 }}
                               >
                                 <Link size={12} />
@@ -2532,38 +2532,39 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                 <ChevronDown size={12} />
                               </button>
                               
-                              <div 
-                                id={`dropdown-${therapist.therapist_id}`}
-                                className="hidden absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden text-left"
-                              >
-                                <div className="px-3 py-2 bg-gray-50 border-b">
-                                  <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Public Booking Pages</p>
-                                </div>
-                                <div className="max-h-[200px] overflow-y-auto">
-                                  {services.map((service: any, sIdx: number) => (
-                                    <div key={sIdx} className="p-3 border-b last:border-0 hover:bg-gray-50 transition-colors">
-                                      <p className="text-xs font-semibold text-gray-800 mb-1 truncate">{service.title}</p>
-                                      <div className="flex gap-2">
-                                        <button 
-                                          className="flex-1 flex items-center justify-center gap-1 text-[10px] py-1 border rounded hover:bg-gray-100 text-gray-600"
-                                          onClick={() => {
-                                            navigator.clipboard.writeText(`https://safestories.in${service.slug}`);
-                                            alert('Link copied!');
-                                          }}
-                                        >
-                                          <Copy size={10} /> Copy
-                                        </button>
-                                        <button 
-                                          className="flex-1 flex items-center justify-center gap-1 text-[10px] py-1 bg-teal-50 text-teal-700 border border-teal-100 rounded hover:bg-teal-100"
-                                          onClick={() => window.open(`/book${service.slug}`, '_blank')}
-                                        >
-                                          <ExternalLink size={10} /> Open
-                                        </button>
+                              {openBookingLinksId === therapist.therapist_id && (
+                                <div 
+                                  className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden text-left"
+                                >
+                                  <div className="px-3 py-2 bg-gray-50 border-b">
+                                    <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Public Booking Pages</p>
+                                  </div>
+                                  <div className="max-h-[200px] overflow-y-auto">
+                                    {services.map((service: any, sIdx: number) => (
+                                      <div key={sIdx} className="p-3 border-b last:border-0 hover:bg-gray-50 transition-colors">
+                                        <p className="text-xs font-semibold text-gray-800 mb-1 truncate">{service.title}</p>
+                                        <div className="flex gap-2">
+                                          <button 
+                                            className="flex-1 flex items-center justify-center gap-1 text-[10px] py-1 border rounded hover:bg-gray-100 text-gray-600"
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(`https://safestories.in${service.slug}`);
+                                              alert('Link copied!');
+                                            }}
+                                          >
+                                            <Copy size={10} /> Copy
+                                          </button>
+                                          <button 
+                                            className="flex-1 flex items-center justify-center gap-1 text-[10px] py-1 bg-teal-50 text-teal-700 border border-teal-100 rounded hover:bg-teal-100"
+                                            onClick={() => window.open(`/book${service.slug}`, '_blank')}
+                                          >
+                                            <ExternalLink size={10} /> Open
+                                          </button>
+                                        </div>
                                       </div>
-                                    </div>
-                                  ))}
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
                           </>
                         ) : (

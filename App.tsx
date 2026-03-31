@@ -8,6 +8,7 @@ import { TherapistDashboard } from './components/TherapistDashboard';
 import { MaintenancePage } from './components/MaintenancePage';
 import { SOSDocumentationView } from './components/SOSDocumentationView';
 import { PublicBookingContainer } from './components/PublicBookingContainer';
+import { BookingConfirmation } from './components/BookingConfirmation';
 import CRMApp from './src/crm/App';
 import { Monitor } from 'lucide-react';
 
@@ -27,6 +28,13 @@ const App: React.FC = () => {
   if (bookingMatch) {
     const slug = bookingMatch[1];
     return <PublicBookingContainer slug={slug} />;
+  }
+
+  // Check if this is a booking confirmation/cancellation view
+  const confirmationMatch = path.match(/^\/booking-confirmation\/(.+)$/);
+  if (confirmationMatch) {
+    const bookingId = confirmationMatch[1];
+    return <BookingConfirmation bookingId={bookingId} />;
   }
 
   // Show maintenance page only on Vercel (production)

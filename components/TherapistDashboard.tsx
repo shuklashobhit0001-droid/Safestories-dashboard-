@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, User, CalendarIcon, ArrowLeft, Mail, Eye, EyeOff, Edit, ExternalLink, Download } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, LogOut, PieChart, ChevronUp, ChevronDown, ChevronRight, Copy, Send, Search, FileText, Bell, X, User, CalendarIcon, ArrowLeft, Mail, Eye, EyeOff, Edit, ExternalLink, Download, MessageCircle } from 'lucide-react';
 import { Logo } from './Logo';
 import { Notifications } from './Notifications';
 import { Toast } from './Toast';
@@ -138,6 +138,11 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
   const [showCompleteProfileModal, setShowCompleteProfileModal] = useState(false);
   const [selectedEditEvent, setSelectedEditEvent] = useState<any>(null);
   const [selectedBookingSession, setSelectedBookingSession] = useState<any>(null);
+
+  // Feedback state
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackTarget, setFeedbackTarget] = useState<any>(null);
+  const [isSendingFeedback, setIsSendingFeedback] = useState(false);
 
   useEffect(() => {
     if (activeView === 'resources' && !selectedEditEvent) {
@@ -1939,29 +1944,29 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
                           {selectedAppointmentIndex === index && (
                             <tr className="bg-gray-100">
                               <td colSpan={5} className="px-6 py-4">
-                                <div className="flex gap-3 justify-center">
+                                <div className="flex gap-1.5 justify-center">
                                   <button
                                     onClick={() => copyAppointmentDetails(appointment)}
-                                    className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                                    className="px-3 py-1.5 border border-gray-400 rounded-lg text-xs text-gray-700 hover:bg-white flex items-center gap-1.5"
                                   >
-                                    <Copy size={16} />
-                                    Copy to Clipboard
+                                    <Copy size={13} />
+                                    Copy Details
                                   </button>
                                   <button
                                     onClick={() => handleReminderClick(appointment)}
                                     disabled={isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'}
-                                    className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'
+                                    className={`px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 ${isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'
                                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                       : 'border border-gray-400 text-gray-700 hover:bg-white'
                                       }`}
                                   >
-                                    <Send size={16} />
-                                    Send Manual Reminder to Client
+                                    <Send size={13} />
+                                    Send Reminder
                                   </button>
                                   <button
                                     onClick={() => handleSOSClick(appointment)}
                                     disabled={appointment.booking_status === 'cancelled'}
-                                    className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${appointment.booking_status === 'cancelled'
+                                    className={`px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 ${appointment.booking_status === 'cancelled'
                                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                       : 'border border-red-600 text-red-600 hover:bg-white'
                                       }`}
@@ -1972,25 +1977,37 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
                                   <button
                                     onClick={() => handleViewSessionNotes(appointment)}
                                     disabled={!appointment.has_session_notes || appointment.booking_status === 'cancelled'}
-                                    className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${!appointment.has_session_notes || appointment.booking_status === 'cancelled'
+                                    className={`px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 ${!appointment.has_session_notes || appointment.booking_status === 'cancelled'
                                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                       : 'border border-blue-600 text-blue-600 hover:bg-white'
                                       }`}
                                   >
-                                    <FileText size={16} />
+                                    <FileText size={13} />
                                     View Session Notes
                                   </button>
                                   <button
                                     onClick={() => handleFillSessionNotes(appointment)}
                                     disabled={appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)}
-                                    className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)
+                                    className={`px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 ${appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)
                                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                       : 'border border-teal-600 text-teal-600 hover:bg-white'
                                       }`}
                                   >
-                                    <FileText size={16} />
+                                    <FileText size={13} />
                                     Fill Session Notes
                                   </button>
+                                  {(getAppointmentStatus(appointment) === 'completed' || getAppointmentStatus(appointment) === 'pending_notes') && (
+                                    <button
+                                      onClick={() => {
+                                        setFeedbackTarget(appointment);
+                                        setShowFeedbackModal(true);
+                                      }}
+                                      className="px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 border border-teal-600 text-teal-600 hover:bg-white"
+                                    >
+                                      <MessageCircle size={13} />
+                                      Give Feedback
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -3665,6 +3682,68 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
           </div>
         )}
 
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Give Feedback Confirmation Modal */}
+      {showFeedbackModal && feedbackTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-xl font-bold mb-4">Send Feedback Request</h3>
+            <p className="text-gray-600 mb-6 font-medium">
+              This will send a feedback to the client <span className="text-teal-700"> {formatClientName(feedbackTarget.client_name)} </span>. 
+              Would you like to proceed?
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={async () => {
+                  setIsSendingFeedback(true);
+                  try {
+                    const webhookData = {
+                      bookingId: feedbackTarget.booking_id,
+                      clientName: feedbackTarget.client_name,
+                      clientEmail: feedbackTarget.client_email || feedbackTarget.invitee_email,
+                      clientPhone: feedbackTarget.client_phone || feedbackTarget.invitee_phone,
+                      therapistName: user.full_name || user.username,
+                      sessionName: feedbackTarget.session_name || feedbackTarget.therapy_type,
+                      sessionDate: feedbackTarget.session_timings || feedbackTarget.booking_start_at
+                    };
+                    
+                    // Real webhook URL
+                    const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/6e110a22-ddc7-487b-8995-233b94ecb2c5', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(webhookData)
+                    });
+
+                    if (response.ok) {
+                      setToast({ message: `Feedback request sent to ${formatClientName(feedbackTarget.client_name)} successfully!`, type: 'success' });
+                    } else {
+                      setToast({ message: 'Failed to send feedback request', type: 'error' });
+                    }
+                  } catch (err) {
+                    console.error('Error sending feedback:', err);
+                    setToast({ message: 'Failed to send feedback request', type: 'error' });
+                  } finally {
+                    setIsSendingFeedback(false);
+                    setShowFeedbackModal(false);
+                    setFeedbackTarget(null);
+                  }
+                }} 
+                disabled={isSendingFeedback}
+                className="flex-1 px-4 py-2.5 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-semibold disabled:opacity-50"
+              >
+                {isSendingFeedback ? 'Sending...' : 'Yes'}
+              </button>
+              <button 
+                onClick={() => { setShowFeedbackModal(false); setFeedbackTarget(null); }} 
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {showReminderModal && selectedReminderAppointment && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

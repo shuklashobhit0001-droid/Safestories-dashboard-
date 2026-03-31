@@ -2181,6 +2181,36 @@ app.post('/api/reschedule-booking', async (req, res) => {
   }
 });
 
+// GET Public Booking Details
+app.get('/api/public/booking/:booking_id', async (req, res) => {
+  const { booking_id } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT 
+        booking_id,
+        invitee_name,
+        booking_start_at,
+        booking_invitee_time,
+        booking_resource_name,
+        booking_host_name,
+        booking_status,
+        booking_cancel_reason,
+        booking_joining_link
+      FROM bookings 
+      WHERE booking_id = $1
+    `, [booking_id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 
 
 app.get('/api/appointments', async (req, res) => {

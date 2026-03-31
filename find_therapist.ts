@@ -11,19 +11,19 @@ const pool = new Pool({
 
 async function findTherapist() {
   try {
-    const name = 'Aastha Yagnik';
+    const name = 'Ishika Mahajan';
     console.log(`Searching for therapist: ${name}`);
 
     const userResult = await pool.query(
       `SELECT id, name, full_name, role, therapist_id FROM users WHERE name ILIKE $1 OR full_name ILIKE $1`,
-      [`%Aastha%`]
+      [`%Ishika%`]
     );
     console.log('\n--- USERS MATCHES ---');
     console.table(userResult.rows);
 
     const therapistResult = await pool.query(
       `SELECT * FROM therapists WHERE name ILIKE $1`,
-      [`%Aastha%`]
+      [`%Ishika%`]
     );
     console.log('\n--- THERAPISTS MATCHES ---');
     console.table(therapistResult.rows);

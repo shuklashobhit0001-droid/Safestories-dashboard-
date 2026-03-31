@@ -64,6 +64,11 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
     { id: 'no_show', label: 'No Show' },
   ];
 
+  // Feedback state
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackTarget, setFeedbackTarget] = useState<Appointment | null>(null);
+  const [isSendingFeedback, setIsSendingFeedback] = useState(false);
+
   const fetchAppointments = () => {
     setLoading(true);
     fetch('/api/appointments')
@@ -97,7 +102,7 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
 ${apt.booking_start_at}
 Time zone: Asia/Kolkata
 ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link: ${apt.booking_joining_link}` : ''}`;
-    
+
     navigator.clipboard.writeText(details).then(() => {
       setToast({ message: 'Appointment details copied to clipboard!', type: 'success' });
     }).catch(err => {
@@ -363,11 +368,10 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
               setActiveTab(tab.id);
               setCurrentPage(1);
             }}
-            className={`pb-2 font-medium ${
-              activeTab === tab.id
+            className={`pb-2 font-medium ${activeTab === tab.id
                 ? 'text-teal-700 border-b-2 border-teal-700'
                 : 'text-gray-400'
-            }`}
+              }`}
           >
             {tab.label}
           </button>
@@ -399,174 +403,233 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       {loading ? (
         <Loader />
       ) : (
-      <div className="bg-white rounded-lg border flex-1 flex flex-col">
-        <div className="overflow-x-auto">
-          <table className="w-full" ref={appointmentActionsRef}>
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapist Name</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
-                <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+        <div className="bg-white rounded-lg border flex-1 flex flex-col">
+          <div className="overflow-x-auto">
+            <table className="w-full" ref={appointmentActionsRef}>
+              <thead className="bg-gray-50 border-b">
                 <tr>
-                  <td colSpan={7} className="text-center text-gray-400 py-8">Loading...</td>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapist Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
                 </tr>
-              ) : filteredAppointments.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center text-gray-400 py-8">No bookings found</td>
-                </tr>
-              ) : (
-                paginatedAppointments.map((apt, index) => (
-                  <React.Fragment key={index}>
-                    <tr
-                      className={`border-b cursor-pointer transition-colors ${
-                        selectedRowIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
-                      }`}
-                      onClick={() => setSelectedRowIndex(selectedRowIndex === index ? null : index)}
-                    >
-                      <td className="px-6 py-4 text-sm">{apt.booking_start_at}</td>
-                      <td className="px-6 py-4 text-sm">{apt.booking_resource_name}</td>
-                      <td className="px-6 py-4 text-sm whitespace-nowrap">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onClientClick) {
-                              onClientClick({
-                                invitee_name: apt.invitee_name,
-                                invitee_email: apt.invitee_email,
-                                invitee_phone: apt.invitee_phone
-                              });
-                            }
-                          }}
-                          className="text-teal-700 hover:underline font-medium"
-                        >
-                          {apt.invitee_name}
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <div>{apt.invitee_phone}</div>
-                        <div className="text-gray-500 text-xs">{apt.invitee_email}</div>
-                      </td>
-                      <td className="px-6 py-4 text-sm">{apt.booking_host_name}</td>
-                      <td className="px-6 py-4 text-sm">{formatMode(apt.booking_mode)}</td>
-                      <td className="px-6 py-4 text-sm">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                          getAppointmentStatus(apt) === 'completed' ? 'bg-green-100 text-green-700' :
-                          getAppointmentStatus(apt) === 'cancelled' ? 'bg-red-100 text-red-700' :
-                          getAppointmentStatus(apt) === 'no_show' ? 'bg-orange-100 text-orange-700' :
-                          getAppointmentStatus(apt) === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-blue-100 text-blue-700'
-                        }`}>
-                          {getAppointmentStatus(apt) === 'pending_notes' ? 'Pending Notes' :
-                           getAppointmentStatus(apt) === 'no_show' ? 'No Show' :
-                           getAppointmentStatus(apt).charAt(0).toUpperCase() + getAppointmentStatus(apt).slice(1)}
-                        </span>
-                      </td>
-                    </tr>
-                    {selectedRowIndex === index && (
-                      <tr className="bg-gray-100">
-                        <td colSpan={7} className="px-6 py-4">
-                          <div className="flex gap-2 justify-center items-center">
-                            <button
-                              onClick={() => copyAppointmentDetails(apt)}
-                              className="px-3 py-1.5 border border-gray-400 rounded-lg text-xs text-gray-700 hover:bg-white flex items-center gap-1.5 whitespace-nowrap"
-                            >
-                              <Copy size={13} />
-                              Copy Details
-                            </button>
-                            <button
-                              onClick={() => handleReminderClick(apt)}
-                              disabled={isMeetingEnded(apt) || apt.booking_status === 'cancelled'}
-                              className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 whitespace-nowrap ${
-                                isMeetingEnded(apt) || apt.booking_status === 'cancelled'
-                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
-                                  : 'border border-gray-400 text-gray-700 hover:bg-white'
-                              }`}
-                            >
-                              <Send size={13} />
-                              Send Reminder
-                            </button>
-                            <button
-                              onClick={() => handleSessionNotesReminder(apt)}
-                              disabled={!isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'}
-                              className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 whitespace-nowrap ${
-                                !isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'
-                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
-                                  : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-                              }`}
-                            >
-                              <FileText size={13} />
-                              Session Notes Reminder
-                            </button>
-                            {/* Reschedule — only for upcoming/scheduled bookings */}
-                            {getAppointmentStatus(apt) === 'scheduled' && apt.booking_status !== 'cancelled' && (
-                              <button
-                                onClick={() => openRescheduleModal(apt)}
-                                className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-teal-600 text-teal-700 bg-white hover:bg-teal-50 whitespace-nowrap"
-                              >
-                                <RefreshCw size={13} />
-                                Reschedule
-                              </button>
-                            )}
-                            {/* Cancel — only for upcoming/scheduled bookings */}
-                            {getAppointmentStatus(apt) === 'scheduled' && apt.booking_status !== 'cancelled' && (
-                              <button
-                                onClick={() => openCancelModal(apt)}
-                                className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-red-500 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap"
-                              >
-                                <X size={13} />
-                                Cancel Booking
-                              </button>
-                            )}
-                            {(activeTab === 'completed' || activeTab === 'pending_notes') && (
-                              <button
-                                onClick={() => setToast({ message: 'Give Feedback feature coming soon!', type: 'success' })}
-                                className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 bg-white text-teal-700 border border-teal-700 hover:bg-teal-50 whitespace-nowrap"
-                              >
-                                <MessageCircle size={13} />
-                                Give Feedback
-                              </button>
-                            )}
-                          </div>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="text-center text-gray-400 py-8">Loading...</td>
+                  </tr>
+                ) : filteredAppointments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center text-gray-400 py-8">No bookings found</td>
+                  </tr>
+                ) : (
+                  paginatedAppointments.map((apt, index) => (
+                    <React.Fragment key={index}>
+                      <tr
+                        className={`border-b cursor-pointer transition-colors ${selectedRowIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                          }`}
+                        onClick={() => setSelectedRowIndex(selectedRowIndex === index ? null : index)}
+                      >
+                        <td className="px-6 py-4 text-sm">{apt.booking_start_at}</td>
+                        <td className="px-6 py-4 text-sm">{apt.booking_resource_name}</td>
+                        <td className="px-6 py-4 text-sm whitespace-nowrap">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onClientClick) {
+                                onClientClick({
+                                  invitee_name: apt.invitee_name,
+                                  invitee_email: apt.invitee_email,
+                                  invitee_phone: apt.invitee_phone
+                                });
+                              }
+                            }}
+                            className="text-teal-700 hover:underline font-medium"
+                          >
+                            {apt.invitee_name}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <div>{apt.invitee_phone}</div>
+                          <div className="text-gray-500 text-xs">{apt.invitee_email}</div>
+                        </td>
+                        <td className="px-6 py-4 text-sm">{apt.booking_host_name}</td>
+                        <td className="px-6 py-4 text-sm">{formatMode(apt.booking_mode)}</td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getAppointmentStatus(apt) === 'completed' ? 'bg-green-100 text-green-700' :
+                              getAppointmentStatus(apt) === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                getAppointmentStatus(apt) === 'no_show' ? 'bg-orange-100 text-orange-700' :
+                                  getAppointmentStatus(apt) === 'pending_notes' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-blue-100 text-blue-700'
+                            }`}>
+                            {getAppointmentStatus(apt) === 'pending_notes' ? 'Pending Notes' :
+                              getAppointmentStatus(apt) === 'no_show' ? 'No Show' :
+                                getAppointmentStatus(apt).charAt(0).toUpperCase() + getAppointmentStatus(apt).slice(1)}
+                          </span>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-6 py-4 border-t flex justify-between items-center">
-          <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredAppointments.length)} of {filteredAppointments.length} booking{filteredAppointments.length !== 1 ? 's' : ''}</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              ←
-            </button>
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              →
-            </button>
+                      {selectedRowIndex === index && (
+                        <tr className="bg-gray-100">
+                          <td colSpan={7} className="px-6 py-4">
+                            <div className="flex gap-2 justify-center items-center">
+                              <button
+                                onClick={() => copyAppointmentDetails(apt)}
+                                className="px-3 py-1.5 border border-gray-400 rounded-lg text-xs text-gray-700 hover:bg-white flex items-center gap-1.5 whitespace-nowrap"
+                              >
+                                <Copy size={13} />
+                                Copy Details
+                              </button>
+                              <button
+                                onClick={() => handleReminderClick(apt)}
+                                disabled={isMeetingEnded(apt) || apt.booking_status === 'cancelled'}
+                                className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 whitespace-nowrap ${isMeetingEnded(apt) || apt.booking_status === 'cancelled'
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                    : 'border border-gray-400 text-gray-700 hover:bg-white'
+                                  }`}
+                              >
+                                <Send size={13} />
+                                Send Reminder
+                              </button>
+                              <button
+                                onClick={() => handleSessionNotesReminder(apt)}
+                                disabled={!isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'}
+                                className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 whitespace-nowrap ${!isMeetingEnded(apt) || apt.has_session_notes || apt.booking_status === 'cancelled'
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
+                                    : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                                  }`}
+                              >
+                                <FileText size={13} />
+                                Session Notes Reminder
+                              </button>
+                              {/* Reschedule — only for upcoming/scheduled bookings */}
+                              {getAppointmentStatus(apt) === 'scheduled' && apt.booking_status !== 'cancelled' && (
+                                <button
+                                  onClick={() => openRescheduleModal(apt)}
+                                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-teal-600 text-teal-700 bg-white hover:bg-teal-50 whitespace-nowrap"
+                                >
+                                  <RefreshCw size={13} />
+                                  Reschedule
+                                </button>
+                              )}
+                              {/* Cancel — only for upcoming/scheduled bookings */}
+                              {getAppointmentStatus(apt) === 'scheduled' && apt.booking_status !== 'cancelled' && (
+                                <button
+                                  onClick={() => openCancelModal(apt)}
+                                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-red-500 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap"
+                                >
+                                  <X size={13} />
+                                  Cancel Booking
+                                </button>
+                              )}
+                               {(activeTab === 'completed' || activeTab === 'pending_notes') && (
+                                <button
+                                  onClick={() => {
+                                    setFeedbackTarget(apt);
+                                    setShowFeedbackModal(true);
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 bg-white text-teal-700 border border-teal-700 hover:bg-teal-50 whitespace-nowrap"
+                                >
+                                  <MessageCircle size={13} />
+                                  Give Feedback
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-6 py-4 border-t flex justify-between items-center">
+            <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredAppointments.length)} of {filteredAppointments.length} booking{filteredAppointments.length !== 1 ? 's' : ''}</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ←
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                →
+              </button>
+            </div>
           </div>
         </div>
-      </div>
       )}
 
       <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+
+      {/* Give Feedback Confirmation Modal */}
+      {showFeedbackModal && feedbackTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-xl font-bold mb-4">Send Feedback Request</h3>
+            <p className="text-gray-600 mb-6 font-medium">
+              This will send a feedback to the client <span className="text-teal-700"> {feedbackTarget.invitee_name} </span>. 
+              Would you like to proceed?
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={async () => {
+                  setIsSendingFeedback(true);
+                  try {
+                    const webhookData = {
+                      bookingId: feedbackTarget.booking_id,
+                      clientName: feedbackTarget.invitee_name,
+                      clientEmail: feedbackTarget.invitee_email,
+                      clientPhone: feedbackTarget.invitee_phone,
+                      therapistName: feedbackTarget.booking_host_name,
+                      sessionName: feedbackTarget.booking_resource_name,
+                      sessionDate: feedbackTarget.booking_start_at
+                    };
+                    
+                    const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/6e110a22-ddc7-487b-8995-233b94ecb2c5', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(webhookData)
+                    });
+
+                    if (response.ok) {
+                      setToast({ message: `Feedback request sent to ${feedbackTarget.invitee_name} successfully!`, type: 'success' });
+                    } else {
+                      setToast({ message: 'Failed to send feedback request', type: 'error' });
+                    }
+                  } catch (err) {
+                    console.error('Error sending feedback:', err);
+                    setToast({ message: 'Failed to send feedback request', type: 'error' });
+                  } finally {
+                    setIsSendingFeedback(false);
+                    setShowFeedbackModal(false);
+                    setFeedbackTarget(null);
+                  }
+                }} 
+                disabled={isSendingFeedback}
+                className="flex-1 px-4 py-2.5 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-semibold disabled:opacity-50"
+              >
+                {isSendingFeedback ? 'Sending...' : 'Yes'}
+              </button>
+              <button 
+                onClick={() => { setShowFeedbackModal(false); setFeedbackTarget(null); }} 
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />

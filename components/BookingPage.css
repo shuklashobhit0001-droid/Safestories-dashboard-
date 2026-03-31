@@ -231,6 +231,50 @@
 .bp-dot.busy      { background: #fca5a5; }
 .bp-dot.available { background: #22c55e; }
 
+/* ─── Loading & Empty States ─── */
+.bp-loading-slots {
+  display: flex;
+  flex-direction: column;
+  align-items: center; 
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 0;
+  color: #64748b;
+  font-size: 14px;
+  text-align: center;
+}
+
+.bp-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2D7579;
+  border-radius: 50%;
+  animation: bp-spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+
+.bp-spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: bp-spin 0.8s linear infinite;
+}
+
+@keyframes bp-spin {
+  to { transform: rotate(360deg); }
+}
+
+.bp-no-slots {
+  padding: 40px 0;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 500;
+}
+
 /* ─── Registration View Layout ─── */
 .bp-container.registration {
   grid-template-columns: 350px 1fr;
@@ -557,10 +601,221 @@
 .bp-cancel-btn:hover { background: #f8fafc; color: #0f172a; }
 
 /* Responsive */
+/* ─── Confirmation & Cancellation States ─── */
+.bp-conf-content {
+  text-align: center;
+  max-width: 500px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.bp-conf-icon-wrapper {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.bp-conf-icon-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bp-conf-icon-circle.success {
+  background-color: #ecfdf5;
+  color: #10b981;
+}
+
+.bp-conf-icon-circle.error {
+  background-color: #fef2f2;
+  color: #ef4444;
+}
+
+.bp-conf-status-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+
+.bp-conf-status-subtitle {
+  font-size: 15px;
+  color: #64748b;
+  line-height: 1.6;
+  margin-bottom: 32px;
+}
+
+.bp-conf-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: left;
+  margin-bottom: 32px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.bp-conf-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.bp-conf-item:last-child {
+  margin-bottom: 0;
+}
+
+.bp-conf-item-icon {
+  color: #94a3b8;
+  padding-top: 2px;
+}
+
+.bp-conf-item-text {
+  flex: 1;
+  font-size: 15px;
+  color: #1e293b;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bp-conf-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: capitalize;
+}
+
+.bp-conf-badge.confirmed {
+  background-color: #ecfdf5;
+  color: #059669;
+}
+
+.bp-conf-badge.cancelled {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.bp-conf-meet-link {
+  color: #2563eb;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.bp-conf-calendar-btn {
+  width: 100%;
+  background: #1a1a1a;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 40px;
+  transition: background 0.2s;
+}
+
+.bp-conf-calendar-btn:hover {
+  background: #000;
+}
+
+.bp-conf-cancel-trigger {
+  background: none;
+  border: 1px solid #e2e8f0;
+  color: #dc2626;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 auto;
+  transition: all 0.2s;
+}
+
+.bp-conf-cancel-trigger:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.bp-conf-cancel-form {
+  text-align: left;
+  margin-top: 24px;
+}
+
+.bp-conf-cancel-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 10px;
+}
+
+.bp-conf-cancel-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 15px;
+  color: #0f172a;
+  min-height: 100px;
+  margin-bottom: 24px;
+  transition: border-color 0.2s;
+}
+
+.bp-conf-cancel-input:focus {
+  outline: none;
+  border-color: #ef4444;
+}
+
+.bp-conf-cancel-submit {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.bp-conf-cancel-submit:hover {
+  background: #dc2626;
+}
+
+.bp-conf-cancel-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bp-conf-reason-text {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+/* Responsive */
 @media (max-width: 1024px) {
-  .bp-container { grid-template-columns: 1fr; max-width: 560px; }
+  .bp-container { grid-template-columns: 1fr; max-width: 560px; height: auto; min-height: auto; }
   .bp-container.registration { grid-template-columns: 1fr; }
   .bp-calendar  { border-left: none; border-right: none; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; }
   .bp-registration { border-left: none; border-top: 1px solid #f1f5f9; }
   .bp-option-grid { grid-template-columns: 1fr; }
+  .bp-pane { padding: 30px 20px; }
+  .bp-summary { border-bottom: 1px solid #f1f5f9; }
 }

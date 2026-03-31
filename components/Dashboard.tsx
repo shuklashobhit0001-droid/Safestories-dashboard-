@@ -29,7 +29,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const [activeView, setActiveView] = useUrlState<string>('view', 'dashboard', 'adminActiveView');
   const [appointmentTab, setAppointmentTab] = useUrlState<string>('tab', 'scheduled', undefined);
   const [refundTab, setRefundTab] = useUrlState<string>('refundTab', 'all_payments', undefined);
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedClientForView, setSelectedClientForView] = useState<any>(() => {
     const saved = localStorage.getItem('selectedClientForView');
@@ -79,14 +79,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     const startDate = new Date(2025, 9, 1); // Oct 2025
     const currentDate = new Date();
     const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1); // +1 month ahead
-    
+
     for (let d = new Date(endDate); d >= startDate; d.setMonth(d.getMonth() - 1)) {
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       months.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
     }
     return months;
   };
-  
+
   const monthOptions = generateMonthOptions();
 
   const [stats, setStats] = useState([
@@ -217,7 +217,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     setSelectedMonth(month);
     setIsDateDropdownOpen(false);
     setShowCustomCalendar(false);
-    
+
     const [monthName, year] = month.split(' ');
     const monthMap: { [key: string]: number } = {
       'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
@@ -227,7 +227,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
     const start = `${year}-${String(monthNum + 1).padStart(2, '0')}-01`;
     const lastDay = new Date(parseInt(year), monthNum + 1, 0).getDate();
     const end = `${year}-${String(monthNum + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    
+
     setDateRange({ start, end });
   };
 
@@ -285,7 +285,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch admin profile picture
       try {
         const profileRes = await fetch(`/api/admin-profile?user_id=${user.id}`);
@@ -301,14 +301,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       } catch (error) {
         console.error('Error fetching profile picture:', error);
       }
-      
-      const statsUrl = dateRange.start && dateRange.end 
+
+      const statsUrl = dateRange.start && dateRange.end
         ? `/api/dashboard/stats?start=${dateRange.start}&end=${dateRange.end}`
         : '/api/dashboard/stats';
       const statsRes = await fetch(statsUrl);
       if (!statsRes.ok) throw new Error('Failed to fetch stats');
       const statsData = await statsRes.json();
-      
+
       setStats([
         { title: 'Revenue', value: `₹${Number(statsData.revenue || 0).toLocaleString('en-IN')}`, lastMonth: '₹0', clickable: false },
         { title: 'Refunded', value: `₹${Number(statsData.refundedAmount || 0).toLocaleString('en-IN')}`, lastMonth: '₹0', clickable: false },
@@ -326,7 +326,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
       const bookingsData = await bookingsRes.json();
       setAllBookings(bookingsData);
       setTotalBookings(bookingsData.length);
-      
+
       // Set initial page bookings
       setCurrentPage(1);
       setBookings(bookingsData.slice(0, bookingsPerPage));
@@ -352,8 +352,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         </div>
 
         <nav className="flex-1 px-4">
-          <div 
-            className="rounded-xl px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:opacity-90" 
+          <div
+            className="rounded-xl px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:opacity-90"
             style={{ backgroundColor: '#21615D' }}
             onClick={() => {
               resetAllStates();
@@ -363,8 +363,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <Plus size={20} className="text-white" />
             <span className="text-white">Create</span>
           </div>
-          <div 
-            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer" 
+          <div
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer"
             style={{ backgroundColor: activeView === 'dashboard' ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
@@ -374,8 +374,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <LayoutDashboard size={20} className={activeView === 'dashboard' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'dashboard' ? 'text-teal-700' : 'text-gray-700'}>Dashboard</span>
           </div>
-          <div 
-            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+          <div
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
             style={{ backgroundColor: (activeView === 'clients' || (activeView === 'therapists' && clientViewSource === 'clients')) ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
@@ -385,8 +385,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <Users size={20} className={(activeView === 'clients' || (activeView === 'therapists' && clientViewSource === 'clients')) ? 'text-teal-700' : 'text-gray-700'} />
             <span className={(activeView === 'clients' || (activeView === 'therapists' && clientViewSource === 'clients')) ? 'text-teal-700' : 'text-gray-700'}>All Clients</span>
           </div>
-          <div 
-            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+          <div
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
             style={{ backgroundColor: (activeView === 'therapists' && (!selectedClientForView || clientViewSource === 'therapists')) ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
@@ -396,8 +396,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <UserCog size={20} className={(activeView === 'therapists' && (!selectedClientForView || clientViewSource === 'therapists')) ? 'text-teal-700' : 'text-gray-700'} />
             <span className={(activeView === 'therapists' && (!selectedClientForView || clientViewSource === 'therapists')) ? 'text-teal-700' : 'text-gray-700'}>All Therapists</span>
           </div>
-          <div 
-            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+          <div
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
             style={{ backgroundColor: (activeView === 'appointments' || (activeView === 'therapists' && clientViewSource === 'appointments')) ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
@@ -407,8 +407,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <Calendar size={20} className={(activeView === 'appointments' || (activeView === 'therapists' && clientViewSource === 'appointments')) ? 'text-teal-700' : 'text-gray-700'} />
             <span className={(activeView === 'appointments' || (activeView === 'therapists' && clientViewSource === 'appointments')) ? 'text-teal-700' : 'text-gray-700'}>Bookings</span>
           </div>
-          <div 
-            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+          <div
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
             style={{ backgroundColor: activeView === 'refunds' ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
@@ -418,8 +418,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <CreditCard size={20} className={activeView === 'refunds' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'refunds' ? 'text-teal-700' : 'text-gray-700'}>Payments</span>
           </div>
-          <div 
-            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+          <div
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
             style={{ backgroundColor: activeView === 'notifications' ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
@@ -444,8 +444,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         </nav>
 
         <div className="px-4 mb-4 pt-4 border-t">
-          <div 
-            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+          <div
+            className="rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
             style={{ backgroundColor: activeView === 'reportIssue' ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
@@ -455,9 +455,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             <AlertCircle size={20} className={activeView === 'reportIssue' ? 'text-teal-700' : 'text-gray-700'} />
             <span className={activeView === 'reportIssue' ? 'text-teal-700' : 'text-gray-700'}>Report an Issue</span>
           </div>
-          
-          <div 
-            className="rounded-lg px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-gray-100" 
+
+          <div
+            className="rounded-lg px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
             style={{ backgroundColor: activeView === 'audit' ? '#2D75795C' : 'transparent' }}
             onClick={() => {
               resetAllStates();
@@ -495,17 +495,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
               </button>
             </div>
           )}
-          
+
           {/* Profile Box */}
-          <div 
-            className="flex items-center gap-3 rounded-lg p-3 cursor-pointer hover:bg-gray-100" 
+          <div
+            className="flex items-center gap-3 rounded-lg p-3 cursor-pointer hover:bg-gray-100"
             style={{ backgroundColor: '#2D757930' }}
             onClick={() => setShowProfileMenu(!showProfileMenu)}
           >
             {profilePictureUrl ? (
-              <img 
-                src={profilePictureUrl} 
-                alt="Profile" 
+              <img
+                src={profilePictureUrl}
+                alt="Profile"
                 className="w-10 h-10 rounded-lg object-cover"
               />
             ) : (
@@ -532,16 +532,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         ) : activeView === 'changePassword' ? (
           <ChangePassword user={user} onBack={() => setActiveView('dashboard')} />
         ) : activeView === 'reportIssue' ? (
-          <ReportIssuePage 
-            onBack={() => setActiveView('dashboard')} 
+          <ReportIssuePage
+            onBack={() => setActiveView('dashboard')}
             userInfo={{
               username: user?.full_name || user?.username || 'Admin',
               role: 'Admin'
             }}
           />
         ) : activeView === 'create' ? (
-          <CreatePage 
-            onCreateBooking={() => setActiveView('createBooking')} 
+          <CreatePage
+            onCreateBooking={() => setActiveView('createBooking')}
             onCreateDirectBooking={() => setActiveView('createBookingDirect')}
             onSendBookingLink={() => setIsModalOpen(true)}
             onAddNewTherapist={() => setActiveView('newTherapist')}
@@ -559,8 +559,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             setActiveView('therapists');
           }} onCreateBooking={() => setActiveView('createBooking')} />
         ) : activeView === 'therapists' ? (
-          <AllTherapists 
-            selectedClientProp={selectedClientForView} 
+          <AllTherapists
+            selectedClientProp={selectedClientForView}
             onBack={() => {
               const sourceView = clientViewSource || 'therapists';
               setSelectedClientForView(null);
@@ -571,14 +571,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
             }}
           />
         ) : activeView === 'appointments' ? (
-          <Appointments 
+          <Appointments
             initialTab={appointmentTab}
             onClientClick={(client) => {
               setSelectedClientForView(client);
               setClientViewSource('appointments');
               setActiveView('therapists');
-            }} 
-            onCreateBooking={() => setActiveView('createBooking')} 
+            }}
+            onCreateBooking={() => setActiveView('createBooking')}
           />
         ) : activeView === 'refunds' ? (
           <RefundsCancellations initialTab={refundTab} />
@@ -589,331 +589,329 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
         ) : loading ? (
           <Loader />
         ) : (
-        <div className="p-8">
-          {/* Header */}
-          <div className="flex justify-between items-start mb-8">
-            <div>
-              <h1 className="text-3xl font-bold mb-1">Dashboard</h1>
-              <p className="text-gray-600">Welcome Back, {user?.full_name || user?.username}!</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <button className="flex items-center gap-2 border rounded-lg px-4 py-2 bg-white hover:bg-gray-50">
-                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                <span className="text-sm font-medium">Live Sessions: {liveSessionsCount}</span>
-              </button>
-              <div className="relative" ref={dropdownRef}>
-                <button 
-                  onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
-                  className="flex items-center gap-2 border rounded-lg px-4 py-2"
-                  style={{ backgroundColor: '#2D757938' }}
-                >
-                  <PieChart size={18} className="text-gray-600" />
-                  <span className="text-sm text-teal-700">{selectedMonth}</span>
-                  {isDateDropdownOpen ? (
-                    <ChevronUp size={16} className="text-teal-700" />
-                  ) : (
-                    <ChevronDown size={16} className="text-teal-700" />
-                  )}
+          <div className="p-8">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <h1 className="text-3xl font-bold mb-1">Dashboard</h1>
+                <p className="text-gray-600">Welcome Back, {user?.full_name || user?.username}!</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <button className="flex items-center gap-2 border rounded-lg px-4 py-2 bg-white hover:bg-gray-50">
+                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                  <span className="text-sm font-medium">Live Sessions: {liveSessionsCount}</span>
                 </button>
-                {isDateDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
-                    {!showCustomCalendar ? (
-                      <>
-                        <button
-                          onClick={() => {
-                            setSelectedMonth('All Time');
-                            setDateRange({ start: '', end: '' });
-                            setIsDateDropdownOpen(false);
-                          }}
-                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
-                        >
-                          All Time
-                        </button>
-                        <button
-                          onClick={() => setShowCustomCalendar(true)}
-                          className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
-                        >
-                          Custom Dates
-                        </button>
-                        <div className="max-h-60 overflow-y-auto">
-                          {monthOptions.map((month) => (
-                            <button
-                              key={month}
-                              onClick={() => handleMonthSelect(month)}
-                              className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
-                            >
-                              {month}
-                            </button>
-                          ))}
-                        </div>
-                      </>
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+                    className="flex items-center gap-2 border rounded-lg px-4 py-2"
+                    style={{ backgroundColor: '#2D757938' }}
+                  >
+                    <PieChart size={18} className="text-gray-600" />
+                    <span className="text-sm text-teal-700">{selectedMonth}</span>
+                    {isDateDropdownOpen ? (
+                      <ChevronUp size={16} className="text-teal-700" />
                     ) : (
-                      <div className="p-4">
-                        <div className="mb-3">
-                          <label className="block text-xs text-gray-600 mb-1">Start Date</label>
-                          <input
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="w-full px-3 py-2 border rounded text-sm"
-                          />
-                        </div>
-                        <div className="mb-3">
-                          <label className="block text-xs text-gray-600 mb-1">End Date</label>
-                          <input
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="w-full px-3 py-2 border rounded text-sm"
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setShowCustomCalendar(false)}
-                            className="flex-1 px-3 py-2 border rounded text-sm hover:bg-gray-100"
-                          >
-                            Back
-                          </button>
-                          <button
-                            onClick={handleCustomDateApply}
-                            className="flex-1 px-3 py-2 bg-teal-700 text-white rounded text-sm hover:bg-teal-800"
-                          >
-                            Apply
-                          </button>
-                        </div>
-                      </div>
+                      <ChevronDown size={16} className="text-teal-700" />
                     )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-4 gap-4 mb-8">
-            {stats.map((stat, index) => (
-              <div 
-                key={index} 
-                className={`bg-white rounded-lg p-6 border ${
-                  stat.clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
-                }`}
-                onClick={() => {
-                  if (stat.clickable) {
-                    resetAllStates();
-                    setActiveView(stat.targetView);
-                    if (stat.targetView === 'appointments' && stat.targetTab) {
-                      setAppointmentTab(stat.targetTab);
-                    } else if (stat.targetView === 'refunds' && stat.targetTab) {
-                      setRefundTab(stat.targetTab);
-                    }
-                  }
-                }}
-              >
-                <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
-                <CountUpNumber 
-                  value={stat.value} 
-                  prefix={(stat.title.includes('Revenue') || stat.title.includes('Refunded')) ? '₹' : ''} 
-                  className="text-3xl font-bold"
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* Upcoming Sessions */}
-          <div className="bg-white rounded-lg border">
-            <div className="p-6 border-b">
-              <h2 className="text-xl font-bold">Upcoming Sessions</h2>
-            </div>
-            <div className="overflow-x-auto max-h-80 overflow-y-auto">
-              <table className="w-full" ref={bookingActionsRef}>
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapy Type</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bookings.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-20 text-center text-gray-400">
-                        No upcoming sessions
-                      </td>
-                    </tr>
-                  ) : (
-                    bookings.map((booking, index) => (
-                      <React.Fragment key={index}>
-                        <tr 
-                          className={`border-b cursor-pointer transition-colors ${
-                            selectedBookingIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
-                          }`}
-                          onClick={() => setSelectedBookingIndex(selectedBookingIndex === index ? null : index)}
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
+                  </button>
+                  {isDateDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-10">
+                      {!showCustomCalendar ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedMonth('All Time');
+                              setDateRange({ start: '', end: '' });
+                              setIsDateDropdownOpen(false);
+                            }}
+                            className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                          >
+                            All Time
+                          </button>
+                          <button
+                            onClick={() => setShowCustomCalendar(true)}
+                            className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100 border-b"
+                          >
+                            Custom Dates
+                          </button>
+                          <div className="max-h-60 overflow-y-auto">
+                            {monthOptions.map((month) => (
+                              <button
+                                key={month}
+                                onClick={() => handleMonthSelect(month)}
+                                className="w-full px-4 py-2 text-center text-sm hover:bg-gray-100"
+                              >
+                                {month}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="p-4">
+                          <div className="mb-3">
+                            <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                            <input
+                              type="date"
+                              value={startDate}
+                              onChange={(e) => setStartDate(e.target.value)}
+                              className="w-full px-3 py-2 border rounded text-sm"
+                            />
+                          </div>
+                          <div className="mb-3">
+                            <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                            <input
+                              type="date"
+                              value={endDate}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              className="w-full px-3 py-2 border rounded text-sm"
+                            />
+                          </div>
+                          <div className="flex gap-2">
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedClientForView({
-                                  invitee_name: booking.client_name,
-                                  invitee_email: booking.client_email,
-                                  invitee_phone: booking.client_phone
-                                });
-                                setClientViewSource('dashboard');
-                                setActiveView('therapists');
-                              }}
-                              className="text-teal-700 hover:underline font-medium"
+                              onClick={() => setShowCustomCalendar(false)}
+                              className="flex-1 px-3 py-2 border rounded text-sm hover:bg-gray-100"
                             >
-                              {formatClientName(booking.client_name)}
+                              Back
                             </button>
-                          </td>
-                          <td className="px-6 py-4">{booking.therapy_type}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <span>{booking.mode}</span>
-                              {booking.mode === 'Online' && booking.booking_joining_link && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.open(booking.booking_joining_link, '_blank');
-                                  }}
-                                  className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium flex items-center gap-1"
-                                  title="Open Google Meet Link"
-                                >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                                  Join Now
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">{booking.therapist_name}</td>
-                          <td className="px-6 py-4">{booking.booking_start_at}</td>
-                        </tr>
-                        {selectedBookingIndex === index && (
-                          <tr className="bg-gray-100">
-                            <td colSpan={5} className="px-6 py-4">
-                              <div className="flex gap-2 justify-center items-center">
-                                <button
-                                  onClick={() => copyBookingDetails(booking)}
-                                  className="px-3 py-1.5 border border-gray-400 rounded-lg text-xs text-gray-700 hover:bg-white flex items-center gap-1.5 whitespace-nowrap"
-                                >
-                                  <Copy size={13} />
-                                  Copy Details
-                                </button>
-                                <button
-                                  onClick={() => handleReminderClick(booking)}
-                                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-gray-400 text-gray-700 hover:bg-white whitespace-nowrap"
-                                >
-                                  <Send size={13} />
-                                  Send Reminder
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setRescheduleTarget(booking);
-                                    setRescheduleDateTime('');
-                                    setRescheduleDuration(booking.duration || 50);
-                                    setRescheduleReason('');
-                                    setRescheduleNotify(true);
-                                    setShowRescheduleModal(true);
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-teal-600 text-teal-700 bg-white hover:bg-teal-50 whitespace-nowrap"
-                                >
-                                  <RefreshCw size={13} />
-                                  Reschedule
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setCancelTarget(booking);
-                                    setCancelReason('');
-                                    setCancelNotify(true);
-                                    setShowCancelModal(true);
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-red-500 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap"
-                                >
-                                  <X size={13} />
-                                  Cancel Booking
-                                </button>
+                            <button
+                              onClick={handleCustomDateApply}
+                              className="flex-1 px-3 py-2 bg-teal-700 text-white rounded text-sm hover:bg-teal-800"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-4 gap-4 mb-8">
+              {stats.map((stat, index) => (
+                <div
+                  key={index}
+                  className={`bg-white rounded-lg p-6 border ${stat.clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+                    }`}
+                  onClick={() => {
+                    if (stat.clickable) {
+                      resetAllStates();
+                      setActiveView(stat.targetView);
+                      if (stat.targetView === 'appointments' && stat.targetTab) {
+                        setAppointmentTab(stat.targetTab);
+                      } else if (stat.targetView === 'refunds' && stat.targetTab) {
+                        setRefundTab(stat.targetTab);
+                      }
+                    }
+                  }}
+                >
+                  <div className="text-sm text-gray-600 mb-2">{stat.title}</div>
+                  <CountUpNumber
+                    value={stat.value}
+                    prefix={(stat.title.includes('Revenue') || stat.title.includes('Refunded')) ? '₹' : ''}
+                    className="text-3xl font-bold"
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Upcoming Sessions */}
+            <div className="bg-white rounded-lg border">
+              <div className="p-6 border-b">
+                <h2 className="text-xl font-bold">Upcoming Sessions</h2>
+              </div>
+              <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                <table className="w-full" ref={bookingActionsRef}>
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapy Type</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Assigned Therapist</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bookings.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-20 text-center text-gray-400">
+                          No upcoming sessions
+                        </td>
+                      </tr>
+                    ) : (
+                      bookings.map((booking, index) => (
+                        <React.Fragment key={index}>
+                          <tr
+                            className={`border-b cursor-pointer transition-colors ${selectedBookingIndex === index ? 'bg-gray-100' : 'hover:bg-gray-50'
+                              }`}
+                            onClick={() => setSelectedBookingIndex(selectedBookingIndex === index ? null : index)}
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedClientForView({
+                                    invitee_name: booking.client_name,
+                                    invitee_email: booking.client_email,
+                                    invitee_phone: booking.client_phone
+                                  });
+                                  setClientViewSource('dashboard');
+                                  setActiveView('therapists');
+                                }}
+                                className="text-teal-700 hover:underline font-medium"
+                              >
+                                {formatClientName(booking.client_name)}
+                              </button>
+                            </td>
+                            <td className="px-6 py-4">{booking.therapy_type}</td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span>{booking.mode}</span>
+                                {booking.mode === 'Online' && booking.booking_joining_link && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(booking.booking_joining_link, '_blank');
+                                    }}
+                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium flex items-center gap-1"
+                                    title="Open Google Meet Link"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    Join Now
+                                  </button>
+                                )}
                               </div>
                             </td>
+                            <td className="px-6 py-4">{booking.therapist_name}</td>
+                            <td className="px-6 py-4">{booking.booking_start_at}</td>
                           </tr>
-                        )}
-                      </React.Fragment>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                          {selectedBookingIndex === index && (
+                            <tr className="bg-gray-100">
+                              <td colSpan={5} className="px-6 py-4">
+                                <div className="flex gap-2 justify-center items-center">
+                                  <button
+                                    onClick={() => copyBookingDetails(booking)}
+                                    className="px-3 py-1.5 border border-gray-400 rounded-lg text-xs text-gray-700 hover:bg-white flex items-center gap-1.5 whitespace-nowrap"
+                                  >
+                                    <Copy size={13} />
+                                    Copy Details
+                                  </button>
+                                  <button
+                                    onClick={() => handleReminderClick(booking)}
+                                    className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-gray-400 text-gray-700 hover:bg-white whitespace-nowrap"
+                                  >
+                                    <Send size={13} />
+                                    Send Reminder
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setRescheduleTarget(booking);
+                                      setRescheduleDateTime('');
+                                      setRescheduleDuration(booking.duration || 50);
+                                      setRescheduleReason('');
+                                      setRescheduleNotify(true);
+                                      setShowRescheduleModal(true);
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-teal-600 text-teal-700 bg-white hover:bg-teal-50 whitespace-nowrap"
+                                  >
+                                    <RefreshCw size={13} />
+                                    Reschedule
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setCancelTarget(booking);
+                                      setCancelReason('');
+                                      setCancelNotify(true);
+                                      setShowCancelModal(true);
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-red-500 text-red-600 bg-white hover:bg-red-50 whitespace-nowrap"
+                                  >
+                                    <X size={13} />
+                                    Cancel Booking
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-6 py-4 border-t flex justify-between items-center">
+                <span className="text-sm text-gray-600">
+                  Showing {((currentPage - 1) * bookingsPerPage) + 1}-{Math.min(currentPage * bookingsPerPage, totalBookings)} of {totalBookings} result{totalBookings !== 1 ? 's' : ''}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handlePrevPage}
+                    disabled={currentPage === 1}
+                    className={`p-2 border rounded ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                  >
+                    ←
+                  </button>
+                  <button
+                    onClick={handleNextPage}
+                    disabled={currentPage >= Math.ceil(totalBookings / bookingsPerPage)}
+                    className={`p-2 border rounded ${currentPage >= Math.ceil(totalBookings / bookingsPerPage) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="px-6 py-4 border-t flex justify-between items-center">
-              <span className="text-sm text-gray-600">
-                Showing {((currentPage - 1) * bookingsPerPage) + 1}-{Math.min(currentPage * bookingsPerPage, totalBookings)} of {totalBookings} result{totalBookings !== 1 ? 's' : ''}
-              </span>
-              <div className="flex gap-2">
-                <button 
-                  onClick={handlePrevPage}
-                  disabled={currentPage === 1}
-                  className={`p-2 border rounded ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+
+            {/* Latest Notifications */}
+            <div className="bg-white rounded-lg border mt-8">
+              <div className="p-6 border-b">
+                <h2 className="text-xl font-bold">Latest Notifications</h2>
+              </div>
+              <div className="divide-y">
+                {notifications.length === 0 ? (
+                  <div className="px-6 py-20 text-center text-gray-400">
+                    No notifications
+                  </div>
+                ) : (
+                  notifications.map((notification, index) => (
+                    <div
+                      key={index}
+                      onClick={() => setActiveView('notifications')}
+                      className="px-6 py-4 hover:bg-gray-50 cursor-pointer flex items-start gap-4"
+                    >
+                      <div className="flex-shrink-0 mt-1">
+                        <Bell size={20} className={notification.is_read ? 'text-gray-400' : 'text-teal-700'} />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <h3 className={`font-semibold ${notification.is_read ? 'text-gray-700' : 'text-gray-900'}`}>
+                            {notification.title}
+                          </h3>
+                          <span className="text-xs text-gray-500">
+                            {new Date(notification.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="px-6 py-4 border-t">
+                <button
+                  onClick={() => setActiveView('notifications')}
+                  className="text-sm text-teal-700 hover:text-teal-800 font-medium"
                 >
-                  ←
-                </button>
-                <button 
-                  onClick={handleNextPage}
-                  disabled={currentPage >= Math.ceil(totalBookings / bookingsPerPage)}
-                  className={`p-2 border rounded ${currentPage >= Math.ceil(totalBookings / bookingsPerPage) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
-                >
-                  →
+                  View All Notifications →
                 </button>
               </div>
             </div>
           </div>
-
-          {/* Latest Notifications */}
-          <div className="bg-white rounded-lg border mt-8">
-            <div className="p-6 border-b">
-              <h2 className="text-xl font-bold">Latest Notifications</h2>
-            </div>
-            <div className="divide-y">
-              {notifications.length === 0 ? (
-                <div className="px-6 py-20 text-center text-gray-400">
-                  No notifications
-                </div>
-              ) : (
-                notifications.map((notification, index) => (
-                  <div
-                    key={index}
-                    onClick={() => setActiveView('notifications')}
-                    className="px-6 py-4 hover:bg-gray-50 cursor-pointer flex items-start gap-4"
-                  >
-                    <div className="flex-shrink-0 mt-1">
-                      <Bell size={20} className={notification.is_read ? 'text-gray-400' : 'text-teal-700'} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
-                        <h3 className={`font-semibold ${notification.is_read ? 'text-gray-700' : 'text-gray-900'}`}>
-                          {notification.title}
-                        </h3>
-                        <span className="text-xs text-gray-500">
-                          {new Date(notification.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="px-6 py-4 border-t">
-              <button
-                onClick={() => setActiveView('notifications')}
-                className="text-sm text-teal-700 hover:text-teal-800 font-medium"
-              >
-                View All Notifications →
-              </button>
-            </div>
-          </div>
-        </div>
         )}
       </div>
       {isModalOpen && <SendBookingModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />}

@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Lottie from 'lottie-react';
+import sessionBookedAnimation from '../session-booked.json';
 import { 
   ChevronLeft, ChevronRight, Globe, Clock, Check, 
   CalendarCheck, User, Mail, MessageSquare, Video, MapPin, CreditCard,
@@ -15,6 +17,7 @@ interface BookingPageProps {
     charges: string;
     owner: string;
     slug: string;
+    label?: string;
   };
   onBack?: () => void;
   isPublic?: boolean;
@@ -48,16 +51,137 @@ export const BookingPage: React.FC<BookingPageProps> = ({ session, onBack, isPub
     agreedTerms: false
   });
 
-  const slots = [
-    { time: '16:00', status: 'busy' },
-    { time: '16:30', status: 'busy' },
-    { time: '17:00', status: 'available' },
-    { time: '17:30', status: 'busy' },
-    { time: '18:00', status: 'available' },
-  ];
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [sessionCharges, setSessionCharges] = useState(session.charges);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [bookedDetails, setBookedDetails] = useState<any>(null);
 
   const formatTime = (timeStr: string) => {
     return moment(timeStr, 'HH:mm').format(timeFormat === '12h' ? 'h:mm A' : 'HH:mm');
+  };
+
+  const fetchSlots = async (date: moment.Moment) => {
+    setIsLoadingSlots(true);
+    setAvailableSlots([]);
+    setSelectedSlot(null);
+
+    const getSimplifiedTherapyName = () => {
+      const isFree = session.charges === '₹0' || session.charges === '0' || session.charges.toLowerCase().includes('free');
+      if (isFree) return 'Free Consultation';
+      
+      if (!session.label) return session.title;
+      const category = session.label.split('/')[0].toLowerCase();
+      if (category === 'individual') return 'Individual Therapy';
+      if (category === 'couple') return 'Couples Therapy';
+      if (category === 'adolescent') return 'Adolescent Therapy';
+      return session.title;
+    };
+
+    const payload = {
+      selectedTherapy: getSimplifiedTherapyName(),
+      selectedTherapist: session.owner === 'SafeStories' ? 'SafeStories' : session.owner,
+      selectedDate: date.format('YYYY-MM-DD'),
+      isFreeConsultation: session.charges === '₹0' || session.charges === '0' || session.charges.toLowerCase().includes('free'),
+      timezone: 'Asia/Kolkata',
+      isDirectBooking: false
+    };
+
+    try {
+      const response = await fetch('/api/fetch-slots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.length > 0 && data[0]['Available Slots']) {
+          const rawSlots = data[0]['Available Slots'];
+          const charges = data[0]['session charges'];
+          if (charges) setSessionCharges(`₹${charges}`);
+
+          if (rawSlots.length > 0) {
+            const formattedSlots = rawSlots.map((slot: string) => {
+              const d = new Date(slot);
+              return moment(d).format('HH:mm');
+            });
+            setAvailableSlots(formattedSlots);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching slots:', error);
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSlots(selectedDate);
+  }, [selectedDate, session.owner, session.title]);
+
+  const handleBookingSubmit = async () => {
+    if (!formData.agreedTerms) {
+      alert('Please agree to the Terms & Conditions');
+      return;
+    }
+
+    const getSimplifiedTherapyName = () => {
+      const isFree = session.charges === '₹0' || session.charges === '0' || session.charges.toLowerCase().includes('free');
+      if (isFree) return 'Free Consultation';
+      
+      if (!session.label) return session.title;
+      const category = session.label.split('/')[0].toLowerCase();
+      if (category === 'individual') return 'Individual Therapy';
+      if (category === 'couple') return 'Couples Therapy';
+      if (category === 'adolescent') return 'Adolescent Therapy';
+      return session.title;
+    };
+
+    setIsSubmitting(true);
+    const payload = {
+      therapyName: getSimplifiedTherapyName(),
+      therapistName: session.owner,
+      isFreeConsultation: session.charges === '₹0' || session.charges === '0' || session.charges.toLowerCase().includes('free'),
+      date: selectedDate.format('YYYY-MM-DD'),
+      slot: selectedSlot,
+      clientName: formData.name,
+      clientEmail: formData.email,
+      clientWhatsApp: `${formData.whatsappCountryCode}${formData.whatsapp}`,
+      partnerName: isCoupleSession ? formData.name2 : undefined,
+      partnerEmail: isCoupleSession ? formData.email2 : undefined,
+      partnerWhatsApp: isCoupleSession ? `${formData.whatsapp2CountryCode}${formData.whatsapp2}` : undefined,
+      emergencyContactName: formData.emergencyName,
+      emergencyContactRelation: formData.emergencyRelation,
+      emergencyContactNumber: `${formData.emergencyCountryCode}${formData.emergencyNumber}`,
+      sessionMode: formData.location === 'google_meet' ? 'online' : 'in-person',
+      timezone: 'Asia/Kolkata',
+      notes: formData.notes,
+      amount: parseFloat(sessionCharges.replace('₹', '').replace(',', '')) || 0
+    };
+
+    try {
+      const response = await fetch('/api/create-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        setBookedDetails(payload);
+        setShowSuccessModal(true);
+      } else {
+        const errorData = await response.json();
+        alert(`Booking failed: ${errorData.details || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error creating booking:', error);
+      alert('Error creating booking. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const generateCalendarDays = () => {
@@ -197,21 +321,30 @@ export const BookingPage: React.FC<BookingPageProps> = ({ session, onBack, isPub
                 </div>
               </div>
               <div className="bp-slots-list">
-                {slots.map((s, i) => (
-                  <div 
-                    key={i} 
-                    className={`bp-slot ${s.status}${selectedSlot === s.time ? ' selected' : ''}`}
-                    onClick={() => {
-                      if (s.status === 'available') {
-                        setSelectedSlot(s.time);
-                        setView('registration');
-                      }
-                    }}
-                  >
-                    <span className={`bp-dot ${s.status}`} />
-                    {formatTime(s.time)}
+                {isLoadingSlots ? (
+                  <div className="bp-loading-slots">
+                    <div className="bp-spinner" />
+                    <p>Loading slots...</p>
                   </div>
-                ))}
+                ) : availableSlots.length > 0 ? (
+                  availableSlots.map((s, i) => (
+                    <div 
+                      key={i} 
+                      className={`bp-slot available${selectedSlot === s ? ' selected' : ''}`}
+                      onClick={() => {
+                        setSelectedSlot(s);
+                        setView('registration');
+                      }}
+                    >
+                      <span className="bp-dot available" />
+                      {formatTime(s)}
+                    </div>
+                  ))
+                ) : (
+                  <div className="bp-no-slots">
+                    <p>No slots available for this date.</p>
+                  </div>
+                )}
               </div>
             </div>
           </>
@@ -416,13 +549,68 @@ export const BookingPage: React.FC<BookingPageProps> = ({ session, onBack, isPub
               )}
 
               <div className="bp-reg-actions">
-                <button className="bp-pay-btn" onClick={() => alert('Payment Gateaway Initialized...')}>
-                  <CalendarCheck size={18} /> Pay and Confirm
+                <button 
+                  className="bp-pay-btn" 
+                  disabled={isSubmitting || !formData.agreedTerms || !formData.name || !formData.email || !formData.whatsapp}
+                  onClick={handleBookingSubmit}
+                >
+                  {isSubmitting ? (
+                    <><div className="bp-spinner-small" /> Processing...</>
+                  ) : (
+                    <><CalendarCheck size={18} /> Pay and Confirm</>
+                  )}
                 </button>
                 <button className="bp-cancel-btn" onClick={() => setView('selection')}>
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl text-center transform animate-in zoom-in duration-300">
+              <div className="flex justify-center mb-6">
+                <div className="w-24 h-24 bg-teal-50 rounded-full flex items-center justify-center">
+                  <Lottie 
+                    animationData={sessionBookedAnimation}
+                    loop={false}
+                    style={{ width: 120, height: 120 }}
+                  />
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Booking Confirmed!</h2>
+              <p className="text-gray-600 mb-6 font-medium">
+                Your session with {session.owner} has been successfully scheduled.
+              </p>
+              
+              <div className="bg-gray-50 rounded-xl p-4 mb-8 text-left space-y-2 border border-gray-100">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 font-medium">Date:</span>
+                  <span className="text-gray-900 font-bold">{selectedDate.format('dddd, D MMMM')}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 font-medium">Time:</span>
+                  <span className="text-gray-900 font-bold">{formatTime(selectedSlot!)} (GMT+5:30)</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 font-medium">Mode:</span>
+                  <span className="text-gray-900 font-bold">{formData.location === 'google_meet' ? 'Online (Google Meet)' : 'In-person'}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  if (onBack) onBack();
+                  else window.location.reload();
+                }}
+                className="w-full bg-teal-700 text-white font-bold py-4 rounded-xl hover:bg-teal-800 transition-colors shadow-lg shadow-teal-700/20"
+              >
+                Done
+              </button>
             </div>
           </div>
         )}
