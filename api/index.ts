@@ -2411,16 +2411,25 @@ app.get('/api/therapists', async (req, res) => {
         t.contact_info,
         t.profile_picture_url,
         t.phone_number,
-        MAX(tr.schedule_id) as "scheduleId",
-        COUNT(DISTINCT b.booking_id) as total_sessions_lifetime,
+        (SELECT MAX(schedule_id) FROM therapist_resources WHERE therapist_id = t.therapist_id) as "scheduleId",
         COUNT(DISTINCT CASE 
-          WHEN EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
+          WHEN LOWER(b.booking_status) NOT IN ('cancelled', 'canceled') 
+          THEN b.booking_id 
+        END) as total_sessions_lifetime,
+        COUNT(DISTINCT CASE 
+          WHEN LOWER(b.booking_status) NOT IN ('cancelled', 'canceled')
+          AND EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
           AND EXTRACT(YEAR FROM b.booking_start_at) = EXTRACT(YEAR FROM CURRENT_DATE)
           THEN b.booking_id 
         END) as sessions_this_month,
-        COALESCE(SUM(b.invitee_payment_amount), 0) as total_revenue,
         COALESCE(SUM(CASE 
-          WHEN EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
+          WHEN LOWER(b.booking_status) NOT IN ('cancelled', 'canceled') 
+          THEN b.invitee_payment_amount 
+          ELSE 0 
+        END), 0) as total_revenue,
+        COALESCE(SUM(CASE 
+          WHEN LOWER(b.booking_status) NOT IN ('cancelled', 'canceled')
+          AND EXTRACT(MONTH FROM b.booking_start_at) = EXTRACT(MONTH FROM CURRENT_DATE)
           AND EXTRACT(YEAR FROM b.booking_start_at) = EXTRACT(YEAR FROM CURRENT_DATE)
           THEN b.invitee_payment_amount 
           ELSE 0 
@@ -2430,7 +2439,6 @@ app.get('/api/therapists', async (req, res) => {
         TRIM(b.booking_host_name) ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
         OR TRIM(b.booking_host_name) ILIKE t.name
       )
-      LEFT JOIN therapist_resources tr ON t.therapist_id = tr.therapist_id
       GROUP BY t.therapist_id, t.name, t.specialization, t.contact_info, t.profile_picture_url, t.phone_number
       ORDER BY t.name ASC
     `);
@@ -4060,16 +4068,50 @@ app.post('/api/fetch-slots', async (req, res) => {
   try {
     const payload = req.body;
     
-    // Validate required fields (at least date and timezone)
     if (!payload.selectedDate || !payload.timezone) {
-      return res.status(400).json({ error: 'Missing required fields: date and timezone are required' });
+      return res.status(400).json({ error: 'Missing required fields: date and timezone' });
     }
 
+    console.log('--- FETCH SLOTS DEBUG ---');
+    console.log('Payload:', JSON.stringify(req.body, null, 2));
+    
+    const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/324275f9-00bd-4609-bdb0-307c301b322c';
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const responseText = await response.text();
+    console.log('📥 Webhook Response Text:', responseText);
+
+    if (response.ok) {
+      let jsonResponse;
+      try {
+        jsonResponse = JSON.parse(responseText);
+      } catch (e) {
+        jsonResponse = responseText;
+      }
+      res.status(200).json(jsonResponse);
+    } else {
+      console.error('❌ Slots Webhook failed:', response.status, response.statusText);
+      res.status(response.status).json({ error: 'Webhook failed', details: responseText });
+    }
+  } catch (error) {
+    console.error('❌ Error in fetch-slots:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create Direct Booking webhook proxy
+app.post('/api/create-booking', async (req, res) => {
+  try {
+    const payload = req.body;
+    
     try {
-      // Send to n8n webhook based on booking type
-      const webhookUrl = payload.isDirectBooking 
-        ? 'https://n8n.srv1169280.hstgr.cloud/webhook/ebc7a183-926b-4cdb-ad3b-27f335a02e17'
-        : 'https://n8n.srv1169280.hstgr.cloud/webhook/b5ab584c-1203-41c0-b296-3107e2e6035e';
+      // Send to n8n webhook
+      // Updated to new Create Booking webhook provided by user
+      const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/d7194a23-689f-4d95-bb35-d30fca3f15f9';
       
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -4091,64 +4133,15 @@ app.post('/api/fetch-slots', async (req, res) => {
         }
         res.status(200).json(jsonResponse);
       } else {
-        console.error('❌ Slots Webhook failed:', response.status, response.statusText);
-        console.error('❌ Error response:', responseText);
-        res.status(response.status).json({ 
-          error: 'Webhook service unavailable',
-          details: responseText
-        });
+        console.error('❌ Booking Webhook failed:', response.status, response.statusText);
+        res.status(response.status).json({ error: 'Webhook failed', details: responseText });
       }
     } catch (fetchError) {
-      console.error('❌ Network error calling slots webhook:', fetchError);
+      console.error('❌ Network error calling booking webhook:', fetchError);
       res.status(503).json({ error: 'Could not reach webhook service' });
     }
   } catch (error) {
-    console.error('❌ Error in fetch-slots endpoint:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Create Direct Booking webhook proxy
-app.post('/api/create-booking', async (req, res) => {
-  try {
-    const payload = req.body;
-    
-    try {
-      // Send to n8n webhook
-      const webhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/568038fa-d320-47da-8001-ea1ffeabde00';
-      
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'User-Agent': 'SafeStories-Backend/1.0'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const responseText = await response.text();
-
-      if (response.ok) {
-        let jsonResponse;
-        try {
-          jsonResponse = JSON.parse(responseText);
-        } catch (e) {
-          jsonResponse = { success: true, message: responseText };
-        }
-        res.status(200).json(jsonResponse);
-      } else {
-        console.error('❌ Create Booking Webhook failed:', response.status, response.statusText);
-        res.status(response.status).json({ 
-          error: 'Webhook service unavailable',
-          details: responseText
-        });
-      }
-    } catch (fetchError) {
-      console.error('❌ Network error calling create booking webhook:', fetchError);
-      res.status(503).json({ error: 'Could not reach webhook service' });
-    }
-  } catch (error) {
-    console.error('❌ Error in create-booking endpoint:', error);
+    console.error('❌ Error in create-booking:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
