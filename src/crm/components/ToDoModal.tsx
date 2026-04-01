@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './StageRemarkModal.css'; // Reusing some modal styles
-import { Loader } from '../../../components/Loader';
+import { Loader2 } from 'lucide-react';
 
 interface ToDoItem {
   id: string;
@@ -80,7 +80,10 @@ const ToDoModal: React.FC<ToDoModalProps> = ({ onViewLead, isFullPage = false, s
       {/* Body with precise scrolling limits */}
       <div className="p-5 overflow-y-auto custom-scrollbar" style={{ flex: 1 }}>
         {loading ? (
-          <Loader />
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
+            <span className="ml-2 text-gray-500 font-medium">Loading tasks...</span>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             

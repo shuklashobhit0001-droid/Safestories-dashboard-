@@ -54,14 +54,11 @@ const DashboardContent = ({ currentUser, setCurrentPage }: DashboardContentProps
               'Pooja Reference', 'Other'
             ];
             
-            // Start with standard sources at 0
             const sourceMap: Record<string, number> = {};
             standardSources.forEach(s => sourceMap[s] = 0);
             
-            // Fill with backend data
             data.sources.forEach((s: any) => {
               const name = s.name || 'Other';
-              // Check if it matches a standard source case-insensitively
               const standardMatch = standardSources.find(ss => ss.toLowerCase() === name.toLowerCase());
               if (standardMatch) {
                 sourceMap[standardMatch] = s.value;
@@ -126,130 +123,119 @@ const DashboardContent = ({ currentUser, setCurrentPage }: DashboardContentProps
     { id: 4, title: 'Leaks', value: leaks.toString() },
   ]
 
-  const revenueData = [
-    { date: '1', value: 12000 },
-    { date: '5', value: 18000 },
-    { date: '10', value: 25000 },
-    { date: '15', value: 22000 },
-    { date: '20', value: 30000 },
-    { date: '25', value: 35000 },
-    { date: '28', value: 42000 },
-  ]
+  const leadSourcesData = leadSources;
+  const maxValue = Math.max(...leadSourcesData.map(s => s.value), 4)
 
-
-  const maxRevenue = Math.max(...revenueData.map(d => d.value))
-  const currentMonthRevenue = '₹42,000'
-  const maxValue = Math.max(...leadSources.map(s => s.value), 4)
+  if (loading) {
+    return (
+      <div className="w-full h-full bg-gray-50 relative flex items-center justify-center min-h-[400px]">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full bg-gray-50 relative min-h-full">
-      {loading ? (
-        <Loader />
-      ) : (
-        <>
-          <header className="mb-8 pt-8 pl-8 pr-8">
-            <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-3xl font-bold mb-1">Analytics</h1>
-                <p className="text-gray-600 text-sm">Welcome {currentUser?.full_name || currentUser?.name || 'User'}, to SafeStories CRM Analytics!</p>
-              </div>
+    <div className="flex-1 h-screen overflow-auto bg-gray-50">
+      <div className="w-full relative min-h-full">
+      <header className="mb-8 pt-8 pl-8 pr-8">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold mb-1">Analytics</h1>
+            <p className="text-gray-600 text-sm">Welcome {currentUser?.full_name || currentUser?.name || 'User'}, to SafeStories CRM Analytics!</p>
+          </div>
+        </div>
+      </header>
+
+      <div className="pl-8 pr-8 pb-8">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-4 gap-4 mb-8">
+          {modules.map((module) => (
+            <div key={module.id} className="bg-white rounded-xl shadow-sm border border-gray-100 transition-shadow hover:shadow-md p-6">
+              <div className="text-sm text-gray-600 mb-2">{module.title}</div>
+              <div className="text-3xl font-bold text-gray-900">{module.value}</div>
             </div>
-          </header>
+          ))}
+        </div>
 
-          <div className="pl-8 pr-8 pb-8">
+        <ToDoModal 
+          setCurrentPage={setCurrentPage}
+          onViewLead={(leadId) => {
+            if (setCurrentPage) {
+              setCurrentPage(`lead-profile:${leadId}`);
+            }
+          }}
+        />
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-4 gap-4 mb-8">
-              {modules.map((module) => (
-                <div key={module.id} className="bg-white rounded-xl shadow-sm border border-gray-100 transition-shadow hover:shadow-md p-6">
-                  <div className="text-sm text-gray-600 mb-2">{module.title}</div>
-                  <div className="text-3xl font-bold text-gray-900">{module.value}</div>
-                </div>
-              ))}
-            </div>
-
-            <ToDoModal 
-              setCurrentPage={setCurrentPage}
-              onViewLead={(leadId) => {
-                if (setCurrentPage) {
-                  setCurrentPage(`lead-profile:${leadId}`);
-                }
-              }}
-            />
-
-            {/* Lead Source Chart */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 transition-shadow hover:shadow-md mb-8">
-              <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-xl font-bold">Lead Source</h2>
-                <MonthFilter selectedMonth={sourceMonth} onChange={setSourceMonth} />
+        {/* Lead Source Chart */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 transition-shadow hover:shadow-md mb-8">
+          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+            <h2 className="text-xl font-bold">Lead Source</h2>
+            <MonthFilter selectedMonth={sourceMonth} onChange={setSourceMonth} />
+          </div>
+          <div className="p-6">
+            <div className="flex gap-4">
+              <div className="flex flex-col justify-between text-xs text-gray-500 w-12 pb-10">
+                {[maxValue, Math.floor(maxValue * 0.75), Math.floor(maxValue * 0.5), Math.floor(maxValue * 0.25), 0].map((tick, i) => (
+                  <div key={i} className="text-right">{tick}</div>
+                ))}
               </div>
-              <div className="p-6">
-                <div className="flex gap-4">
-                  <div className="flex flex-col justify-between text-xs text-gray-500 w-12 pb-10">
-                    {[maxValue, Math.floor(maxValue * 0.75), Math.floor(maxValue * 0.5), Math.floor(maxValue * 0.25), 0].map((tick, i) => (
-                      <div key={i} className="text-right">{tick}</div>
-                    ))}
-                  </div>
-                  <div className="flex-1 overflow-x-auto custom-scrollbar">
-                    <div className="flex items-end justify-start gap-3 border-l border-b border-gray-200 pl-4 pb-4 min-w-max h-[250px]">
-                      {leadSources.map((source, i) => (
-                        <div key={i} className="flex flex-col items-center justify-end gap-2 w-20 flex-shrink-0 h-full">
-                          <div className="w-full flex justify-center items-end h-full">
-                            <div
-                              className="w-10 rounded-t flex items-start justify-center pt-2 transition-all duration-300 hover:opacity-80"
-                              style={{ 
-                                height: `${Math.max((source.value / maxValue) * 200, leadSources.length > 5 ? 10 : 24)}px`, 
-                                backgroundColor: '#21615D',
-                                minHeight: source.value > 0 ? '10px' : '2px'
-                              }}
-                            >
-                              {source.value > 0 && <span className="text-white text-[10px] font-bold">{source.value}</span>}
-                            </div>
-                          </div>
-                          <div className="text-[10px] text-gray-600 text-center whitespace-nowrap overflow-hidden text-ellipsis w-full" title={source.name}>
-                            {source.name}
-                          </div>
+              <div className="flex-1 overflow-x-auto custom-scrollbar">
+                <div className="flex items-end justify-start gap-3 border-l border-b border-gray-200 pl-4 pb-4 min-w-max h-[250px]">
+                  {leadSourcesData.map((source, i) => (
+                    <div key={i} className="flex flex-col items-center justify-end gap-2 w-20 flex-shrink-0 h-full">
+                      <div className="w-full flex justify-center items-end h-full">
+                        <div
+                          className="w-10 rounded-t flex items-start justify-center pt-2 transition-all duration-300 hover:opacity-80"
+                          style={{ 
+                            height: `${Math.max((source.value / maxValue) * 200, leadSourcesData.length > 5 ? 10 : 24)}px`, 
+                            backgroundColor: '#21615D',
+                            minHeight: source.value > 0 ? '10px' : '2px'
+                          }}
+                        >
+                          {source.value > 0 && <span className="text-white text-[10px] font-bold">{source.value}</span>}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Funnel */}
-            <div className="mb-8">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 transition-shadow hover:shadow-md">
-                <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-                  <h2 className="text-xl font-bold">Conversion Funnel</h2>
-                  <MonthFilter selectedMonth={funnelMonth} onChange={setFunnelMonth} />
-                </div>
-                <div className="p-6 space-y-3">
-                  {funnelStages.map((stage, i) => (
-                    <div
-                      key={i}
-                      className="px-6 py-4 rounded-lg text-white flex justify-between items-center transition-all hover:shadow-md"
-                      style={{
-                        backgroundColor: '#21615D',
-                        width: `${Math.max(stage.percentage, 15)}%`,
-                        minWidth: 'fit-content'
-                      }}
-                    >
-                      <span className="font-medium">{stage.label}</span>
-                      <div>
-                        <span className="font-bold">{stage.value}</span>
-                        <span className="ml-2 text-sm opacity-80">({stage.percentage}%)</span>
+                      </div>
+                      <div className="text-[10px] text-gray-600 text-center whitespace-nowrap overflow-hidden text-ellipsis w-full" title={source.name}>
+                        {source.name}
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-
-
             </div>
           </div>
-        </>
-      )}
+        </div>
+
+        {/* Funnel */}
+        <div className="mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 transition-shadow hover:shadow-md">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold">Conversion Funnel</h2>
+              <MonthFilter selectedMonth={funnelMonth} onChange={setFunnelMonth} />
+            </div>
+            <div className="p-6 space-y-3">
+              {funnelStages.map((stage, i) => (
+                <div
+                  key={i}
+                  className="px-6 py-4 rounded-lg text-white flex justify-between items-center transition-all hover:shadow-md"
+                  style={{
+                    backgroundColor: '#21615D',
+                    width: `${Math.max(stage.percentage, 15)}%`,
+                    minWidth: 'fit-content'
+                  }}
+                >
+                  <span className="font-medium">{stage.label}</span>
+                  <div>
+                    <span className="font-bold">{stage.value}</span>
+                    <span className="ml-2 text-sm opacity-80">({stage.percentage}%)</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
     </div>
   )
 }
