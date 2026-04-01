@@ -6,6 +6,7 @@ import LeadProfile from './LeadProfile'
 import PreTherapyBookings from './PreTherapyBookings'
 import { AdminEditProfile } from '../../../components/AdminEditProfile'
 import { ChangePassword } from '../../../components/ChangePassword'
+import ToDoModal from './ToDoModal'
 
 interface DashboardProps {
   currentPage: string
@@ -32,6 +33,13 @@ const Dashboard = ({ currentPage, setCurrentPage, currentUser, onLogout }: Dashb
           />
         )}
         {currentPage === 'pretherapy' && <PreTherapyBookings currentUser={currentUser} setCurrentPage={setCurrentPage} />}
+        {currentPage === 'full-todo' && (
+          <ToDoModal 
+            isFullPage={true} 
+            setCurrentPage={setCurrentPage}
+            onViewLead={(leadId) => setCurrentPage(`lead-profile:${leadId}`)}
+          />
+        )}
         {currentPage === 'settings' && (
           <AdminEditProfile user={currentUser} onBack={() => setCurrentPage('analytics')} />
         )}

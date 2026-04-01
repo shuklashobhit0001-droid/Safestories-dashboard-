@@ -19,9 +19,11 @@ interface ToDoData {
 
 interface ToDoModalProps {
   onViewLead: (leadId: string) => void;
+  isFullPage?: boolean;
+  setCurrentPage?: (page: string) => void;
 }
 
-const ToDoModal: React.FC<ToDoModalProps> = ({ onViewLead }) => {
+const ToDoModal: React.FC<ToDoModalProps> = ({ onViewLead, isFullPage = false, setCurrentPage }) => {
   const [data, setData] = useState<ToDoData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,12 +51,30 @@ const ToDoModal: React.FC<ToDoModalProps> = ({ onViewLead }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-8 overflow-hidden flex flex-col" style={{ maxHeight: 350 }}>
+    <div 
+      className={`bg-white rounded-xl shadow-sm border border-gray-100 ${isFullPage ? 'h-full flex flex-col' : 'mb-8 overflow-hidden flex flex-col'}`} 
+      style={isFullPage ? { width: '100%', height: 'calc(100vh - 100px)', margin: 0, border: 'none' } : { maxHeight: 350 }}
+    >
       {/* Header */}
-      <div className="p-5 border-b border-gray-200">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <span>📋</span> To-Do List
+      <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
+        <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
+          <span>📋</span> To-Do List {isFullPage && <span className="text-sm font-normal text-gray-500 ml-2">(Full View)</span>}
         </h2>
+        {isFullPage ? (
+          <button 
+            onClick={() => setCurrentPage?.('analytics')}
+            className="flex items-center gap-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold transition-colors"
+          >
+            ← Back to Analytics
+          </button>
+        ) : (
+          <button 
+            onClick={() => setCurrentPage?.('full-todo')}
+            className="px-4 py-1.5 bg-teal-50 text-[#21615D] border border-[#21615D] hover:bg-teal-100 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+          >
+            <span className="text-base">⤢</span> View Full List
+          </button>
+        )}
       </div>
 
       {/* Body with precise scrolling limits */}

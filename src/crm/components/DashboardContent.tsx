@@ -169,6 +169,7 @@ const DashboardContent = ({ currentUser, setCurrentPage }: DashboardContentProps
             </div>
 
             <ToDoModal 
+              setCurrentPage={setCurrentPage}
               onViewLead={(leadId) => {
                 if (setCurrentPage) {
                   setCurrentPage(`lead-profile:${leadId}`);
