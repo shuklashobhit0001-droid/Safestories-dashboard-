@@ -919,8 +919,20 @@ app.post('/api/leads', async (req, res) => {
                 pipelineStage = 'booked-first-session';
                 timestampCol = 'stage_booked_first_session_at';
             }
-            therapistId = booking.user_id || null;
-            console.log(`ℹ️ [Lead creation] Auto-routing ${name} to ${pipelineStage} based on booking history.`);
+            
+            // Resolve internal therapist ID
+            const therapistExtId = booking.therapist_id || booking.booking_host_user_id?.toString();
+            if (therapistExtId) {
+                const uRes = await pool.query(
+                    'SELECT id FROM users WHERE therapist_id = $1 OR CAST(id AS TEXT) = $1',
+                    [therapistExtId]
+                );
+                if (uRes.rows.length > 0) {
+                    therapistId = uRes.rows[0].id;
+                }
+            }
+            
+            console.log(`ℹ️ [Lead creation] Auto-routing ${name} to ${pipelineStage} based on booking history (Therapist: ${therapistId || 'N/A'}).`);
         }
 
         const insertQuery = `
@@ -3883,12 +3895,26 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
 
     const booking = bookingResult.rows[0];
 
+    // Resolve therapist internal ID (users.id) from bookings table
+    const therapistExternalId = booking.therapist_id || booking.booking_host_user_id?.toString();
+    let therapistInternalId = null;
+
+    if (therapistExternalId) {
+      const userRes = await pool.query(
+        'SELECT id FROM users WHERE therapist_id = $1 OR CAST(id AS TEXT) = $1',
+        [therapistExternalId]
+      );
+      if (userRes.rows.length > 0) {
+        therapistInternalId = userRes.rows[0].id;
+      }
+    }
+
     // Notify therapist
-    if (booking.user_id) {
+    if (therapistInternalId) {
       await pool.query(
         `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [booking.user_id, 'therapist', 'new_booking', 'New Booking Assigned',
+        [therapistInternalId, 'therapist', 'new_booking', 'New Booking Assigned',
          `New session "${booking.booking_resource_name}" booked with ${booking.invitee_name}`, booking.booking_id]
       );
     }
@@ -3957,8 +3983,8 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
             const dateStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
             const remark = `\n[System ${dateStr}]: Auto-moved to ${targetStage} due to booking ${booking_id} (${isFreeConsultation ? 'Free' : 'Paid'})`;
             
-            // Assign therapist from booking if available (using user_id to avoid foreign key error)
-            const therapistId = booking.user_id || null;
+            // Assign therapist from booking (using resolved internal ID)
+            const therapistId = therapistInternalId || null;
 
             await pool.query(
               `UPDATE leads 
