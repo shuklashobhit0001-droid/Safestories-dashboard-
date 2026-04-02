@@ -70,7 +70,7 @@ export const TherapistCalendar: React.FC<TherapistCalendarProps> = ({
   
   // Calendar view state
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day'>('month');
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 1, 4)); // February 4, 2026
+  const [currentDate, setCurrentDate] = useState(new Date()); // Current month
 
   // Event modal state
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
