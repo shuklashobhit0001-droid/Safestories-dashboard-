@@ -800,7 +800,7 @@ const EditEvent: React.FC<EditEventProps> = ({ event, therapistId, onBack, onSav
                             className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-100 text-gray-700 font-medium w-full justify-center"
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigator.clipboard.writeText(`https://safestories.in${service.slug}`);
+                              navigator.clipboard.writeText(`https://safestories.in/book${service.slug}`);
                               alert('Link copied to clipboard!');
                               setShowLinkDropdown(false);
                             }}

@@ -2550,7 +2550,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                                             onMouseDown={e => e.stopPropagation()}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              navigator.clipboard.writeText(`https://safestories.in${service.slug}`);
+                                              navigator.clipboard.writeText(`https://safestories.in/book${service.slug}`);
                                               setToast({ message: 'Booking link copied!', type: 'success' });
                                             }}
                                           >

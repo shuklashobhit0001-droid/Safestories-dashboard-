@@ -69,3 +69,48 @@ export const convertToIST = (timeStr: string): string => {
     return timeStr;
   }
 };
+
+export const formatISOToIST = (dateInput: string | Date | null | undefined, endInput?: string | Date | null | undefined): string => {
+  if (!dateInput) return 'N/A';
+  try {
+    const startDate = new Date(dateInput);
+    if (isNaN(startDate.getTime())) return 'N/A';
+
+    let endDate: Date;
+    if (endInput) {
+      endDate = new Date(endInput);
+      if (isNaN(endDate.getTime())) {
+        endDate = new Date(startDate.getTime() + (50 * 60 * 1000));
+      }
+    } else {
+      endDate = new Date(startDate.getTime() + (50 * 60 * 1000));
+    }
+
+    const dateStr = startDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata'
+    });
+    
+    const timeStr = startDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata'
+    });
+
+    const endTimeStr = endDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata'
+    });
+
+    return `${dateStr} at ${timeStr} - ${endTimeStr} IST`;
+  } catch (e) {
+    console.error('Error formatting ISO to IST:', e);
+    return 'N/A';
+  }
+};

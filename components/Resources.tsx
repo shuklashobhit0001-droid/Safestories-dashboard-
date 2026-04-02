@@ -25,7 +25,7 @@ const ServiceCard: React.FC<ResourceCardProps> = ({
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(`https://safestories.in${slug}`);
+    navigator.clipboard.writeText(`https://safestories.in/book${slug}`);
     setCopied(true);
     setTimeout(() => {
       setCopied(false);

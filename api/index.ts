@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 import multer from 'multer';
 import { randomUUID } from 'crypto';
 import pool from './_lib/db.js';
-import { convertToIST } from './_lib/timezone.js';
+import { convertToIST, formatISOToIST } from './_lib/timezone.js';
 import { startDashboardApiBookingSync } from './_lib/dashboardApiBookingSync.js';
 import { uploadFile } from './_lib/minio.js';
 import { sendOTPEmail, sendPasswordResetOTP } from './_lib/email.js';
@@ -3631,27 +3631,7 @@ app.get('/api/refunds', async (req, res) => {
     const result = await pool.query(query, params);
     
     const refunds = result.rows.map(row => {
-      let formattedTimings = 'N/A';
-      if (row.session_timings) {
-        const date = new Date(row.session_timings);
-        const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
-        const endDate = new Date(istDate.getTime() + (50 * 60 * 1000));
-        
-        const formatTime = (d: Date) => {
-          const hours = d.getHours();
-          const minutes = d.getMinutes();
-          const ampm = hours >= 12 ? 'PM' : 'AM';
-          const hour12 = hours % 12 || 12;
-          return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-        };
-        
-        const weekday = istDate.toLocaleDateString('en-US', { weekday: 'long' });
-        const month = istDate.toLocaleDateString('en-US', { month: 'short' });
-        const day = istDate.getDate();
-        const year = istDate.getFullYear();
-        
-        formattedTimings = `${weekday}, ${month} ${day}, ${year} at ${formatTime(istDate)} - ${formatTime(endDate)} IST`;
-      }
+      const formattedTimings = formatISOToIST(row.session_timings);
       
       return {
         ...row,
@@ -3689,26 +3669,7 @@ app.get('/api/payments', async (req, res) => {
     const result = await pool.query(query);
     
     const payments = result.rows.map(row => {
-      let formattedTimings = 'N/A';
-      if (row.start_at) {
-        const date = new Date(row.start_at);
-        const endDate = new Date(row.end_at || date.getTime() + (50 * 60 * 1000));
-        
-        const formatTime = (d: Date) => {
-          const hours = d.getHours();
-          const minutes = d.getMinutes();
-          const ampm = hours >= 12 ? 'PM' : 'AM';
-          const hour12 = hours % 12 || 12;
-          return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-        };
-        
-        const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
-        const month = date.toLocaleDateString('en-US', { month: 'short' });
-        const day = date.getDate();
-        const year = date.getFullYear();
-        
-        formattedTimings = `${weekday}, ${month} ${day}, ${year} at ${formatTime(date)} - ${formatTime(endDate)} IST`;
-      }
+      const formattedTimings = formatISOToIST(row.start_at, row.end_at);
       
       return {
         client_name: row.invitee_name,
