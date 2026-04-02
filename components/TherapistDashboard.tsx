@@ -3287,29 +3287,29 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
                                 {selectedAppointmentIndex === index && (
                                   <tr className="bg-gray-100">
                                     <td colSpan={5} className="px-6 py-4">
-                                      <div className="flex gap-3 justify-center">
+                                      <div className="flex flex-wrap gap-2 justify-center">
                                         <button
                                           onClick={() => copyAppointmentDetails(appointment)}
-                                          className="px-6 py-2 border border-gray-400 rounded-lg text-sm text-gray-700 hover:bg-white flex items-center gap-2"
+                                          className="px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 border border-gray-400 text-gray-700 hover:bg-white"
                                         >
-                                          <Copy size={16} />
+                                          <Copy size={13} />
                                           Copy to Clipboard
                                         </button>
                                         <button
                                           onClick={() => handleReminderClick(appointment)}
                                           disabled={isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'}
-                                          className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'
+                                          className={`px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 ${isMeetingEnded(appointment) || appointment.booking_status === 'cancelled'
                                             ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                             : 'border border-gray-400 text-gray-700 hover:bg-white'
                                             }`}
                                         >
-                                          <Send size={16} />
-                                          Send Manual Reminder to Client
+                                          <Send size={13} />
+                                          Send Reminder
                                         </button>
                                         <button
                                           onClick={() => handleSOSClick(appointment)}
                                           disabled={appointment.booking_status === 'cancelled'}
-                                          className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${appointment.booking_status === 'cancelled'
+                                          className={`px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 ${appointment.booking_status === 'cancelled'
                                             ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                             : 'border border-red-600 text-red-600 hover:bg-white'
                                             }`}
@@ -3320,24 +3320,34 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
                                         <button
                                           onClick={() => handleViewSessionNotes(appointment)}
                                           disabled={!appointment.has_session_notes || appointment.booking_status === 'cancelled'}
-                                          className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${!appointment.has_session_notes || appointment.booking_status === 'cancelled'
+                                          className={`px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 ${!appointment.has_session_notes || appointment.booking_status === 'cancelled'
                                             ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                             : 'border border-blue-600 text-blue-600 hover:bg-white'
                                             }`}
                                         >
-                                          <FileText size={16} />
+                                          <FileText size={13} />
                                           View Session Notes
                                         </button>
                                         <button
                                           onClick={() => handleFillSessionNotes(appointment)}
                                           disabled={appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)}
-                                          className={`px-6 py-2 rounded-lg text-sm flex items-center gap-2 ${appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)
+                                          className={`px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 ${appointment.has_session_notes || appointment.booking_status === 'cancelled' || !isMeetingStarted(appointment)
                                             ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-400'
                                             : 'border border-teal-600 text-teal-600 hover:bg-white'
                                             }`}
                                         >
-                                          <FileText size={16} />
+                                          <FileText size={13} />
                                           Fill Session Notes
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setFeedbackTarget(appointment);
+                                            setShowFeedbackModal(true);
+                                          }}
+                                          className="px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 border border-teal-600 text-teal-600 hover:bg-white"
+                                        >
+                                          <MessageCircle size={13} />
+                                          Give Feedback
                                         </button>
                                       </div>
                                     </td>
