@@ -574,7 +574,7 @@
 
 .day-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   padding: 10px 0;
   border-bottom: 1px solid #f3f4f6;
   gap: 12px;
@@ -604,6 +604,8 @@
   align-items: center;
   gap: 6px;
   flex: 1;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .time-input-wrap {
@@ -655,6 +657,16 @@
 
 .icon-btn:hover {
   color: #374151;
+}
+
+.icon-btn.remove-slot-btn {
+  color: #ef4444;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.icon-btn.remove-slot-btn:hover {
+  color: #b91c1c;
 }
 
 /* Toggle Switch */

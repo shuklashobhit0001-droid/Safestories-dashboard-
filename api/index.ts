@@ -4662,7 +4662,13 @@ app.get('/api/progress-notes', async (req, res) => {
     // client_id is actually the phone number, so use it directly to match bookings
     const sessionNotesResult = await pool.query(
       `SELECT DISTINCT csn.note_id as id, csn.session_timing, csn.created_at, 
-              csn.client_name, csn.concerns_discussed, csn.somatic_cues, csn.interventions_used,
+              csn.client_name, csn.host_name,
+              csn.concerns_discussed, csn.somatic_cues, csn.interventions_used,
+              csn.interventions_helpful, csn.client_participation, csn.goal_progress,
+              csn.client_values, csn.self_harm_mention, csn.self_harm_details,
+              csn.current_risk_level, csn.protective_factors, csn.health_history,
+              csn.past_diagnoses, csn.next_session_plan, csn.homework_suggested,
+              csn.session_status, csn.client_age, csn.gender, csn.occupation, csn.marital_status,
               'session_note' as note_type, csn.booking_id
        FROM client_session_notes csn
        INNER JOIN bookings b ON csn.booking_id::text = b.booking_id::text

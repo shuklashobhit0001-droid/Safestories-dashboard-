@@ -233,39 +233,138 @@ export const ProgressNotesTab: React.FC<ProgressNotesTabProps> = ({ clientId, on
 
                 {/* Expanded Content */}
                 {isExpanded && (
-                  <div className="px-4 pb-4 space-y-4 border-t" style={{ borderColor: '#21615D' }}>
-                    {note.concerns_discussed && (
+                  <div className="px-4 pb-4 space-y-5 border-t" style={{ borderColor: '#21615D' }}>
+
+                    {/* ── Context ── */}
+                    {(note.client_age || note.gender || note.occupation || note.marital_status) && (
                       <div className="pt-4">
-                        <span className="text-xs font-semibold" style={{ color: '#21615D' }}>
-                          Concerns or Themes Discussed:
-                        </span>
-                        <p className="text-sm text-gray-800 mt-2 whitespace-pre-wrap">
-                          {note.concerns_discussed}
-                        </p>
+                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Client Context</p>
+                        <div className="flex flex-wrap gap-4 text-sm text-gray-700">
+                          {note.client_age && <span><strong>Age:</strong> {note.client_age}</span>}
+                          {note.gender && <span><strong>Gender:</strong> {note.gender}</span>}
+                          {note.occupation && <span><strong>Occupation:</strong> {note.occupation}</span>}
+                          {note.marital_status && <span><strong>Marital Status:</strong> {note.marital_status}</span>}
+                        </div>
                       </div>
                     )}
 
-                    {note.somatic_cues && (
-                      <div>
-                        <span className="text-xs font-semibold" style={{ color: '#21615D' }}>
-                          Somatic Cues (Appearance, Behavior, Energy, Mood):
-                        </span>
-                        <p className="text-sm text-gray-800 mt-2 whitespace-pre-wrap">
-                          {note.somatic_cues}
-                        </p>
+                    {/* ── Clinical ── */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Clinical Notes</p>
+
+                      {note.concerns_discussed && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Concerns or Themes Discussed:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.concerns_discussed}</p>
+                        </div>
+                      )}
+                      {note.somatic_cues && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Somatic Cues (Appearance, Behavior, Energy, Mood):</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{Array.isArray(note.somatic_cues) ? note.somatic_cues.join(', ') : note.somatic_cues}</p>
+                        </div>
+                      )}
+                      {note.interventions_used && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Interventions Used:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.interventions_used}</p>
+                        </div>
+                      )}
+                      {note.interventions_helpful && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Were Interventions Helpful?</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.interventions_helpful}</p>
+                        </div>
+                      )}
+                      {note.client_participation && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Client Participation:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.client_participation}</p>
+                        </div>
+                      )}
+                      {note.goal_progress && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Goal Progress:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.goal_progress}</p>
+                        </div>
+                      )}
+                      {note.client_values && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Client Values:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.client_values}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Risk & Safety ── */}
+                    {(note.self_harm_mention || note.self_harm_details || note.current_risk_level || note.protective_factors) && (
+                      <div className="space-y-3 bg-red-50 rounded-lg p-3 border border-red-200">
+                        <p className="text-xs font-bold uppercase tracking-wider text-red-500">Risk & Safety</p>
+                        {note.current_risk_level && (
+                          <div>
+                            <span className="text-xs font-semibold text-red-700">Current Risk Level:</span>
+                            <p className="text-sm text-gray-800 mt-1">{note.current_risk_level}</p>
+                          </div>
+                        )}
+                        {note.self_harm_mention && (
+                          <div>
+                            <span className="text-xs font-semibold text-red-700">Self-Harm Mention:</span>
+                            <p className="text-sm text-gray-800 mt-1">{note.self_harm_mention}</p>
+                          </div>
+                        )}
+                        {note.self_harm_details && (
+                          <div>
+                            <span className="text-xs font-semibold text-red-700">Self-Harm Details:</span>
+                            <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.self_harm_details}</p>
+                          </div>
+                        )}
+                        {note.protective_factors && (
+                          <div>
+                            <span className="text-xs font-semibold text-red-700">Protective Factors:</span>
+                            <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.protective_factors}</p>
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {note.interventions_used && (
-                      <div>
-                        <span className="text-xs font-semibold" style={{ color: '#21615D' }}>
-                          Interventions Used:
-                        </span>
-                        <p className="text-sm text-gray-800 mt-2 whitespace-pre-wrap">
-                          {note.interventions_used}
-                        </p>
+                    {/* ── History ── */}
+                    {(note.health_history || note.past_diagnoses) && (
+                      <div className="space-y-3">
+                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Medical History</p>
+                        {note.health_history && (
+                          <div>
+                            <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Health History:</span>
+                            <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.health_history}</p>
+                          </div>
+                        )}
+                        {note.past_diagnoses && (
+                          <div>
+                            <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Past Diagnoses:</span>
+                            <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.past_diagnoses}</p>
+                          </div>
+                        )}
                       </div>
                     )}
+
+                    {/* ── Planning ── */}
+                    {(note.next_session_plan || note.homework_suggested) && (
+                      <div className="space-y-3">
+                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Planning</p>
+                        {note.next_session_plan && (
+                          <div>
+                            <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Next Session Plan:</span>
+                            <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.next_session_plan}</p>
+                          </div>
+                        )}
+                        {note.homework_suggested && (
+                          <div>
+                            <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Homework / Suggested Activities:</span>
+                            <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.homework_suggested}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                   </div>
                 )}
               </div>

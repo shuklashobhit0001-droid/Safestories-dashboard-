@@ -228,6 +228,33 @@ const EditEvent: React.FC<EditEventProps> = ({ event, therapistId, onBack, onSav
     setScheduleData({ ...scheduleData, availability: newAvailability });
   };
 
+  const addTimeSlotByName = (dayName: string) => {
+    if (!scheduleData) return;
+    const existingIndex = (scheduleData.availability || []).findIndex((a: any) => a.day.toUpperCase() === dayName.toUpperCase());
+    let newAvailability = [...(scheduleData.availability || [])];
+    if (existingIndex > -1) {
+      const currentTimes = newAvailability[existingIndex].times || [];
+      // Default new slot starts after the last end time
+      const lastEnd = currentTimes.length > 0 ? currentTimes[currentTimes.length - 1].end : '09:00';
+      newAvailability[existingIndex] = {
+        ...newAvailability[existingIndex],
+        times: [...currentTimes, { start: lastEnd, end: lastEnd }]
+      };
+    }
+    setScheduleData({ ...scheduleData, availability: newAvailability });
+  };
+
+  const removeTimeSlotByName = (dayName: string, timeIndex: number) => {
+    if (!scheduleData) return;
+    const existingIndex = (scheduleData.availability || []).findIndex((a: any) => a.day.toUpperCase() === dayName.toUpperCase());
+    let newAvailability = [...(scheduleData.availability || [])];
+    if (existingIndex > -1) {
+      const newTimes = newAvailability[existingIndex].times.filter((_: any, i: number) => i !== timeIndex);
+      newAvailability[existingIndex] = { ...newAvailability[existingIndex], times: newTimes };
+    }
+    setScheduleData({ ...scheduleData, availability: newAvailability });
+  };
+
   const addOverride = () => {
     if (!scheduleData || !selectedDate) return;
 
@@ -408,6 +435,7 @@ const EditEvent: React.FC<EditEventProps> = ({ event, therapistId, onBack, onSav
                           <div className="time-range">
                             {times.map((time: any, tIdx: number) => (
                               <React.Fragment key={tIdx}>
+                                {tIdx > 0 && <div style={{ width: '100%', height: 0 }} />}
                                 <div className="time-input-wrap" onClick={(e) => {
                                   e.stopPropagation();
                                   setActivePicker({ dayIdx: idx, tIdx, field: 'start', type: 'weekly' });
@@ -451,10 +479,22 @@ const EditEvent: React.FC<EditEventProps> = ({ event, therapistId, onBack, onSav
                                     />
                                   )}
                                 </div>
+                                {times.length > 1 && (
+                                  <button
+                                    className="icon-btn remove-slot-btn"
+                                    title="Remove this slot"
+                                    onClick={(e) => { e.stopPropagation(); removeTimeSlotByName(dayName, tIdx); }}
+                                  >
+                                    ×
+                                  </button>
+                                )}
                               </React.Fragment>
                             ))}
-                            <button className="icon-btn">+</button>
-                            <button className="icon-btn"><Copy size={13} /></button>
+                            <button
+                              className="icon-btn"
+                              title="Add time slot"
+                              onClick={(e) => { e.stopPropagation(); addTimeSlotByName(dayName); }}
+                            >+</button>
                           </div>
                           <div
                             className="toggle-switch on"
