@@ -20,7 +20,7 @@ interface NotificationsProps {
 export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'new_bookings' | 'sos_alerts' | 'client_transfers'>('all');
+  const [filter, setFilter] = useState<'all' | 'new_bookings' | 'sos_alerts' | 'client_transfers' | 'cancellations' | 'rescheduled' | 'schedule_updates'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const notificationsPerPage = 10;
 
@@ -91,11 +91,24 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
           n.notification_type === 'client_transfer_in' || 
           n.notification_type === 'client_transfer_out'
         );
+      case 'cancellations':
+        return notifications.filter(n => n.notification_type === 'booking_cancelled');
+      case 'rescheduled':
+        return notifications.filter(n => n.notification_type === 'booking_rescheduled');
+      case 'schedule_updates':
+        return notifications.filter(n => n.notification_type === 'schedule_updated');
       case 'all':
       default:
         return notifications;
     }
   })();
+
+  const newBookingsCount = notifications.filter(n => n.notification_type === 'new_booking' || n.notification_type === 'new_booking_request').length;
+  const sosCount = notifications.filter(n => n.notification_type === 'sos_ticket').length;
+  const transfersCount = notifications.filter(n => n.notification_type === 'client_transfer' || n.notification_type === 'client_transfer_in' || n.notification_type === 'client_transfer_out').length;
+  const cancellationsCount = notifications.filter(n => n.notification_type === 'booking_cancelled').length;
+  const rescheduledCount = notifications.filter(n => n.notification_type === 'booking_rescheduled').length;
+  const scheduleUpdatesCount = notifications.filter(n => n.notification_type === 'schedule_updated').length;
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
@@ -167,39 +180,18 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
         )}
       </div>
 
-      <div className="mb-4 flex gap-2">
-        <button
-          onClick={() => setFilter('all')}
-          className={`px-4 py-2 rounded-lg text-sm ${
-            filter === 'all' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'
-          }`}
-        >
-          All
-        </button>
-        <button
-          onClick={() => setFilter('new_bookings')}
-          className={`px-4 py-2 rounded-lg text-sm ${
-            filter === 'new_bookings' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'
-          }`}
-        >
-          New Bookings
-        </button>
-        <button
-          onClick={() => setFilter('sos_alerts')}
-          className={`px-4 py-2 rounded-lg text-sm ${
-            filter === 'sos_alerts' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'
-          }`}
-        >
-          SOS Alerts
-        </button>
-        <button
-          onClick={() => setFilter('client_transfers')}
-          className={`px-4 py-2 rounded-lg text-sm ${
-            filter === 'client_transfers' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'
-          }`}
-        >
-          Client Transfers
-        </button>
+      <div className="mb-4 flex gap-2 flex-wrap">
+        <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-lg text-sm ${filter === 'all' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'}`}>All</button>
+        <button onClick={() => setFilter('new_bookings')} className={`px-4 py-2 rounded-lg text-sm ${filter === 'new_bookings' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'}`}>New Bookings ({newBookingsCount})</button>
+        {userRole === 'admin' && (
+          <button onClick={() => setFilter('sos_alerts')} className={`px-4 py-2 rounded-lg text-sm ${filter === 'sos_alerts' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'}`}>SOS Alerts ({sosCount})</button>
+        )}
+        <button onClick={() => setFilter('client_transfers')} className={`px-4 py-2 rounded-lg text-sm ${filter === 'client_transfers' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'}`}>Client Transfers ({transfersCount})</button>
+        <button onClick={() => setFilter('cancellations')} className={`px-4 py-2 rounded-lg text-sm ${filter === 'cancellations' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'}`}>Cancellations ({cancellationsCount})</button>
+        <button onClick={() => setFilter('rescheduled')} className={`px-4 py-2 rounded-lg text-sm ${filter === 'rescheduled' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'}`}>Rescheduled ({rescheduledCount})</button>
+        {userRole === 'admin' && (
+          <button onClick={() => setFilter('schedule_updates')} className={`px-4 py-2 rounded-lg text-sm ${filter === 'schedule_updates' ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-700'}`}>Schedule Updates ({scheduleUpdatesCount})</button>
+        )}
       </div>
 
       {loading ? (
@@ -211,6 +203,9 @@ export const Notifications: React.FC<NotificationsProps> = ({ userRole, userId }
             {filter === 'new_bookings' ? 'No new booking notifications' : 
              filter === 'sos_alerts' ? 'No SOS alert notifications' :
              filter === 'client_transfers' ? 'No client transfer notifications' :
+             filter === 'cancellations' ? 'No cancellation notifications' :
+             filter === 'rescheduled' ? 'No rescheduled session notifications' :
+             filter === 'schedule_updates' ? 'No schedule update notifications' :
              'No notifications yet'}
           </p>
         </div>

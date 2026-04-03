@@ -2058,7 +2058,24 @@ app.put('/api/dayschedule/schedules/:id', async (req, res) => {
       body: JSON.stringify({ ...body, scheduleId: id })
     });
 
+    // Helper: notify all admins about schedule update (fire-and-forget)
+    const notifyScheduleUpdate = async () => {
+      try {
+        const therapistName = (body.name || '').replace(/'s Schedule$/, '').trim();
+        const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
+        for (const admin of admins.rows) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [admin.id, 'admin', 'schedule_updated', 'Schedule Updated',
+             `${therapistName} updated their availability schedule`, id]
+          );
+        }
+      } catch (e) { /* non-critical, don't fail the main response */ }
+    };
+
     if (response.status === 204) {
+      notifyScheduleUpdate();
       return res.status(204).send();
     }
 
@@ -2074,6 +2091,7 @@ app.put('/api/dayschedule/schedules/:id', async (req, res) => {
     if (!response.ok) {
       if (responseData?.code === 0) {
         console.log(`[DEBUG Proxy] n8n updated schedule ${id} successfully (no respond node configured)`);
+        notifyScheduleUpdate();
         return res.json({ success: true, scheduleId: id });
       }
       console.error(`[DEBUG Proxy] Webhook PUT returned error ${response.status}:`, responseData);
@@ -2084,6 +2102,7 @@ app.put('/api/dayschedule/schedules/:id', async (req, res) => {
       });
     }
 
+    notifyScheduleUpdate();
     res.json(responseData || { success: true });
   } catch (error: any) {
     console.error('[DEBUG Proxy] Internal Error during PUT fetch/json:', error);
@@ -2133,6 +2152,40 @@ app.post('/api/cancel-booking', async (req, res) => {
     }
 
     console.log(`[Cancel Booking] Successfully forwarded cancellation to webhook: ${booking_id}`);
+
+    // Notify all admins about cancellation
+    const sessionName = (bookingDetails.booking_resource_name || 'Session').replace(/ with .+$/i, '').trim();
+    const adminsForCancel = await pool.query("SELECT id FROM users WHERE role = 'admin'");
+    for (const admin of adminsForCancel.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [admin.id, 'admin', 'booking_cancelled', 'Booking Cancelled',
+         `"${sessionName}" booked with ${bookingDetails.invitee_name} has been cancelled. Reason: ${reason || 'No reason provided'}`,
+         booking_id]
+      );
+    }
+
+    // Notify assigned therapist about cancellation
+    const cancelHostId = bookingDetails.booking_host_calendar_id;
+    if (cancelHostId) {
+      const therapistUserRes = await pool.query(
+        'SELECT id FROM users WHERE therapist_id = $1 OR CAST(id AS TEXT) = $1',
+        [cancelHostId]
+      );
+      if (therapistUserRes.rows.length > 0) {
+        const tId = therapistUserRes.rows[0].id;
+        const sName = (bookingDetails.booking_resource_name || 'Session').replace(/ with .+$/i, '').trim();
+        await pool.query(
+          `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [tId, 'therapist', 'booking_cancelled', 'Session Cancelled',
+           `"${sName}" with ${bookingDetails.invitee_name} has been cancelled. Reason: ${reason || 'No reason provided'}`,
+           booking_id]
+        );
+      }
+    }
+
     res.json({ success: true, message: 'Booking cancellation forwarded successfully' });
 
   } catch (error: any) {
@@ -2189,6 +2242,40 @@ app.post('/api/reschedule-booking', async (req, res) => {
     }
 
     console.log(`[Reschedule Booking] Successfully forwarded reschedule to webhook: ${booking_id}`);
+
+    // Notify all admins about rescheduling
+    const rSessionName = (bookingDetails.booking_resource_name || 'Session').replace(/ with .+$/i, '').trim();
+    const newTime = new Date(new_start_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+    const adminsForReschedule = await pool.query("SELECT id FROM users WHERE role = 'admin'");
+    for (const admin of adminsForReschedule.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [admin.id, 'admin', 'booking_rescheduled', 'Session Rescheduled',
+         `"${rSessionName}" with ${bookingDetails.invitee_name} rescheduled to ${newTime}. Reason: ${reason || 'No reason provided'}`,
+         booking_id]
+      );
+    }
+
+    // Notify assigned therapist about rescheduling
+    const rescheduleHostId = bookingDetails.booking_host_calendar_id;
+    if (rescheduleHostId) {
+      const therapistUserRes = await pool.query(
+        'SELECT id FROM users WHERE therapist_id = $1 OR CAST(id AS TEXT) = $1',
+        [rescheduleHostId]
+      );
+      if (therapistUserRes.rows.length > 0) {
+        const tId = therapistUserRes.rows[0].id;
+        await pool.query(
+          `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [tId, 'therapist', 'booking_rescheduled', 'Session Rescheduled',
+           `"${rSessionName}" with ${bookingDetails.invitee_name} rescheduled to ${newTime}. Reason: ${reason || 'No reason provided'}`,
+           booking_id]
+        );
+      }
+    }
+
     res.json({ success: true, message: 'Booking reschedule forwarded successfully' });
 
   } catch (error: any) {
@@ -3742,7 +3829,9 @@ app.get('/api/notifications', async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT * FROM notifications WHERE user_id = $1 AND user_role = $2 ORDER BY created_at DESC LIMIT 50',
+      `SELECT notification_id, user_id, user_role, notification_type, title, message, is_read,
+              (created_at AT TIME ZONE 'Asia/Kolkata') as created_at, related_id
+       FROM notifications WHERE user_id = $1 AND user_role = $2 ORDER BY created_at DESC LIMIT 50`,
       [user_id, user_role]
     );
 

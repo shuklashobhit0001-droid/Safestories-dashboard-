@@ -18,6 +18,7 @@ import { AdminEditProfile } from './AdminEditProfile';
 import { CountUpNumber } from './CountUpNumber';
 import { ReportIssuePage } from './ReportIssuePage';
 import { useUrlState } from '../hooks/useUrlState';
+import { NotificationBell } from './NotificationBell';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -597,6 +598,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
                 <p className="text-gray-600">Welcome Back, {user?.full_name || user?.username}!</p>
               </div>
               <div className="flex items-center gap-4">
+                <NotificationBell
+                  userId={user?.id}
+                  userRole="admin"
+                  onViewAll={() => { resetAllStates(); setActiveView('notifications'); }}
+                />
                 <button className="flex items-center gap-2 border rounded-lg px-4 py-2 bg-white hover:bg-gray-50">
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                   <span className="text-sm font-medium">Live Sessions: {liveSessionsCount}</span>
@@ -867,50 +873,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
               </div>
             </div>
 
-            {/* Latest Notifications */}
-            <div className="bg-white rounded-lg border mt-8">
-              <div className="p-6 border-b">
-                <h2 className="text-xl font-bold">Latest Notifications</h2>
-              </div>
-              <div className="divide-y">
-                {notifications.length === 0 ? (
-                  <div className="px-6 py-20 text-center text-gray-400">
-                    No notifications
-                  </div>
-                ) : (
-                  notifications.map((notification, index) => (
-                    <div
-                      key={index}
-                      onClick={() => setActiveView('notifications')}
-                      className="px-6 py-4 hover:bg-gray-50 cursor-pointer flex items-start gap-4"
-                    >
-                      <div className="flex-shrink-0 mt-1">
-                        <Bell size={20} className={notification.is_read ? 'text-gray-400' : 'text-teal-700'} />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between">
-                          <h3 className={`font-semibold ${notification.is_read ? 'text-gray-700' : 'text-gray-900'}`}>
-                            {notification.title}
-                          </h3>
-                          <span className="text-xs text-gray-500">
-                            {new Date(notification.created_at).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              <div className="px-6 py-4 border-t">
-                <button
-                  onClick={() => setActiveView('notifications')}
-                  className="text-sm text-teal-700 hover:text-teal-800 font-medium"
-                >
-                  View All Notifications →
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </div>
