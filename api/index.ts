@@ -3894,8 +3894,20 @@ app.delete('/api/notifications/:id', async (req, res) => {
 app.post('/api/notifications/create-admin', async (req, res) => {
   try {
     const { notification_type, title, message, related_id } = req.body;
+
+    // Deduplication: skip if a notification with same related_id + type already exists for any admin
+    if (related_id) {
+      const dupCheck = await pool.query(
+        `SELECT 1 FROM notifications WHERE related_id = $1 AND notification_type = $2 AND user_role = 'admin' LIMIT 1`,
+        [String(related_id), notification_type]
+      );
+      if (dupCheck.rows.length > 0) {
+        console.log(`[Notifications] Skipping duplicate ${notification_type} for related_id=${related_id}`);
+        return res.json({ success: true, skipped: true });
+      }
+    }
+
     const admins = await pool.query("SELECT id FROM users WHERE role = 'admin'");
-    
     for (const admin of admins.rows) {
       await pool.query(
         `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
@@ -3903,7 +3915,7 @@ app.post('/api/notifications/create-admin', async (req, res) => {
         [admin.id, 'admin', notification_type, title, message, related_id]
       );
     }
-    
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error creating admin notifications:', error);
@@ -4060,13 +4072,19 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
     }
     // -------------------------------------
 
+    // Clean session name: strip ' with TherapistName' suffix; convert venue addresses to 'In-person Session'
+    const rawName = booking.booking_resource_name || '';
+    const sessionName = rawName.startsWith('In-person (') || rawName.startsWith('In-Person (')
+      ? 'In-person Session'
+      : rawName.replace(/ with [^"]+$/, '').trim() || 'Session';
+
     // Notify therapist
     if (therapistInternalId) {
       await pool.query(
         `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [therapistInternalId, 'therapist', 'new_booking', 'New Booking Assigned',
-         `New session "${booking.booking_resource_name}" booked with ${booking.invitee_name}`, booking.booking_id]
+         `New session "${sessionName}" booked with ${booking.invitee_name}`, booking.booking_id]
       );
     }
 
@@ -4077,7 +4095,7 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
         `INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [admin.id, 'admin', 'new_booking', 'New Booking Created',
-         `${booking.invitee_name} booked "${booking.booking_resource_name}" with ${booking.booking_host_name}`, booking.booking_id]
+         `${booking.invitee_name} booked "${sessionName}" with ${booking.booking_host_name}`, booking.booking_id]
       );
     }
 
