@@ -2219,6 +2219,49 @@ app.post('/api/reschedule-booking', async (req, res) => {
     const startAtDate = new Date(new_start_at);
     const endAtDate = new Date(startAtDate.getTime() + (duration || 50) * 60000);
 
+    // 2.1 Update local database before forwarding
+    const formatDateForInvitee = (date: Date) => {
+      return date.toLocaleString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Kolkata'
+      });
+    };
+
+    const startText = formatDateForInvitee(startAtDate);
+    const endText = startAtDate.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata'
+    });
+    const endTextFull = endAtDate.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata'
+    });
+
+    // Format: "Monday, March 30, 2026 at 10:00 AM - 10:50 AM IST"
+    const bookingInviteeTime = `${startText.replace(/ at /i, ' at ').replace(/, \d{4}/, '')}, ${startAtDate.getFullYear()} at ${endText} - ${endTextFull} IST`;
+
+    await pool.query(
+      `UPDATE bookings 
+       SET booking_start_at = $1, 
+           booking_end_at = $2, 
+           booking_duration = $3, 
+           booking_invitee_time = $4,
+           rescheduled_at = NOW(),
+           recheduled_from = $5
+       WHERE booking_id = $6`,
+      [startAtDate.toISOString(), endAtDate.toISOString(), duration || 50, bookingInviteeTime, bookingDetails.booking_start_at, booking_id]
+    );
+
     // 3. Forward to n8n reschedule webhook
     const n8nWebhookUrl = 'https://n8n.srv1169280.hstgr.cloud/webhook/9508e1da-b3b0-47d3-8c83-8a793281c1e2';
 
@@ -2231,7 +2274,9 @@ app.post('/api/reschedule-booking', async (req, res) => {
         end_at: endAtDate.toISOString(),
         reschedule_reason: reason || 'No reason provided',
         notify_participants: notify !== undefined ? notify : true,
-        rescheduled_at: new Date().toISOString()
+        rescheduled_at: new Date().toISOString(),
+        // Pass the updated invitee time too so downstream systems have it
+        booking_invitee_time: bookingInviteeTime
       })
     });
 
@@ -2241,7 +2286,7 @@ app.post('/api/reschedule-booking', async (req, res) => {
       return res.status(502).json({ error: 'Failed to process reschedule via downstream webhook' });
     }
 
-    console.log(`[Reschedule Booking] Successfully forwarded reschedule to webhook: ${booking_id}`);
+    console.log(`[Reschedule Booking] Successfully updated local DB and forwarded reschedule to webhook: ${booking_id}`);
 
     // Notify all admins about rescheduling
     const rSessionName = (bookingDetails.booking_resource_name || 'Session').replace(/ with .+$/i, '').trim();
@@ -2276,7 +2321,7 @@ app.post('/api/reschedule-booking', async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: 'Booking reschedule forwarded successfully' });
+    res.json({ success: true, message: 'Booking rescheduled successfully and forwarded' });
 
   } catch (error: any) {
     console.error('[Reschedule Booking] Error:', error);
