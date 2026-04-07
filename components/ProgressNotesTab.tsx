@@ -13,6 +13,38 @@ export const ProgressNotesTab: React.FC<ProgressNotesTabProps> = ({ clientId, on
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedSessionNote, setExpandedSessionNote] = useState<number | null>(null);
+  const [expandedProgressNote, setExpandedProgressNote] = useState<number | null>(null);
+
+  const formatHeaderDate = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    
+    // Parse DD/MM/YYYY
+    const parts = dateStr.split(' ')[0].split('/');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1; // 0-indexed
+      const year = parseInt(parts[2], 10);
+      const date = new Date(year, month, day);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+      }
+    }
+    
+    // Fallback to JS Date
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    }
+    return dateStr;
+  };
 
   useEffect(() => {
     fetchProgressNotes();
@@ -371,53 +403,213 @@ export const ProgressNotesTab: React.FC<ProgressNotesTabProps> = ({ clientId, on
             );
           } else {
             // Regular Progress Note (from client_progress_notes table)
+            const isExpanded = expandedProgressNote === note.id;
             return (
               <div
                 key={`pn-${note.id}`}
-                className="bg-white rounded-lg border hover:border-teal-500 transition-colors cursor-pointer"
-                onClick={() => onViewNote(note.id, false)}
+                className="rounded-lg border-2 transition-all"
+                style={{ 
+                  backgroundColor: '#21615d1a',
+                  borderColor: '#21615D'
+                }}
               >
-                <div className="p-4">
+                <div 
+                  className="p-4 cursor-pointer"
+                  onClick={() => setExpandedProgressNote(isExpanded ? null : note.id)}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-1">
-                        <h3 className="font-semibold text-gray-900">
-                          Session #{note.session_number}
-                        </h3>
+                        <span 
+                          className="px-3 py-1 text-white text-xs font-medium rounded-full"
+                          style={{ backgroundColor: '#21615D' }}
+                        >
+                          SESSION NOTE
+                        </span>
                         <span className="text-sm text-gray-500">
-                          {new Date(note.session_date).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric'
-                          })}
+                          {formatHeaderDate(note.session_date)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-gray-500">
-                        <span>Mode: {note.session_mode}</span>
-                        <span>•</span>
-                        <span className={`px-2 py-0.5 rounded-full ${getRiskColor(note.risk_level)}`}>
-                          {getRiskIcon(note.risk_level)} Risk: {note.risk_level || 'None'}
-                        </span>
+                      <div className="text-sm text-gray-500 mt-2">
+                        {note.session_date}
                       </div>
                     </div>
-                    <ChevronRight size={20} className="text-gray-400" />
+                    {isExpanded ? (
+                      <ChevronDown size={20} style={{ color: '#21615D' }} />
+                    ) : (
+                      <ChevronRight size={20} style={{ color: '#21615D' }} />
+                    )}
                   </div>
 
-                  <div className="space-y-2">
+                  {!isExpanded && note.client_report && (
                     <div>
-                      <span className="text-xs font-medium text-gray-500">Subjective:</span>
+                      <span className="text-xs font-medium" style={{ color: '#21615D' }}>Subjective:</span>
                       <p className="text-sm text-gray-700 line-clamp-2 mt-0.5">
-                        {note.client_report || 'No report available'}
+                        {note.client_report}
                       </p>
                     </div>
-                    <div>
-                      <span className="text-xs font-medium text-gray-500">Interventions:</span>
-                      <p className="text-sm text-gray-700 line-clamp-1 mt-0.5">
-                        {note.techniques_used || 'No interventions recorded'}
-                      </p>
-                    </div>
-                  </div>
+                  )}
                 </div>
+
+                {/* Expanded Content */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 space-y-5 border-t" style={{ borderColor: '#21615D' }}>
+
+                    {/* ───── Session Info ───── */}
+                    <div className="pt-4">
+                      <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Session Details</p>
+                      <div className="flex flex-wrap gap-4 text-sm text-gray-700">
+                        <span><strong>#</strong> {note.session_number}</span>
+                        <span>•</span>
+                        {note.session_duration && <span><strong>Duration:</strong> {note.session_duration} mins</span>}
+                        {note.session_mode && <span><strong>Mode:</strong> {note.session_mode}</span>}
+                        {note.session_frequency && <span><strong>Frequency:</strong> {note.session_frequency}</span>}
+                      </div>
+                    </div>
+
+                    {/* ───── Clinical Notes (S.O.A.P approximation) ───── */}
+                    <div className="space-y-4">
+                      <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Clinical Narrative</p>
+
+                      {note.client_report && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Subjective Report:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.client_report}</p>
+                        </div>
+                      )}
+                      
+                      {note.direct_quotes && (
+                        <div className="bg-gray-50 p-3 rounded italic border-l-4 border-teal-500">
+                           <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Direct Quotes:</span>
+                           <p className="text-sm text-gray-600 mt-1">"{note.direct_quotes}"</p>
+                        </div>
+                      )}
+
+                      {note.client_presentation && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Clinical Presentation:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.client_presentation}</p>
+                          {note.presentation_tags && note.presentation_tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {note.presentation_tags.map((tag: string, i: number) => (
+                                <span key={i} className="px-2 py-0.5 bg-teal-50 text-teal-700 text-[10px] rounded border border-teal-100">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {note.techniques_used && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Interventions / Techniques:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.techniques_used}</p>
+                        </div>
+                      )}
+
+                      {note.engagement_notes && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Engagement & Participation:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.engagement_notes}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ───── Progress & Observations ───── */}
+                    <div className="space-y-4 pt-2">
+                       <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Analysis & Progress</p>
+                       
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {note.themes_patterns && (
+                            <div>
+                              <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Themes & Patterns:</span>
+                              <p className="text-sm text-gray-800 mt-1">{note.themes_patterns}</p>
+                            </div>
+                          )}
+                           {note.clinical_concerns && (
+                            <div>
+                              <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Clinical Concerns:</span>
+                              <p className="text-sm text-gray-800 mt-1">{note.clinical_concerns}</p>
+                            </div>
+                          )}
+                       </div>
+
+                       {note.progress_regression && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Overall Progress:</span>
+                          <p className="text-sm text-gray-800 mt-1">{note.progress_regression}</p>
+                        </div>
+                       )}
+                    </div>
+
+                    {/* ───── Risk & Safety (Highlighted similar to old system) ───── */}
+                    <div className="space-y-3 bg-red-50 rounded-lg p-3 border border-red-200">
+                      <p className="text-xs font-bold uppercase tracking-wider text-red-500">Risk Assessment</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-xs font-semibold text-red-700">Current Risk Level:</span>
+                          <p className="text-sm text-gray-800 mt-1 font-medium capitalize">{note.risk_level || 'None'}</p>
+                        </div>
+                        {note.self_harm_mention && (
+                          <div>
+                            <span className="text-xs font-semibold text-red-700">Self-Harm Mention:</span>
+                            <p className="text-sm text-gray-800 mt-1">{note.self_harm_mention}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {note.self_harm_details && (
+                        <div className="mt-2 text-sm text-gray-800 pl-2 border-l-2 border-red-300 italic">
+                          {note.self_harm_details}
+                        </div>
+                      )}
+
+                      {(note.risk_factors || note.protective_factors || note.safety_plan) && (
+                        <div className="mt-2 space-y-2 pt-2 border-t border-red-100">
+                           {note.risk_factors && (
+                            <div>
+                              <span className="text-xs font-semibold text-red-600">Risk Factors:</span>
+                              <p className="text-sm text-gray-700">{note.risk_factors}</p>
+                            </div>
+                           )}
+                           {note.protective_factors && (
+                            <div>
+                              <span className="text-xs font-semibold text-red-600">Protective Factors:</span>
+                              <p className="text-sm text-gray-700">{note.protective_factors}</p>
+                            </div>
+                           )}
+                           {note.safety_plan && (
+                            <div className="bg-white p-2 rounded border border-red-100">
+                              <span className="text-xs font-bold text-red-600">Safety Plan:</span>
+                              <p className="text-sm text-gray-800">{note.safety_plan}</p>
+                            </div>
+                           )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ───── Plan & Therapy ───── */}
+                    <div className="space-y-4 pt-2">
+                       <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Treatment Planning</p>
+                       
+                       {note.homework_assigned && (
+                        <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Assigned Homework:</span>
+                          <p className="text-sm text-gray-800 mt-1">{note.homework_assigned}</p>
+                        </div>
+                       )}
+
+                       {note.future_interventions && (
+                         <div>
+                          <span className="text-xs font-semibold" style={{ color: '#21615D' }}>Future Interventions:</span>
+                          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{note.future_interventions}</p>
+                        </div>
+                       )}
+                    </div>
+
+                  </div>
+                )}
               </div>
             );
           }

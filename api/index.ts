@@ -697,7 +697,7 @@ app.get('/api/leads', async (req, res) => {
                 ptcf.consultation_outcome
             FROM leads
             LEFT JOIN users sales ON leads.sales_agent_id::text = sales.id::text
-            LEFT JOIN users therapists ON leads.therapist_id::text = therapists.id::text
+            LEFT JOIN users therapists ON (leads.therapist_id::text = therapists.id::text OR leads.therapist_id::text = therapists.therapist_id::text)
             LEFT JOIN (
                 SELECT DISTINCT ON (lead_id) lead_id, consultation_outcome 
                 FROM pretherapy_call_forms 
@@ -723,7 +723,7 @@ app.get('/api/leads/:id', async (req, res) => {
                 COALESCE(therapists.full_name, therapists.name) as therapist_name
             FROM leads
             LEFT JOIN users sales ON leads.sales_agent_id::text = sales.id::text
-            LEFT JOIN users therapists ON leads.therapist_id::text = therapists.id::text
+            LEFT JOIN users therapists ON (leads.therapist_id::text = therapists.id::text OR leads.therapist_id::text = therapists.therapist_id::text)
             WHERE leads.id::text = $1
         `;
         const result = await pool.query(query, [id]);
@@ -1734,7 +1734,8 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_resource_name as therapy_type,
             booking_mode as mode,
             booking_host_name as therapist_name,
-            booking_invitee_time
+            booking_invitee_time,
+            booking_id
           FROM bookings
           WHERE booking_status NOT IN ($1, $2)
             AND booking_start_at BETWEEN $3 AND $4
@@ -1750,7 +1751,8 @@ app.get('/api/dashboard/bookings', async (req, res) => {
             booking_resource_name as therapy_type,
             booking_mode as mode,
             booking_host_name as therapist_name,
-            booking_invitee_time
+            booking_invitee_time,
+            booking_id
           FROM bookings
           WHERE booking_status NOT IN ($1, $2, $3, $4)
           ORDER BY booking_start_at ASC`,
@@ -3989,63 +3991,65 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
       const inviteePhone = booking.invitee_phone ? booking.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : '';
       const inviteeEmail = booking.invitee_email ? booking.invitee_email.toLowerCase().trim() : '';
 
-      if (inviteePhone || inviteeEmail) {
-        // Determine if it's a Free Consultation
-        const isFreeConsultation = (booking.booking_resource_name || '').toLowerCase().includes('free consultation') || 
-                                   parseFloat(booking.invitee_payment_amount || '0') === 0;
+        if (inviteePhone || inviteeEmail) {
+          // Determine if it's a Free Consultation
+          const isFreeConsultation = (booking.booking_resource_name || '').toLowerCase().includes('free consultation') || 
+                                     (booking.booking_resource_name || '').toLowerCase().includes('pre-therapy') ||
+                                     parseFloat(booking.invitee_payment_amount || '0') === 0;
 
-        // Find matching lead - normalizing phone for comparison
-        const leadResult = await pool.query(
-          `SELECT id, name, pipeline_stage FROM leads 
-           WHERE (RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10) = RIGHT($1, 10) 
-              OR LOWER(TRIM(email)) = $2)
-           ORDER BY created_at DESC LIMIT 1`,
-          [inviteePhone, inviteeEmail]
-        );
+          // Find matching lead - normalizing phone for comparison
+          const leadResult = await pool.query(
+            `SELECT id, name, pipeline_stage FROM leads 
+             WHERE (RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10) = RIGHT($1, 10) 
+                OR LOWER(TRIM(email)) = $2)
+             ORDER BY created_at DESC LIMIT 1`,
+            [inviteePhone, inviteeEmail]
+          );
 
-        if (leadResult.rows.length > 0) {
-          const lead = leadResult.rows[0];
-          const currentStage = lead.pipeline_stage;
-          
-          let targetStage = null;
-          let timestampColumn = null;
+          if (leadResult.rows.length > 0) {
+            const lead = leadResult.rows[0];
+            const currentStage = lead.pipeline_stage;
+            
+            let targetStage = null;
+            let timestampColumn = null;
 
-          if (isFreeConsultation) {
-            // Move to pretherapy-call if in an earlier stage
-            const earlyStages = ['lead-inquire', 'contacted', 'followup-1', 'followup-2', 'followup-3'];
-            if (earlyStages.includes(currentStage)) {
-              targetStage = 'pretherapy-call';
-              timestampColumn = 'stage_pretherapy_call_at';
+            if (isFreeConsultation) {
+              // Move to pretherapy-call if in an earlier stage
+              const earlyStages = ['lead-inquire', 'contacted', 'followup-1', 'followup-2', 'followup-3'];
+              if (earlyStages.includes(currentStage)) {
+                targetStage = 'pretherapy-call';
+                timestampColumn = 'stage_pretherapy_call_at';
+              }
+            } else {
+              // Paid session: Move to booked-first-session if in an earlier stage
+              // Inclusive of: lead-inquire, pretherapy-call, and all follow-up stages
+              const convertStages = ['lead-inquire', 'contacted', 'pretherapy-call', 'followup-1', 'followup-2', 'followup-3', 'dropouts', 'leaks'];
+              if (convertStages.includes(currentStage)) {
+                targetStage = 'booked-first-session';
+                timestampColumn = 'stage_booked_first_session_at';
+              }
+            }
+
+            if (targetStage && currentStage !== targetStage) {
+              const dateStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
+              const remark = `\n[System ${dateStr}]: Auto-moved to ${targetStage} due to booking ${booking_id} (${isFreeConsultation ? 'Free' : 'Paid'})`;
+              
+              // Assign therapist from booking (using resolved internal ID)
+              const therapistId = therapistInternalId || null;
+
+              await pool.query(
+                `UPDATE leads 
+                 SET pipeline_stage = $1, 
+                     ${timestampColumn} = CURRENT_TIMESTAMP,
+                     remark_lead_manager = COALESCE(remark_lead_manager, '') || $2,
+                     therapist_id = COALESCE($4, therapist_id),
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $3`,
+                [targetStage, remark, lead.id, therapistId]
+              );
+              console.log(`✨ [Auto-Move] Lead "${lead.name}" (${lead.id}) moved: ${currentStage} → ${targetStage} (Therapist: ${therapistId || 'N/A'})`);
             }
           } else {
-            // Paid session: Move to booked-first-session if in an earlier stage or in dropouts/leaks
-            const convertStages = ['lead-inquire', 'contacted', 'followup-1', 'followup-2', 'followup-3', 'pretherapy-call', 'dropouts', 'leaks'];
-            if (convertStages.includes(currentStage)) {
-              targetStage = 'booked-first-session';
-              timestampColumn = 'stage_booked_first_session_at';
-            }
-          }
-
-          if (targetStage) {
-            const dateStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
-            const remark = `\n[System ${dateStr}]: Auto-moved to ${targetStage} due to booking ${booking_id} (${isFreeConsultation ? 'Free' : 'Paid'})`;
-            
-            // Assign therapist from booking (using resolved internal ID)
-            const therapistId = therapistInternalId || null;
-
-            await pool.query(
-              `UPDATE leads 
-               SET pipeline_stage = $1, 
-                   ${timestampColumn} = CURRENT_TIMESTAMP,
-                   remark_lead_manager = COALESCE(remark_lead_manager, '') || $2,
-                   therapist_id = COALESCE($4, therapist_id),
-                   updated_at = CURRENT_TIMESTAMP
-               WHERE id = $3`,
-              [targetStage, remark, lead.id, therapistId]
-            );
-            console.log(`✨ [Auto-Move] Lead "${lead.name}" (${lead.id}) moved: ${currentStage} → ${targetStage} (Therapist: ${therapistId || 'N/A'})`);
-          }
-        } else {
           // --- AUTO-CREATE LEAD ---
           // If it's a Free Consultation and we have a phone, create a new lead automatically
           if (isFreeConsultation && inviteePhone) {
@@ -4667,6 +4671,37 @@ app.post('/api/session-documentation', async (req, res) => {
           future_interventions, session_frequency,
           therapist_name, therapist_signature, signature_date
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        ON CONFLICT (booking_id) DO UPDATE SET
+          client_id = EXCLUDED.client_id,
+          client_name = EXCLUDED.client_name,
+          session_number = EXCLUDED.session_number,
+          session_date = EXCLUDED.session_date,
+          session_duration = EXCLUDED.session_duration,
+          session_mode = EXCLUDED.session_mode,
+          client_report = EXCLUDED.client_report,
+          direct_quotes = EXCLUDED.direct_quotes,
+          client_presentation = EXCLUDED.client_presentation,
+          presentation_tags = EXCLUDED.presentation_tags,
+          techniques_used = EXCLUDED.techniques_used,
+          homework_assigned = EXCLUDED.homework_assigned,
+          client_reaction = EXCLUDED.client_reaction,
+          reaction_tags = EXCLUDED.reaction_tags,
+          engagement_notes = EXCLUDED.engagement_notes,
+          themes_patterns = EXCLUDED.themes_patterns,
+          progress_regression = EXCLUDED.progress_regression,
+          clinical_concerns = EXCLUDED.clinical_concerns,
+          self_harm_mention = EXCLUDED.self_harm_mention,
+          self_harm_details = EXCLUDED.self_harm_details,
+          risk_level = EXCLUDED.risk_level,
+          risk_factors = EXCLUDED.risk_factors,
+          protective_factors = EXCLUDED.protective_factors,
+          safety_plan = EXCLUDED.safety_plan,
+          future_interventions = EXCLUDED.future_interventions,
+          session_frequency = EXCLUDED.session_frequency,
+          therapist_name = EXCLUDED.therapist_name,
+          therapist_signature = EXCLUDED.therapist_signature,
+          signature_date = EXCLUDED.signature_date,
+          updated_at = NOW()
       `, [
         client_id, client_name, booking_id,
         progress_notes.session_number, progress_notes.session_date,
@@ -4687,15 +4722,19 @@ app.post('/api/session-documentation', async (req, res) => {
     if (therapy_goals) {
       await pool.query(`
         INSERT INTO client_therapy_goals (
-          client_id, client_name, goal_description, current_stage, initiation_date
-        ) VALUES ($1, $2, $3, $4, $5)
+          client_id, client_name, goal_description, current_stage, initiation_date, is_active
+        ) VALUES ($1, $2, $3, $4, $5, true)
+        ON CONFLICT (client_id, goal_description) DO UPDATE 
+        SET current_stage = EXCLUDED.current_stage,
+            updated_at = NOW(),
+            is_active = true
       `, [
         client_id, client_name,
         therapy_goals.goal_description,
         therapy_goals.current_stage || 'Initiation',
         new Date()
       ]);
-      console.log('✅ Therapy goals stored');
+      console.log('✅ Therapy goals stored/updated');
     }
 
     res.json({ success: true, message: 'Session documentation stored successfully' });
@@ -4766,10 +4805,13 @@ app.get('/api/progress-notes', async (req, res) => {
 
     // Fetch from client_progress_notes (new system)
     const progressNotesResult = await pool.query(
-      `SELECT id, session_number, session_date, session_mode, risk_level,
-              client_report, techniques_used, created_at, 'progress_note' as note_type
+      `SELECT *, 'progress_note' as note_type
        FROM client_progress_notes 
        WHERE client_id = $1 
+          OR booking_id IN (
+            SELECT booking_id FROM bookings 
+            WHERE invitee_email = $1 OR invitee_phone = $1
+          )
        ORDER BY session_date DESC`,
       [client_id]
     );
@@ -4847,12 +4889,45 @@ app.get('/api/therapy-goals', async (req, res) => {
       return res.status(400).json({ error: 'client_id is required' });
     }
 
+    console.log(`🔍 [API] therapy-goals fetching for client_id: "${client_id}"`);
+    
+    // First, find all unique names associated with this phone or email from bookings
+    const associatedNamesRes = await pool.query(
+      `SELECT DISTINCT TRIM(invitee_name) as name FROM bookings WHERE invitee_phone = $1 OR invitee_email = $1`,
+      [client_id]
+    );
+    const associatedNames = associatedNamesRes.rows.map(r => r.name);
+    console.log(`📋 [API] Associated names for ${client_id}:`, associatedNames);
+
     const result = await pool.query(
       `SELECT * FROM client_therapy_goals 
-       WHERE client_id = $1 AND is_active = true
+       WHERE (
+         client_id = $1 
+         OR EXISTS (
+           SELECT 1 FROM bookings 
+           WHERE (invitee_phone = $1 OR invitee_email = $1)
+             AND (
+               TRIM(invitee_name) ILIKE '%' || TRIM(client_therapy_goals.client_name) || '%'
+               OR TRIM(client_therapy_goals.client_name) ILIKE '%' || TRIM(invitee_name) || '%'
+             )
+         )
+       ) AND is_active = true
        ORDER BY created_at DESC`,
       [client_id]
     );
+    console.log(`🎯 [API] Found ${result.rows.length} goals for ${client_id}`);
+    if (result.rows.length === 0) {
+      console.warn(`⚠️ [API] No goals found for ${client_id}. Checking for records matching names directly...`);
+      // Final fallback if no booking exists yet
+      if (associatedNames.length > 0) {
+        const nameMatchResult = await pool.query(
+          `SELECT * FROM client_therapy_goals WHERE TRIM(client_name) ILIKE ANY ($1) AND is_active = true`,
+          [associatedNames.map(n => `%${n}%`)]
+        );
+        console.log(`🔄 [API] Name-only fallback found ${nameMatchResult.rows.length} goals`);
+        return res.json({ success: true, data: nameMatchResult.rows });
+      }
+    }
 
     res.json({ success: true, data: result.rows });
   } catch (error) {

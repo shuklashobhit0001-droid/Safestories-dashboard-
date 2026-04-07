@@ -404,43 +404,44 @@ const PipelineContent = ({ currentUser, setCurrentPage }: PipelineContentProps) 
                 </div>
 
                 <div className="column-content">
-                  {stage.leads.length === 0 ? (
-                    <div className="empty-state"><p>No leads</p></div>
-                  ) : (
-                    (() => {
-                      const filteredLeads = stage.leads.filter(lead => {
-                        const term = (stageSearch[stage.id] || '').toLowerCase()
-                        if (!term) return true
-                        return lead.name.toLowerCase().includes(term) ||
-                               lead.phone.includes(term)
-                      })
-                      
-                      if (filteredLeads.length === 0) {
-                        return <div className="empty-state"><p>No results</p></div>
-                      }
+                  {(() => {
+                    const filteredLeads = stage.leads.filter(lead => {
+                      const term = (stageSearch[stage.id] || '').toLowerCase()
+                      if (!term) return true
+                      return lead.name.toLowerCase().includes(term) ||
+                             lead.phone.includes(term)
+                    })
+                    
+                    if (stage.leads.length === 0) {
+                      return <div className="empty-state"><p>No leads</p></div>
+                    }
+                    
+                    if (filteredLeads.length === 0) {
+                      return <div className="empty-state"><p>No results</p></div>
+                    }
 
-                      return filteredLeads.map(lead => {
-                        const canAct = canActOnLead(lead)
-                        return (
-                          <div
-                            key={lead.id}
-                            className={`lead-card ${!canAct ? 'view-only' : ''} ${editingSalesAssignment === lead.id ? 'active-dropdown' : ''} ${stage.id === 'dropouts' ? 'unresponsive-card' : ''}`}
-                            draggable={canAct}
-                            onDragStart={(e) => {
-                              e.stopPropagation()
-                              handleDragStart(lead, stage.id)
-                            }}
-                            onDragEnd={handleDragEnd}
+                    return filteredLeads.map(lead => {
+                      const canAct = canActOnLead(lead)
+                      return (
+                        <div
+                          key={lead.id}
+                          className={`lead-card ${!canAct ? 'view-only' : ''} ${editingSalesAssignment === lead.id ? 'active-dropdown' : ''} ${stage.id === 'dropouts' ? 'unresponsive-card' : ''}`}
+                          draggable={canAct}
+                          onDragStart={(e) => {
+                            e.stopPropagation()
+                            handleDragStart(lead, stage.id)
+                          }}
+                          onDragEnd={handleDragEnd}
+                        >
+                        <div className="lead-card-header">
+                          <h4
+                            className="lead-name text-teal-700 hover:underline cursor-pointer"
+                            onClick={() => setCurrentPage && setCurrentPage(`lead-profile:${lead.id}`)}
                           >
-                          <div className="lead-card-header">
-                            <h4
-                              className="lead-name text-teal-700 hover:underline cursor-pointer"
-                              onClick={() => setCurrentPage && setCurrentPage(`lead-profile:${lead.id}`)}
-                            >
-                              {lead.name}
-                            </h4>
-                            <span className="lead-source">{lead.source}</span>
-                          </div>
+                            {lead.name}
+                          </h4>
+                          <span className="lead-source">{lead.source}</span>
+                        </div>
 
                           {lead.tags && (
                             <div className="lead-tags-container" style={{ marginBottom: 10 }}>
@@ -548,56 +549,7 @@ const PipelineContent = ({ currentUser, setCurrentPage }: PipelineContentProps) 
                               </div>
                             </div>
 
-                            <div className="lead-assignment">
-                              <div className="assignment-label">Lead Manager:</div>
-                              {editingSalesAssignment === lead.id ? (
-                                <div className="custom-dropdown w-full compact" ref={dropdownRef}>
-                                  <button
-                                    type="button"
-                                    className="dropdown-trigger w-full compact"
-                                  >
-                                    <span>{lead.assignedToSales}</span>
-                                    <svg className="dropdown-arrow open" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                      <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                  </button>
-                                  <div className="dropdown-menu w-full" style={{ left: 0, top: '100%', position: 'absolute', zIndex: 100 }}>
-                                    <div className={`dropdown-item ${!lead.sales_agent_id || lead.sales_agent_id === 'null' ? 'selected' : ''}`} onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleSalesAssignment(lead.id, stage.id, null, 'Unassigned')
-                                    }}>Unassigned</div>
-                                    {leadManagers.map(user => (
-                                      <div
-                                        key={user.id}
-                                        className={`dropdown-item ${lead.assignedToSales === user.name ? 'selected' : ''}`}
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleSalesAssignment(lead.id, stage.id, user.id, user.name)
-                                        }}
-                                      >
-                                        {user.name}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div
-                                  className="assignment-value"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    canAct && setEditingSalesAssignment(lead.id)
-                                  }}
-                                >
-                                  {lead.assignedToSales}
-                                  {canAct && (
-                                    <svg className="edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                    </svg>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+
 
                             {isPostPreTherapy(stage.id) && lead.assignedTherapist && (
                               <div className="lead-assignment">
@@ -674,7 +626,7 @@ const PipelineContent = ({ currentUser, setCurrentPage }: PipelineContentProps) 
                         </div>
                       )
                     })
-                  })())}
+                  })()}
                 </div>
               </div>
             ))}
