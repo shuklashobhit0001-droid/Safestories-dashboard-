@@ -28,7 +28,7 @@ const TEAL = BRAND_COLOR; // Keeping alias for backwards compatibility within fi
 const RadioGroup = ({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) => (
   <div className="flex flex-col gap-3">
     {options.map(opt => (
-      <label 
+      <div 
         key={opt} 
         onClick={() => onChange(opt)}
         className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer transition-all ${value === opt ? 'bg-[#21615d] border-[#21615d]' : 'border-gray-100 bg-gray-50/50 hover:bg-gray-100'}`}
@@ -37,7 +37,7 @@ const RadioGroup = ({ options, value, onChange }: { options: string[]; value: st
         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${value === opt ? 'border-white' : 'border-gray-300'}`}>
           {value === opt && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
         </div>
-      </label>
+      </div>
     ))}
   </div>
 );
@@ -45,7 +45,7 @@ const RadioGroup = ({ options, value, onChange }: { options: string[]; value: st
 const RadioGrid = ({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) => (
   <div className="grid grid-cols-3 gap-2">
     {options.map(opt => (
-      <label 
+      <div 
         key={opt} 
         onClick={() => onChange(opt)}
         className={`flex items-center justify-between px-4 py-3 rounded-xl border cursor-pointer transition-all ${value === opt ? 'bg-[#21615d] border-[#21615d]' : 'border-gray-100 bg-gray-50/50 hover:bg-gray-100'}`}
@@ -54,7 +54,7 @@ const RadioGrid = ({ options, value, onChange }: { options: string[]; value: str
         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${value === opt ? 'border-white' : 'border-gray-300'}`}>
           {value === opt && <div className="w-2 h-2 rounded-full bg-white" />}
         </div>
-      </label>
+      </div>
     ))}
   </div>
 );
@@ -67,12 +67,12 @@ const MultiSelectGrid = ({ options, values, onChange }: { options: string[]; val
   return (
     <div className="grid grid-cols-2 gap-2">
       {options.map(opt => (
-        <label key={opt} className={`flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer transition-colors ${values.includes(opt) ? 'border-[#21615D] bg-[#21615D]/10' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
+        <div key={opt} onClick={() => toggle(opt)} className={`flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer transition-colors ${values.includes(opt) ? 'border-[#21615D] bg-[#21615D]/10' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
           <span className="text-sm text-black">{opt}</span>
           <div className={`w-4 h-4 rounded border flex items-center justify-center ${values.includes(opt) ? 'bg-[#21615D] border-[#21615D]' : 'border-gray-300'}`}>
             {values.includes(opt) && <Check size={10} color="white" strokeWidth={3} />}
           </div>
-        </label>
+        </div>
       ))}
     </div>
   );
@@ -132,6 +132,15 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
   // Step 1 - Session Type & Status
   const [sessionType, setSessionType] = useState('');
   const [sessionStatus, setSessionStatus] = useState('');
+
+  // Auto-select session type based on session number
+  useEffect(() => {
+    if (sessionInfo.sessionNumber === 1) {
+      setSessionType('First Session');
+    } else if (sessionInfo.sessionNumber > 1) {
+      setSessionType('Follow-up Session');
+    }
+  }, [sessionInfo.sessionNumber]);
 
   // Derived — reactive to therapist's selection
   const isFirstSession = sessionType !== 'Follow-up Session'; // default to first session flow

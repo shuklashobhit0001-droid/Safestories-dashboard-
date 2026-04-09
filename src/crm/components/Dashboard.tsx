@@ -29,6 +29,7 @@ const Dashboard = ({ currentPage, setCurrentPage, currentUser, onLogout }: Dashb
           <LeadProfile
             leadId={currentPage.split(':')[1]}
             onBack={() => setCurrentPage('leads')}
+            setCurrentPage={setCurrentPage}
             currentUser={currentUser}
           />
         )}

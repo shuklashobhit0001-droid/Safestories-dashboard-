@@ -715,6 +715,55 @@ app.get('/api/leads', async (req, res) => {
 
 app.get('/api/leads/:id', async (req, res) => {
     const { id } = req.params;
+
+    // Handle virtual profiles for clients not yet in leads table
+    if (id && id.startsWith('temp:')) {
+        const identifier = id.split(':')[1];
+        console.log(`[DEBUG] Received request for virtual profile (Vercel). Identifier: ${identifier}`);
+
+        try {
+            const isNumeric = /^\d+$/.test(identifier);
+            const rowIdSearch = isNumeric ? `OR booking_id = $1` : ''; 
+
+            const result = await pool.query(`
+                SELECT 
+                    invitee_name as name,
+                    invitee_phone as phone,
+                    invitee_email as email,
+                    booking_host_name as therapist_name,
+                    booking_start_at as created_at,
+                    invitee_question as client_remark
+                FROM bookings
+                WHERE invitee_id = $1 
+                   OR invitee_phone = $1 
+                   OR invitee_email = $1
+                   OR RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(invitee_phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10) = RIGHT($1, 10)
+                   ${rowIdSearch}
+                ORDER BY booking_start_at DESC
+                LIMIT 1
+            `, [identifier]);
+
+            console.log(`[DEBUG] Virtual profile search result (Vercel): ${result.rows.length} rows found.`);
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({ error: 'Client not found in bookings' });
+            }
+
+            const client = result.rows[0];
+            return res.json({
+                ...client,
+                id: id,
+                is_virtual: true,
+                pipeline_stage: 'lead-inquire',
+                status: 'Booking Only',
+                source: 'Booking System'
+            });
+        } catch (err) {
+            console.error('Error fetching virtual lead:', err);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
     try {
         const query = `
             SELECT 
@@ -759,6 +808,29 @@ app.get('/api/leads/:id', async (req, res) => {
     } catch (err) {
         console.error('Error fetching lead:', err);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Convert virtual profile to a real lead
+app.post('/api/leads/convert-virtual', async (req, res) => {
+    const { name, phone, email, source } = req.body;
+    try {
+        // Check if lead already exists by phone or email
+        const exists = await pool.query('SELECT id FROM leads WHERE phone = $1 OR email = $2', [phone, email]);
+        if (exists.rows.length > 0) {
+            return res.json(exists.rows[0]);
+        }
+
+        const result = await pool.query(`
+            INSERT INTO leads (name, phone, email, source, status, pipeline_stage, created_at)
+            VALUES ($1, $2, $3, $4, 'New', 'lead-inquire', NOW())
+            RETURNING *
+        `, [name, phone, email, source || 'Booking System']);
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('Error converting virtual lead:', err);
+        res.status(500).json({ error: 'Failed to create lead record' });
     }
 });
 
@@ -1858,6 +1930,7 @@ app.get('/api/clients', async (req, res) => {
     
     const result = await pool.query(`
       SELECT 
+        invitee_id,
         invitee_name,
         invitee_phone,
         invitee_email,
@@ -1875,6 +1948,17 @@ app.get('/api/clients', async (req, res) => {
       FROM bookings
       ORDER BY invitee_created_at DESC
     `);
+
+    // Fetch leads for matching
+    const leadsRes = await pool.query(`SELECT id, phone, email FROM leads`);
+    const leadMaps = {
+      phone: new Map(),
+      email: new Map()
+    };
+    leadsRes.rows.forEach(l => {
+      if (l.phone) leadMaps.phone.set(l.phone.replace(/[\s\-\(\)\+]/g, ''), l.id);
+      if (l.email) leadMaps.email.set(l.email.toLowerCase().trim(), l.id);
+    });
 
     // Group by phone (primary) or email (fallback) - phone is more reliable
     const clientMap = new Map();
@@ -1906,9 +1990,11 @@ app.get('/api/clients', async (req, res) => {
 
       if (!clientMap.has(key)) {
         clientMap.set(key, {
+          invitee_id: row.invitee_id,
           invitee_name: row.invitee_name,
           invitee_phone: row.invitee_phone,
           invitee_email: row.invitee_email,
+          lead_id: leadMaps.phone.get(phone) || leadMaps.email.get(email) || null,
           session_count: 0,
           booking_host_name: row.booking_host_name,
           booking_resource_name: row.booking_resource_name,
@@ -4829,6 +4915,13 @@ app.post('/api/session-documentation', async (req, res) => {
       ]);
       console.log('✅ Therapy goals stored/updated');
     }
+
+    // Update documentation form status and data
+    await pool.query(`
+      UPDATE client_doc_form 
+      SET form_data = $1, status = 'completed'
+      WHERE booking_id = $2
+    `, [JSON.stringify(req.body), booking_id]);
 
     res.json({ success: true, message: 'Session documentation stored successfully' });
   } catch (error) {

@@ -5,12 +5,14 @@ import { Loader } from '../../../components/Loader';
 import { Toast } from '../../../components/Toast';
 
 interface Client {
+  invitee_id: string;
   invitee_name: string;
   invitee_phone: string;
   invitee_email: string;
   booking_host_name: string;
   session_count: number;
   latest_booking_date?: string;
+  lead_id?: string | number | null;
 }
 
 interface PreTherapyBookingsProps {
@@ -168,7 +170,24 @@ const PreTherapyBookings: React.FC<PreTherapyBookingsProps> = ({ currentUser, se
                   paginatedClients.map((client, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                        {formatClientName(client.invitee_name)}
+                        <button 
+                          onClick={() => {
+                            const navigateId = client.lead_id || `temp:${client.invitee_id || client.invitee_phone || client.invitee_email || 'unknown'}`;
+                            console.log('[DEBUG] Navigating to Pre-Therapy Client Profile:', { 
+                              client_name: client.invitee_name, 
+                              lead_id: client.lead_id, 
+                              invitee_id: client.invitee_id,
+                              phone: client.invitee_phone,
+                              email: client.invitee_email,
+                              navigateId 
+                            });
+                            setCurrentPage?.(`lead-profile:${navigateId}`);
+                          }}
+                          className="text-teal-600 hover:text-teal-700 hover:underline cursor-pointer transition-colors text-left font-bold"
+                          title={client.lead_id ? "View Lead Profile" : "View Booking Details"}
+                        >
+                          {formatClientName(client.invitee_name)}
+                        </button>
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <div className="text-gray-900">{client.invitee_phone}</div>

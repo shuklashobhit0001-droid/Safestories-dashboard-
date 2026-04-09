@@ -56,11 +56,13 @@ interface Lead {
     age?: number
     city?: string
     preferred_mode_of_session?: string
+    is_virtual?: boolean
 }
 
 interface LeadProfileProps {
     leadId: string
     onBack: () => void
+    setCurrentPage?: (page: string) => void
     currentUser?: any
 }
 
@@ -209,7 +211,7 @@ const StageRemarkCard = ({ stage, lead, isGeneral = false, canAct = false }: { s
     )
 }
 
-const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
+const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser }: LeadProfileProps) => {
     const [lead, setLead] = useState<Lead | null>(null)
     const [loading, setLoading] = useState(true)
     const [isEditing, setIsEditing] = useState(false)
@@ -265,6 +267,44 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
+
+    const handleConvertToLead = async () => {
+        if (!lead) return;
+        setToast({ message: 'Adding client to CRM...', type: 'success' });
+        try {
+            const res = await fetch('/api/leads/convert-virtual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: lead.name,
+                    phone: lead.phone,
+                    email: lead.email,
+                    source: 'Booking System'
+                })
+            });
+            if (res.ok) {
+                const newLead = await res.json();
+                setToast({ message: 'Client added to CRM successfully!', type: 'success' });
+                
+                // Update the global navigation state so the URL/page reflects the new real ID
+                if (setCurrentPage) {
+                    setCurrentPage(`lead-profile:${newLead.id}`);
+                }
+
+                // Fetch the real lead record to update local state immediately
+                const realLeadRes = await fetch(`/api/leads/${newLead.id}`);
+                if (realLeadRes.ok) {
+                    const realLeadData = await realLeadRes.json();
+                    setLead(realLeadData);
+                }
+            } else {
+                setToast({ message: 'Failed to add to CRM.', type: 'error' });
+            }
+        } catch (error) {
+            console.error('Conversion failed', error);
+            setToast({ message: 'Error adding to CRM.', type: 'error' });
+        }
+    };
 
     useEffect(() => {
         const fetchAllData = async () => {
@@ -445,12 +485,30 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                             <path d="M12 19l-7-7 7-7" />
                         </svg>
                     </button>
-                    <h1 className="lp-name">{lead.name}</h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <h1 className="lp-name">{lead.name}</h1>
+                        {lead.is_virtual && (
+                            <span className="lp-virtual-badge" style={{ background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', border: '1px solid #fde68a' }}>
+                                Temporary Profile
+                            </span>
+                        )}
+                    </div>
                     <span className="lp-status-badge active">
-                        {STAGES.find(s => s.id === lead.pipeline_stage)?.label || (lead.pipeline_stage ? lead.pipeline_stage.toUpperCase() : 'NEW')}
+                        {lead.is_virtual ? 'NOT IN CRM' : (STAGES.find(s => s.id === lead.pipeline_stage)?.label || (lead.pipeline_stage ? lead.pipeline_stage.toUpperCase() : 'NEW'))}
                     </span>
                     <div className="lp-header-actions" ref={dropdownRef}>
-                        {canAct && !isEditing && (
+                        {lead.is_virtual && (
+                            <button 
+                                className="lp-convert-btn" 
+                                onClick={handleConvertToLead}
+                                style={{ background: '#0f766e', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}
+                                onMouseOver={(e) => e.currentTarget.style.background = '#0d9488'}
+                                onMouseOut={(e) => e.currentTarget.style.background = '#0f766e'}
+                            >
+                                Add to CRM Pipeline
+                            </button>
+                        )}
+                        {canAct && !isEditing && !lead.is_virtual && (
                             <div className="lp-more-dropdown-container">
                                 <button 
                                     className="lp-more-btn"
