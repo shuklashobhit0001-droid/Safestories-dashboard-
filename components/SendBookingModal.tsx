@@ -415,7 +415,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
         if (result.warning) {
           setToast({ message: `${result.message} (${result.warning})`, type: 'success' });
         } else {
-          setToast({ message: 'Follow up session link sent to client successfully!', type: 'success' });
+          setToast({ message: 'Booking link sent to client successfully!', type: 'success' });
         }
         setClientName('');
         setClientWhatsapp('');
@@ -427,7 +427,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
           onClose();
         }, 2000);
       } else {
-        setToast({ message: 'Failed to send follow up session link', type: 'error' });
+        setToast({ message: 'Failed to send booking link', type: 'error' });
         setShowConfirmModal(false);
       }
     } catch (error) {
@@ -446,7 +446,7 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Send size={24} />
-            <h2 className="text-2xl font-bold">Send follow up session link</h2>
+            <h2 className="text-2xl font-bold">Send booking link</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={24} />
@@ -655,9 +655,9 @@ export const SendBookingModal: React.FC<SendBookingModalProps> = ({ isOpen, onCl
       {showConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Send follow up session link</h3>
+            <h3 className="text-xl font-bold mb-4">Send booking link</h3>
             <p className="text-gray-600 mb-6">
-              This will send a follow up session link to <span className="font-semibold">{clientName}</span> on WhatsApp. Would you like to proceed?
+              This will send a booking link to <span className="font-semibold">{clientName}</span> on WhatsApp. Would you like to proceed?
             </p>
             <div className="flex gap-3">
               <button

@@ -8,26 +8,26 @@ interface CreatePageProps {
   onAddNewTherapist: () => void;
 }
 
-export const CreatePage: React.FC<CreatePageProps> = ({ 
-  onCreateBooking, 
+export const CreatePage: React.FC<CreatePageProps> = ({
+  onCreateBooking,
   onCreateDirectBooking,
-  onSendBookingLink, 
-  onAddNewTherapist 
+  onSendBookingLink,
+  onAddNewTherapist
 }) => {
   return (
     <div className="p-8">
       <h1 className="text-3xl font-bold mb-1">Create</h1>
       <p className="text-gray-600 mb-8">Create New Bookings, Booking Links, Send follow up session links to Clients, Add New Therapists and more...</p>
-      
+
       <div className="grid grid-cols-2 gap-6">
         {/* Create New Booking Card */}
-        <div 
+        <div
           onClick={onCreateDirectBooking}
           className="bg-white rounded-lg border-2 p-6 cursor-pointer hover:shadow-lg transition-shadow"
           style={{ borderColor: '#21615D' }}
         >
           <div className="flex items-center gap-3 mb-4">
-            <div 
+            <div
               className="w-12 h-12 rounded-lg flex items-center justify-center"
               style={{ backgroundColor: '#21615D' }}
             >
@@ -36,19 +36,19 @@ export const CreatePage: React.FC<CreatePageProps> = ({
             <h2 className="text-xl font-bold" style={{ color: '#21615D' }}>Create new booking</h2>
           </div>
           <p className="text-gray-600 text-sm leading-relaxed">
-            Directly book a therapy session for a client by selecting therapy type, therapist, date, and time slot. 
+            Directly book a therapy session for a client by selecting therapy type, therapist, date, and time slot.
             No payment link will be sent to the client.
           </p>
         </div>
 
         {/* Create New Booking Link Card */}
-        <div 
+        <div
           onClick={onCreateBooking}
           className="bg-white rounded-lg border-2 p-6 cursor-pointer hover:shadow-lg transition-shadow"
           style={{ borderColor: '#21615D' }}
         >
           <div className="flex items-center gap-3 mb-4">
-            <div 
+            <div
               className="w-12 h-12 rounded-lg flex items-center justify-center"
               style={{ backgroundColor: '#21615D' }}
             >
@@ -62,13 +62,13 @@ export const CreatePage: React.FC<CreatePageProps> = ({
         </div>
 
         {/* Send follow up session link Card */}
-        <div 
+        <div
           onClick={onSendBookingLink}
           className="bg-white rounded-lg border-2 p-6 cursor-pointer hover:shadow-lg transition-shadow"
           style={{ borderColor: '#21615D' }}
         >
           <div className="flex items-center gap-3 mb-4">
-            <div 
+            <div
               className="w-12 h-12 rounded-lg flex items-center justify-center"
               style={{ backgroundColor: '#21615D' }}
             >
@@ -82,13 +82,13 @@ export const CreatePage: React.FC<CreatePageProps> = ({
         </div>
 
         {/* Add New Therapist Card */}
-        <div 
+        <div
           onClick={onAddNewTherapist}
           className="bg-white rounded-lg border-2 p-6 cursor-pointer hover:shadow-lg transition-shadow"
           style={{ borderColor: '#21615D' }}
         >
           <div className="flex items-center gap-3 mb-4">
-            <div 
+            <div
               className="w-12 h-12 rounded-lg flex items-center justify-center"
               style={{ backgroundColor: '#21615D' }}
             >

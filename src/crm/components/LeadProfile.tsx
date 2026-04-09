@@ -474,7 +474,7 @@ const LeadProfile = ({ leadId, onBack, currentUser }: LeadProfileProps) => {
                                                 setShowDropdown(false)
                                             }}
                                         >
-                                            Send follow up session link
+                                            Send booking link
                                         </button>
                                         <button 
                                             className="lp-dropdown-item" 

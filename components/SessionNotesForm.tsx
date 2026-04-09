@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { Logo } from './Logo';
 
@@ -11,6 +11,7 @@ interface SessionInfo {
   sessionDuration: string;
   therapistName: string;
   modeOfSession: string;
+  bookingStatus: string;
   sessionNumber: number;
 }
 
@@ -20,14 +21,19 @@ interface SessionNotesFormProps {
   onSubmit: (data: any) => void;
 }
 
-const TEAL = '#4A9B8F';
+const BRAND_COLOR = '#21615D';
+const TEAL = BRAND_COLOR; // Keeping alias for backwards compatibility within file
 
 // Reusable components
 const RadioGroup = ({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) => (
-  <div className="flex flex-col gap-2">
+  <div className="flex flex-col gap-3">
     {options.map(opt => (
-      <label key={opt} className={`flex items-center justify-between px-4 py-4 rounded-xl border cursor-pointer transition-colors ${value === opt ? 'border-teal-600 bg-teal-600' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
-        <span className={`text-sm ${value === opt ? 'text-white font-medium' : 'text-gray-700'}`}>{opt}</span>
+      <label 
+        key={opt} 
+        onClick={() => onChange(opt)}
+        className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer transition-all ${value === opt ? 'bg-[#21615d] border-[#21615d]' : 'border-gray-100 bg-gray-50/50 hover:bg-gray-100'}`}
+      >
+        <span className={`text-sm ${value === opt ? 'text-white font-medium' : 'text-gray-900'}`}>{opt}</span>
         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${value === opt ? 'border-white' : 'border-gray-300'}`}>
           {value === opt && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
         </div>
@@ -37,12 +43,16 @@ const RadioGroup = ({ options, value, onChange }: { options: string[]; value: st
 );
 
 const RadioGrid = ({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) => (
-  <div className="grid grid-cols-2 gap-2">
+  <div className="grid grid-cols-3 gap-2">
     {options.map(opt => (
-      <label key={opt} className={`flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer transition-colors ${value === opt ? 'border-teal-600 bg-teal-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
-        <span className="text-sm text-gray-800">{opt}</span>
-        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${value === opt ? 'border-teal-600' : 'border-gray-300'}`}>
-          {value === opt && <div className="w-2 h-2 rounded-full bg-teal-600" />}
+      <label 
+        key={opt} 
+        onClick={() => onChange(opt)}
+        className={`flex items-center justify-between px-4 py-3 rounded-xl border cursor-pointer transition-all ${value === opt ? 'bg-[#21615d] border-[#21615d]' : 'border-gray-100 bg-gray-50/50 hover:bg-gray-100'}`}
+      >
+        <span className={`text-sm ${value === opt ? 'text-white font-medium' : 'text-gray-900'}`}>{opt}</span>
+        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${value === opt ? 'border-white' : 'border-gray-300'}`}>
+          {value === opt && <div className="w-2 h-2 rounded-full bg-white" />}
         </div>
       </label>
     ))}
@@ -57,9 +67,9 @@ const MultiSelectGrid = ({ options, values, onChange }: { options: string[]; val
   return (
     <div className="grid grid-cols-2 gap-2">
       {options.map(opt => (
-        <label key={opt} className={`flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer transition-colors ${values.includes(opt) ? 'border-teal-600 bg-teal-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
-          <span className="text-sm text-gray-800">{opt}</span>
-          <div className={`w-4 h-4 rounded border flex items-center justify-center ${values.includes(opt) ? 'bg-teal-600 border-teal-600' : 'border-gray-300'}`}>
+        <label key={opt} className={`flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer transition-colors ${values.includes(opt) ? 'border-[#21615D] bg-[#21615D]/10' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
+          <span className="text-sm text-black">{opt}</span>
+          <div className={`w-4 h-4 rounded border flex items-center justify-center ${values.includes(opt) ? 'bg-[#21615D] border-[#21615D]' : 'border-gray-300'}`}>
             {values.includes(opt) && <Check size={10} color="white" strokeWidth={3} />}
           </div>
         </label>
@@ -70,37 +80,37 @@ const MultiSelectGrid = ({ options, values, onChange }: { options: string[]; val
 
 const Textarea = ({ label, hint, value, onChange, required }: { label: string; hint?: string; value: string; onChange: (v: string) => void; required?: boolean }) => (
   <div className="flex flex-col gap-1">
-    <label className="text-sm text-gray-700">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>
-    {hint && <p className="text-xs text-gray-400">{hint}</p>}
+    <label className="text-sm text-black font-semibold">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>
+    {hint && <p className="text-xs text-gray-500">{hint}</p>}
     <textarea
       value={value}
       onChange={e => onChange(e.target.value)}
       rows={3}
-      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 resize-none focus:outline-none focus:border-teal-500"
+      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-black resize-none focus:outline-none focus:border-[#21615D]"
     />
   </div>
 );
 
 const TextInput = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
   <div className="flex flex-col gap-1">
-    <label className="text-sm text-gray-700">{label}</label>
+    <label className="text-sm text-black font-semibold">{label}</label>
     <input
       type="text"
       value={value}
       onChange={e => onChange(e.target.value)}
-      className="w-full border-b border-gray-200 px-1 py-2 text-sm text-gray-800 focus:outline-none focus:border-teal-500"
+      className="w-full border-b border-gray-200 px-1 py-2 text-sm text-black focus:outline-none focus:border-[#21615D]"
     />
   </div>
 );
 
 const Toggle = ({ label, value, onChange, required }: { label: string; value: boolean | null; onChange: (v: boolean) => void; required?: boolean }) => (
   <div className="flex flex-col gap-2">
-    <label className="text-sm text-gray-700">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>
+    <label className="text-sm text-black font-semibold">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>
     <div className="grid grid-cols-2 gap-2">
       {['YES', 'NO'].map(opt => (
         <button key={opt} type="button"
           onClick={() => onChange(opt === 'YES')}
-          className={`py-3 rounded-lg text-sm font-medium transition-colors ${(opt === 'YES' ? value === true : value === false) ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          className={`py-3 rounded-lg text-sm font-medium transition-colors ${(opt === 'YES' ? value === true : value === false) ? 'bg-[#21615D] text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>
           {opt}
         </button>
       ))}
@@ -125,7 +135,7 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
 
   // Derived — reactive to therapist's selection
   const isFirstSession = sessionType !== 'Follow-up Session'; // default to first session flow
-  const totalSteps = isFirstSession ? 6 : 4;
+  const totalSteps = isFirstSession ? 5 : 4;
 
   // Step 2 - Case History (First Session only)
   const [knowAge, setKnowAge] = useState<boolean | null>(null);
@@ -249,10 +259,9 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
       </div>
       <div className="w-full max-w-lg">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Client Session Status</h2>
-        <div className="space-y-4 text-base text-gray-800">
+        <div className="space-y-4 text-base text-black">
           {[
             ['Client Name', sessionInfo.clientName, true],
-            ['Client ID', sessionInfo.clientId, false],
             ['Booking ID', sessionInfo.bookingId, true],
             ['Session Date', sessionInfo.sessionDate, false],
             ['Session Timing', sessionInfo.sessionTiming, false],
@@ -266,33 +275,24 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
             </p>
           ))}
         </div>
-        <p className="text-sm text-gray-500 italic mt-8">Proceed only if all details are correct....</p>
+        <p className="text-sm text-gray-600 italic mt-8">Proceed only if all details are correct....</p>
       </div>
     </div>
   );
 
   const renderStep1 = () => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Session Type & Status</h2>
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm space-y-5">
-          <div>
-            <p className="text-sm font-semibold text-gray-800 mb-3">Session Type <span className="text-red-500">*</span></p>
-            <RadioGroup options={['First Session', 'Follow-up Session']} value={sessionType} onChange={setSessionType} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-gray-800 mb-3">Session Status <span className="text-red-500">*</span></p>
-            <div className="grid grid-cols-3 gap-2">
-              {['Completed', 'Cancelled', 'No Show'].map(opt => (
-                <label key={opt} className={`flex items-center justify-between px-3 py-3 rounded-xl border cursor-pointer transition-colors ${sessionStatus === opt ? 'border-teal-600 bg-teal-600' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
-                  <span className={`text-sm ${sessionStatus === opt ? 'text-white' : 'text-gray-800'}`}>{opt}</span>
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${sessionStatus === opt ? 'border-white' : 'border-gray-300'}`}>
-                    {sessionStatus === opt && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
+    <div className="space-y-12 flex flex-col items-center">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 leading-tight">Session Type & Status</h2>
+      </div>
+      <div className="w-full space-y-8">
+        <div>
+          <p className="text-sm font-semibold text-black mb-4">Session Type*</p>
+          <RadioGroup options={['First Session', 'Follow-up Session']} value={sessionType} onChange={setSessionType} />
+        </div>
+        <div className="pt-8 border-t border-gray-100">
+          <p className="text-sm font-semibold text-black mb-4">Session Status*</p>
+          <RadioGrid options={['Completed', 'Cancelled', 'No Show']} value={sessionStatus} onChange={setSessionStatus} />
         </div>
       </div>
     </div>
@@ -300,11 +300,15 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
 
   const renderCaseHistory = () => (
     <div className="space-y-8">
-      <h2 className="text-xl font-semibold text-gray-900">Case History & Mental Status Examination</h2>
-      <p className="text-xs text-teal-600 font-medium -mt-4">First Session only</p>
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 leading-tight">
+          Case History & Mental Status Examination<br />
+          <span className="text-lg font-medium text-gray-600">(Static – First Session only)</span>
+        </h2>
+      </div>
 
       {/* Section 1 */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={1} title="Socio-Demographic Details" />
         <Toggle label="Do you know Age?" value={knowAge} onChange={setKnowAge} />
         {knowAge === true && (
@@ -329,7 +333,7 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
       </div>
 
       {/* Section 2 */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={2} title="Presenting Concerns (Client's Words Preferred)" />
         <Textarea label="Presenting concern(s)" value={presentingConcerns} onChange={setPresentingConcerns} />
         <Textarea label="Duration & onset" value={durationOnset} onChange={setDurationOnset} />
@@ -337,7 +341,7 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
       </div>
 
       {/* Section 3 */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={3} title="Biological & Daily Functioning" />
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -362,7 +366,7 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
       </div>
 
       {/* Section 4 */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={4} title="Family & Personal History" />
         <div>
           <p className="text-sm text-gray-700 mb-2">Family History & Genogram</p>
@@ -375,7 +379,7 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
       </div>
 
       {/* Section 5 */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={5} title="Medical & Mental Health History" />
         <Textarea label="Medical History (current/past)" value={medicalHistory} onChange={setMedicalHistory} />
         <Textarea label="Medications (current/past)" value={medications} onChange={setMedications} />
@@ -394,11 +398,13 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
 
   const renderGoalTracking = () => (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900">Goal Tracking</h2>
-        <p className="text-xs text-teal-600 font-medium">Dynamic – Updated as Needed</p>
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 leading-tight">
+          Goal Tracking<br />
+          <span className="text-lg font-medium text-gray-600">(Dynamic – Updated as Needed)</span>
+        </h2>
       </div>
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <Textarea label="Therapy goals and expectations" value={therapyGoals} onChange={setTherapyGoals} />
         <div>
           <p className="text-sm text-gray-700 mb-2">Current stage of goals</p>
@@ -410,20 +416,22 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
 
   const renderProgressNotes = () => (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900">Progress Notes</h2>
-        <p className="text-xs text-teal-600 font-medium">Dynamic – New Every Session</p>
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 leading-tight">
+          Progress Notes<br />
+          <span className="text-lg font-medium text-gray-600">(Dynamic – New Every Session)</span>
+        </h2>
       </div>
 
       {/* S - Subjective */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={1} title="Subjective (Client Report)" />
         <Textarea label="What did the client bring up today?" hint="(Reported concerns, emotions, thoughts, behaviours, narratives, goals since last session.)" value={clientReport} onChange={setClientReport} />
         <Textarea label="Direct quotes" value={directQuotes} onChange={setDirectQuotes} />
       </div>
 
       {/* O - Objective */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={2} title="Objective (Therapist Observation)" />
         <div>
           <p className="text-sm text-gray-700 mb-1">How did the client present today?</p>
@@ -437,14 +445,14 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
       </div>
 
       {/* Interventions */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={3} title="Interventions" />
         <Textarea label="What techniques, interventions or therapeutic modalities were used during the session?" hint="(e.g., CBT, narrative, grounding, psychoeducation)" value={techniquesUsed} onChange={setTechniquesUsed} required />
         <Textarea label="Homework or reflections assigned (if any)" value={homeworkAssigned} onChange={setHomeworkAssigned} />
       </div>
 
       {/* Client Response */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={4} title="Client Response" />
         <div>
           <p className="text-sm text-gray-700 mb-2">What were the client's reaction to interventions and their engagement?</p>
@@ -454,14 +462,14 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
       </div>
 
       {/* Assessment */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={5} title="Assessment (Clinical Impressions)" />
         <Textarea label="What themes and patterns did you observe as their therapist?" hint="Any progress/regression since last session?" value={themesPatterns} onChange={setThemesPatterns} />
         <Textarea label="Any clinical concerns noticed?" value={clinicalConcerns} onChange={setClinicalConcerns} />
       </div>
 
       {/* Risk Assessment */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={6} title="Risk Assessment (If Applicable)" />
         <Toggle label="Any mention of self-harm?" value={selfHarmMention} onChange={setSelfHarmMention} required />
         {selfHarmMention === true && (
@@ -474,8 +482,8 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
               {['None', 'Low', 'Moderate', 'High'].map((lvl, i) => (
                 <button key={lvl} type="button"
                   onClick={() => setRiskLevel(lvl)}
-                  className={`flex flex-col items-center gap-1 ${riskLevel === lvl ? 'text-teal-600' : 'text-gray-400'}`}>
-                  <div className={`w-4 h-4 rounded-full border-2 ${riskLevel === lvl ? 'border-teal-600 bg-teal-600' : 'border-gray-300 bg-white'}`} />
+                  className={`flex flex-col items-center gap-1 ${riskLevel === lvl ? 'text-[#21615D]' : 'text-gray-400'}`}>
+                  <div className={`w-4 h-4 rounded-full border-2 ${riskLevel === lvl ? 'border-[#21615D] bg-[#21615D]' : 'border-gray-300 bg-white'}`} />
                   <span className="text-xs">{lvl}</span>
                 </button>
               ))}
@@ -489,7 +497,7 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
       </div>
 
       {/* Plan */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="space-y-6 py-4">
         <SectionTitle number={7} title="Plan" />
         <Textarea label="Future interventions and explorations" value={futureInterventions} onChange={setFutureInterventions} />
         <div>
@@ -502,8 +510,10 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
 
   const renderDeclaration = () => (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-gray-900">Therapist Declaration</h2>
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 leading-tight">Therapist Declaration</h2>
+      </div>
+      <div className="space-y-6 py-4">
         <div>
           <p className="text-sm text-gray-700 mb-2">Therapist Signature <span className="text-red-500">*</span></p>
           <div className="border border-gray-200 rounded-lg overflow-hidden relative">
@@ -527,13 +537,13 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
           <div>
             <p className="text-sm text-gray-700 mb-1">Date <span className="text-red-500">*</span></p>
             <input type="date" value={signatureDate} onChange={e => setSignatureDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500" />
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#21615D]" />
           </div>
           <div>
             <p className="text-sm text-gray-700 mb-2">Self-declaration <span className="text-red-500">*</span></p>
-            <label className={`flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer ${selfDeclaration ? 'border-teal-600 bg-teal-50' : 'border-gray-200'}`}>
+            <label className={`flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer ${selfDeclaration ? 'border-[#21615D] bg-[#21615D]/10' : 'border-gray-200'}`}>
               <span className="text-sm text-gray-800">Documentation completed and reviewed</span>
-              <div className={`w-4 h-4 rounded border flex items-center justify-center ${selfDeclaration ? 'bg-teal-600 border-teal-600' : 'border-gray-300'}`}>
+              <div className={`w-4 h-4 rounded border flex items-center justify-center ${selfDeclaration ? 'bg-[#21615D] border-[#21615D]' : 'border-gray-300'}`}>
                 {selfDeclaration && <Check size={10} color="white" strokeWidth={3} />}
               </div>
               <input type="checkbox" className="hidden" checked={selfDeclaration} onChange={e => setSelfDeclaration(e.target.checked)} />
@@ -563,39 +573,51 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
   const isLastStep = step === totalSteps;
 
   return (
-    <div className="min-h-screen flex items-start justify-center py-8 pb-32" style={{ backgroundColor: '#e8eaed' }}>
-      {/* Main card */}
-      <div className="w-full max-w-[660px] mx-4 bg-white rounded-2xl shadow-md px-10 py-10 overflow-y-auto">
+    <div className="min-h-screen bg-white flex items-start justify-center py-8 pb-32">
+      {/* Main container with single boundary boundary */}
+      <div className="w-full max-w-[660px] mx-4 bg-white rounded-2xl border border-gray-200 px-10 py-10 overflow-y-auto">
         {getStepContent()}
       </div>
 
-      {/* Footer */}
-      <div className="fixed bottom-0 left-0 right-0 py-6 flex justify-center bg-transparent">
-        {isLastStep ? (
-          <button
-            onClick={handleSubmit}
-            className="px-10 py-3 rounded-full text-white font-medium text-sm"
-            style={{ backgroundColor: TEAL }}>
-            Submit
-          </button>
-        ) : step === 0 ? (
-          <button
-            onClick={handleNext}
-            className="px-10 py-3 rounded-full text-white flex items-center justify-center"
-            style={{ backgroundColor: TEAL }}>
-            <ArrowRight size={20} />
-          </button>
-        ) : (
-          <div className="flex rounded-full overflow-hidden shadow-sm" style={{ backgroundColor: TEAL }}>
-            <button onClick={handleBack} className="px-6 py-3 text-white hover:bg-black/10 transition-colors flex items-center">
-              <ArrowLeft size={16} />
+      {/* Footer Nav */}
+      <div className="fixed bottom-0 left-0 right-0 py-10 flex flex-col items-center gap-4 pointer-events-none">
+        <div className="w-full max-w-[660px] px-4 pointer-events-auto flex flex-col items-center gap-4">
+          {step === 0 ? (
+            <button
+              onClick={handleNext}
+              className="w-full py-4 rounded-full text-white font-semibold text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+              style={{ backgroundColor: TEAL }}>
+              Next <ArrowRight size={20} />
             </button>
-            <div className="w-px bg-white/30" />
-            <button onClick={handleNext} className="px-6 py-3 text-white hover:bg-black/10 transition-colors flex items-center">
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        )}
+          ) : isLastStep ? (
+            <div className="w-full flex flex-col items-center gap-4">
+              <button
+                onClick={handleSubmit}
+                className="w-full py-4 rounded-full text-white font-semibold text-lg shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                style={{ backgroundColor: TEAL }}>
+                Submit
+              </button>
+              <button 
+                onClick={handleBack} 
+                className="w-12 h-12 rounded-full text-white flex items-center justify-center shadow-lg transition-all active:scale-95"
+                style={{ backgroundColor: TEAL }}>
+                <ArrowLeft size={20} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex rounded-full overflow-hidden shadow-lg" style={{ backgroundColor: TEAL }}>
+              <button onClick={handleBack} className="px-8 py-4 text-white hover:bg-black/10 transition-colors border-r border-white/20">
+                <ArrowLeft size={20} />
+              </button>
+              <button 
+                onClick={handleNext}
+                disabled={step === 1 && (!sessionType || !sessionStatus)}
+                className="px-8 py-4 text-white hover:bg-black/10 transition-colors disabled:opacity-50">
+                <ArrowRight size={20} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -3621,6 +3621,85 @@ app.get('/api/paperform-link', async (req, res) => {
   }
 });
 
+// Get session info for in-app session notes form
+app.get('/api/session-notes-info', async (req, res) => {
+  try {
+    const { booking_id } = req.query;
+    if (!booking_id) return res.status(400).json({ error: 'Booking ID is required' });
+
+    const result = await pool.query(
+      `SELECT
+        b.booking_id,
+        b.invitee_name AS client_name,
+        b.invitee_email,
+        b.invitee_phone,
+        b.booking_start_at,
+        b.booking_end_at,
+        b.booking_duration,
+        COALESCE(
+          NULLIF(b.booking_mode, ''),
+          (
+            SELECT b3.booking_mode FROM bookings b3
+            WHERE (LOWER(TRIM(b3.invitee_email)) = LOWER(TRIM(b.invitee_email)) 
+               OR (regexp_replace(b3.invitee_phone, '[^0-9]', '', 'g') = regexp_replace(b.invitee_phone, '[^0-9]', '', 'g') AND b.invitee_phone IS NOT NULL))
+              AND b3.booking_mode IS NOT NULL
+              AND b3.booking_mode != ''
+            ORDER BY b3.booking_start_at DESC
+            LIMIT 1
+          )
+        ) AS booking_mode,
+        b.booking_status,
+        b.booking_host_name AS therapist_name,
+        b.booking_invitee_time,
+        b.booking_resource_name AS session_name,
+        act.client_id,
+        (
+          SELECT COUNT(*) FROM bookings b2
+          WHERE (LOWER(TRIM(b2.invitee_email)) = LOWER(TRIM(b.invitee_email))
+             OR (regexp_replace(b2.invitee_phone, '[^0-9]', '', 'g') = regexp_replace(b.invitee_phone, '[^0-9]', '', 'g') AND b.invitee_phone IS NOT NULL))
+            AND b2.booking_start_at <= b.booking_start_at
+            AND b2.booking_status NOT IN ('cancelled', 'canceled')
+        ) AS session_number
+      FROM bookings b
+      LEFT JOIN all_clients_table act ON (LOWER(TRIM(act.email_id)) = LOWER(TRIM(b.invitee_email)) OR (regexp_replace(act.phone_number, '[^0-9]', '', 'g') = regexp_replace(b.invitee_phone, '[^0-9]', '', 'g') AND b.invitee_phone IS NOT NULL))
+      WHERE b.booking_id = $1
+      LIMIT 1`,
+      [booking_id]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+
+    const row = result.rows[0];
+    const startAt = new Date(row.booking_start_at);
+    const endAt = new Date(row.booking_end_at);
+
+    const fmt = (d: Date) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const fmtDate = (d: Date) => d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const inviteeTime = row.booking_invitee_time || '';
+    let sessionTiming = `${fmt(startAt)} – ${fmt(endAt)}`;
+    if (inviteeTime.includes(' at ')) {
+      sessionTiming = inviteeTime.split(' at ')[1].replace(' - ', ' – ');
+    }
+
+    res.json({
+      clientName: row.client_name || '',
+      clientId: row.client_id || '',
+      bookingId: row.booking_id,
+      sessionDate: fmtDate(startAt),
+      sessionTiming,
+      sessionDuration: row.booking_duration ? `${row.booking_duration} min` : '',
+      therapistName: row.therapist_name || '',
+      modeOfSession: row.booking_mode || '',
+      bookingStatus: row.booking_status || '',
+      sessionNumber: parseInt(row.session_number) || 0,
+    });
+  } catch (error) {
+    console.error('Error fetching session notes info:', error);
+    res.status(500).json({ error: 'Failed to fetch session info' });
+  }
+});
+
 // Save/Update session notes
 app.post('/api/session-notes', async (req, res) => {
   try {
