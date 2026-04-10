@@ -3726,12 +3726,12 @@ app.get('/api/paperform-link', async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT paperform_link FROM client_doc_form WHERE booking_id = $1',
+      'SELECT custom_form_link FROM client_doc_form WHERE booking_id = $1',
       [booking_id]
     );
 
     if (result.rows.length > 0) {
-      res.json({ paperform_link: result.rows[0].paperform_link });
+      res.json({ paperform_link: result.rows[0].custom_form_link });
     } else {
       res.json({ paperform_link: null });
     }
@@ -3772,6 +3772,7 @@ app.get('/api/session-notes-info', async (req, res) => {
         b.booking_host_name AS therapist_name,
         b.booking_invitee_time,
         b.booking_resource_name AS session_name,
+        b.booking_subject,
         act.client_id,
         (
           SELECT COUNT(*) FROM bookings b2
@@ -3802,14 +3803,39 @@ app.get('/api/session-notes-info', async (req, res) => {
       sessionTiming = inviteeTime.split(' at ')[1].replace(' - ', ' – ');
     }
 
+    const isConsultation = 
+      row.booking_subject?.toLowerCase().includes('consultation') || 
+      row.booking_subject?.toLowerCase().includes('pre-therapy') ||
+      row.booking_duration === 15 ||
+      row.booking_host_name?.toLowerCase().trim() === 'safestories';
+
+    // Auto-populate custom_form_link in DB for consultations if empty
+    if (isConsultation) {
+      const host = req.headers.host || '';
+      const baseUrl = host.includes('localhost') ? 'http://localhost:3004' : 'https://safestories-dashboard.vercel.app';
+      const publicLink = `${baseUrl}/session-notes/${row.booking_id}`;
+      
+      // Upsert into client_doc_form
+      await pool.query(`
+        INSERT INTO client_doc_form (booking_id, status, custom_form_link)
+        VALUES ($1, 'pending', $2)
+        ON CONFLICT (booking_id) DO UPDATE SET
+          custom_form_link = EXCLUDED.custom_form_link
+        WHERE (client_doc_form.custom_form_link IS NULL 
+           OR client_doc_form.custom_form_link = '' 
+           OR client_doc_form.custom_form_link LIKE '%paperform.co%')
+      `, [row.booking_id, publicLink]);
+    }
+
     res.json({
       clientName: row.client_name || '',
       clientId: row.client_id || '',
       bookingId: row.booking_id,
+      bookingSubject: row.booking_subject || '',
       sessionDate: fmtDate(startAt),
       sessionTiming,
-      sessionDuration: row.booking_duration ? `${row.booking_duration} min` : '',
-      therapistName: row.therapist_name || '',
+      sessionDuration: isConsultation ? '15 min' : (row.booking_duration ? `${row.booking_duration} min` : ''),
+      therapistName: isConsultation ? 'Safestories' : (row.therapist_name || ''),
       modeOfSession: row.booking_mode || '',
       bookingStatus: row.booking_status || '',
       sessionNumber: parseInt(row.session_number) || 0,
@@ -4888,7 +4914,48 @@ app.get('/api/sos-documentation', async (req, res) => {
 // 1. Receive session documentation from N8N
 app.post('/api/session-documentation', async (req, res) => {
   try {
-    const { session_type, client_id, client_name, booking_id, case_history, progress_notes, therapy_goals } = req.body;
+    const { session_type, client_id, client_name, booking_id, case_history, progress_notes, therapy_goals, consultation_data } = req.body;
+
+    // If Consultation - store pre-therapy call form data
+    if (session_type === 'Consultation' && consultation_data) {
+      await pool.query(`
+        INSERT INTO pretherapy_call_forms (
+          booking_id, client_id, therapist_id,
+          age, languages_preferred, language_other,
+          location, location_manual, mode_of_session,
+          history_prev_therapy, presenting_concerns, concerns_other,
+          clinical_concerns_observed, clinical_concerns,
+          history_psych_diagnosis, history_medication,
+          suicidal_thoughts, suicidal_current, suicidal_ideation_1m, suicidal_attempt_1m,
+          preferred_therapy_approach, preferred_therapy_text,
+          consent_explained, consent_no_reason, scope_explained,
+          preferred_price, preferred_price_other,
+          readiness, readiness_other,
+          consented_followup, followup_mode,
+          client_questions, source, source_other,
+          consultation_outcome, close_reason
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+        ON CONFLICT (booking_id) DO UPDATE SET
+          consultation_outcome = EXCLUDED.consultation_outcome,
+          updated_at = NOW()
+      `, [
+        booking_id, client_id, 'Safestories',
+        consultation_data.age, Array.isArray(consultation_data.language) ? consultation_data.language.join(', ') : (consultation_data.language || ''), consultation_data.language_other,
+        consultation_data.location, consultation_data.location_manual, Array.isArray(consultation_data.mode_of_session) ? consultation_data.mode_of_session.join(', ') : (consultation_data.mode_of_session || ''),
+        consultation_data.previous_therapy, Array.isArray(consultation_data.concerns) ? consultation_data.concerns.join(', ') : (consultation_data.concerns || ''), consultation_data.concerns_other,
+        consultation_data.clinical_concerns_observed, Array.isArray(consultation_data.clinical_concerns) ? consultation_data.clinical_concerns.join(', ') : (consultation_data.clinical_concerns || ''),
+        consultation_data.psychiatric_treatment, '', // Medications placeholder or same as psych treatment
+        consultation_data.suicidal_thoughts, consultation_data.suicidal_current, consultation_data.suicidal_ideation_1m, consultation_data.suicidal_attempt_1m,
+        consultation_data.preferred_therapy_approach, consultation_data.preferred_therapy_text,
+        consultation_data.consent_explained, consultation_data.consent_no_reason, consultation_data.scope_explained,
+        consultation_data.preferred_price, consultation_data.preferred_price_other,
+        Array.isArray(consultation_data.readiness) ? consultation_data.readiness.join(', ') : (consultation_data.readiness || ''), consultation_data.readiness_other,
+        consultation_data.consented_followup, consultation_data.followup_mode,
+        consultation_data.client_questions, consultation_data.source, consultation_data.source_other,
+        consultation_data.consultation_outcome, consultation_data.close_reason
+      ]);
+      console.log('✅ Consultation lead form data stored');
+    }
 
     // If First Session - store case history
     if (session_type === 'First Session' && case_history) {
@@ -5005,12 +5072,12 @@ app.post('/api/session-documentation', async (req, res) => {
       console.log('✅ Therapy goals stored/updated');
     }
 
-    // Update documentation form status and data
+    // Update documentation form status
     await pool.query(`
       UPDATE client_doc_form 
-      SET form_data = $1, status = 'completed'
+      SET status = 'completed'
       WHERE booking_id = $2
-    `, [JSON.stringify(req.body), booking_id]);
+    `, [booking_id]);
 
     res.json({ success: true, message: 'Session documentation stored successfully' });
   } catch (error) {

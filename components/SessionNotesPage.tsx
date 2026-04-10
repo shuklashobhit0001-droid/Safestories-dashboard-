@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { SessionNotesForm } from './SessionNotesForm';
+import { ConsultationNotesForm } from './ConsultationNotesForm';
 import { Loader } from './Loader';
 
 interface SessionNotesPageProps {
@@ -64,6 +65,22 @@ export function SessionNotesPage({ bookingId }: SessionNotesPageProps) {
       </div>
     </div>
   );
+
+  const isConsultation = 
+    sessionInfo.bookingSubject?.toLowerCase().includes('consultation') || 
+    sessionInfo.bookingSubject?.toLowerCase().includes('pre-therapy') ||
+    sessionInfo.sessionDuration === '15 min' ||
+    sessionInfo.therapistName?.toLowerCase().trim() === 'safestories';
+
+  if (isConsultation) {
+    return (
+      <ConsultationNotesForm
+        sessionInfo={sessionInfo}
+        onClose={() => window.close()}
+        onSubmit={handleSubmit}
+      />
+    );
+  }
 
   return (
     <SessionNotesForm
