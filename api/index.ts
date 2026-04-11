@@ -3307,16 +3307,18 @@ app.get('/api/client-appointments', async (req, res) => {
       }
     }
 
-    // First, find all emails and phones for this client
+    // First, find all emails and phones for this client using normalized phone matching
     const clientEmailResult = await pool.query(
-      'SELECT DISTINCT invitee_email FROM bookings WHERE invitee_phone = $1 AND invitee_email IS NOT NULL LIMIT 1',
+      `SELECT DISTINCT invitee_email FROM bookings 
+       WHERE regexp_replace(invitee_phone, '[^0-9]', '', 'g') = regexp_replace($1, '[^0-9]', '', 'g')
+       AND invitee_email IS NOT NULL LIMIT 1`,
       [client_phone]
     );
 
     const clientEmail = clientEmailResult.rows.length > 0 ? clientEmailResult.rows[0].invitee_email : null;
 
     // Get all phone numbers associated with this email
-    let allPhones = [client_phone];
+    let allPhones = [client_phone as string];
     if (clientEmail) {
       const phonesResult = await pool.query(
         'SELECT DISTINCT invitee_phone FROM bookings WHERE invitee_email = $1 AND invitee_phone IS NOT NULL',
@@ -3325,8 +3327,10 @@ app.get('/api/client-appointments', async (req, res) => {
       allPhones = phonesResult.rows.map(r => r.invitee_phone);
     }
 
-    // Query with or without therapist filter, matching by email (primary) or any phone
-    const phoneConditions = allPhones.map((_, i) => `b.invitee_phone = $${clientEmail ? i + 2 : i + 1}`).join(' OR ');
+    // Use normalized phone matching to handle +91 9999 vs +919999 variations
+    const phoneConditions = allPhones.map((_, i) => 
+      `regexp_replace(b.invitee_phone, '[^0-9]', '', 'g') = regexp_replace($${clientEmail ? i + 2 : i + 1}::text, '[^0-9]', '', 'g')`
+    ).join(' OR ');
     
     const query = therapistFirstName
       ? `SELECT 
@@ -3706,10 +3710,17 @@ app.get('/api/paperform-link', async (req, res) => {
       [booking_id]
     );
 
-    if (result.rows.length > 0) {
+    if (result.rows.length > 0 && result.rows[0].custom_form_link) {
       res.json({ paperform_link: result.rows[0].custom_form_link });
     } else {
-      res.json({ paperform_link: null });
+      // Auto-generate and store the link if missing
+      const publicLink = `https://safestories-dashboard.vercel.app/session-notes/${booking_id}`;
+      await pool.query(`
+        INSERT INTO client_doc_form (booking_id, status, custom_form_link)
+        VALUES ($1, 'pending', $2)
+        ON CONFLICT (booking_id) DO UPDATE SET custom_form_link = $2
+      `, [booking_id, publicLink]);
+      res.json({ paperform_link: publicLink });
     }
   } catch (error) {
     console.error('Error fetching paperform link:', error);

@@ -1,4 +1,4 @@
-FDcfvgb n cerf express from 'express';
+import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
 import multer from 'multer';
@@ -3341,16 +3341,18 @@ app.get('/api/client-appointments', async (req, res) => {
       }
     }
 
-    // First, find all emails and phones for this client
+    // First, find all emails and phones for this client using normalized phone matching
     const clientEmailResult = await pool.query(
-      'SELECT DISTINCT invitee_email FROM bookings WHERE invitee_phone = $1 AND invitee_email IS NOT NULL LIMIT 1',
+      `SELECT DISTINCT invitee_email FROM bookings 
+       WHERE regexp_replace(invitee_phone, '[^0-9]', '', 'g') = regexp_replace($1, '[^0-9]', '', 'g')
+       AND invitee_email IS NOT NULL LIMIT 1`,
       [client_phone]
     );
 
     const clientEmail = clientEmailResult.rows.length > 0 ? clientEmailResult.rows[0].invitee_email : null;
 
     // Get all phone numbers associated with this email
-    let allPhones = [client_phone];
+    let allPhones = [client_phone as string];
     if (clientEmail) {
       const phonesResult = await pool.query(
         'SELECT DISTINCT invitee_phone FROM bookings WHERE invitee_email = $1 AND invitee_phone IS NOT NULL',
@@ -3359,8 +3361,10 @@ app.get('/api/client-appointments', async (req, res) => {
       allPhones = phonesResult.rows.map(r => r.invitee_phone);
     }
 
-    // Query with or without therapist filter, matching by email (primary) or any phone
-    const phoneConditions = allPhones.map((_, i) => `b.invitee_phone = $${clientEmail ? i + 2 : i + 1}`).join(' OR ');
+    // Use normalized phone matching to handle +91 9999 vs +919999 variations
+    const phoneConditions = allPhones.map((_, i) => 
+      `regexp_replace(b.invitee_phone, '[^0-9]', '', 'g') = regexp_replace($${clientEmail ? i + 2 : i + 1}::text, '[^0-9]', '', 'g')`
+    ).join(' OR ');
 
     const query = therapistFirstName
       ? `SELECT 
