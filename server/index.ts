@@ -1,4 +1,4 @@
-import express from 'express';
+FDcfvgb n cerf express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
 import multer from 'multer';
@@ -2465,12 +2465,14 @@ app.get('/api/appointments', async (req, res) => {
         b.booking_checkin_url,
         b.therapist_id,
         b.booking_status,
-        CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes,
+        CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL OR pcf.booking_id IS NOT NULL OR cch.id IS NOT NULL) THEN true ELSE false END as has_session_notes,
         (b.booking_start_at < NOW()) as is_past
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
       LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
       LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
+      LEFT JOIN pretherapy_call_forms pcf ON b.booking_id::text = pcf.booking_id::text
+      LEFT JOIN client_case_history cch ON b.booking_id = cch.booking_id
       ORDER BY b.booking_start_at DESC
     `);
 
@@ -2865,12 +2867,14 @@ app.get('/api/client-details', async (req, res) => {
         b.emergency_contact_relation,
         b.emergency_contact_number,
         b.invitee_question,
-        CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes,
+        CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL OR pcf.booking_id IS NOT NULL OR cch.id IS NOT NULL) THEN true ELSE false END as has_session_notes,
         (b.booking_end_at < NOW()) as is_past
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
       LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
       LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
+      LEFT JOIN pretherapy_call_forms pcf ON b.booking_id::text = pcf.booking_id::text
+      LEFT JOIN client_case_history cch ON b.booking_id = cch.booking_id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -3158,11 +3162,13 @@ app.get('/api/therapist-appointments', async (req, res) => {
         b.booking_start_at,
         b.booking_status,
         b.booking_joining_link,
-        CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes
+        CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL OR pcf.booking_id IS NOT NULL OR cch.id IS NOT NULL) THEN true ELSE false END as has_session_notes
       FROM bookings b
       LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
       LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
       LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
+      LEFT JOIN pretherapy_call_forms pcf ON b.booking_id::text = pcf.booking_id::text
+      LEFT JOIN client_case_history cch ON b.booking_id = cch.booking_id
       WHERE b.booking_host_name ILIKE $1
       ORDER BY b.booking_start_at DESC
     `, [`%${therapistFirstName}%`]);
@@ -3372,11 +3378,13 @@ app.get('/api/client-appointments', async (req, res) => {
           b.invitee_occupation,
           b.invitee_marital_status,
           b.clinical_profile,
-          CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes
+          CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL OR pcf.booking_id IS NOT NULL OR cch.id IS NOT NULL) THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
         LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
         LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
+      LEFT JOIN pretherapy_call_forms pcf ON b.booking_id::text = pcf.booking_id::text
+      LEFT JOIN client_case_history cch ON b.booking_id = cch.booking_id
         WHERE (${clientEmail ? 'b.invitee_email = $1 OR' : ''} ${phoneConditions})
           AND b.booking_host_name ILIKE $${clientEmail ? allPhones.length + 2 : allPhones.length + 1}
         ORDER BY b.booking_start_at DESC`
@@ -3395,11 +3403,13 @@ app.get('/api/client-appointments', async (req, res) => {
           b.invitee_occupation,
           b.invitee_marital_status,
           b.clinical_profile,
-          CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL) THEN true ELSE false END as has_session_notes
+          CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL OR pcf.booking_id IS NOT NULL OR cch.id IS NOT NULL) THEN true ELSE false END as has_session_notes
         FROM bookings b
         LEFT JOIN client_session_notes csn ON b.booking_id = csn.booking_id
         LEFT JOIN client_progress_notes cpn ON b.booking_id = cpn.booking_id
         LEFT JOIN free_consultation_pretherapy_notes fcn ON b.booking_id = fcn.booking_id
+      LEFT JOIN pretherapy_call_forms pcf ON b.booking_id::text = pcf.booking_id::text
+      LEFT JOIN client_case_history cch ON b.booking_id = cch.booking_id
         WHERE ${clientEmail ? 'b.invitee_email = $1 OR' : ''} ${phoneConditions}
         ORDER BY b.booking_start_at DESC`;
 
@@ -4264,7 +4274,17 @@ app.post('/api/webhooks/new-booking', async (req, res) => {
       [publicBookingCheckinUrl, booking_id]
     );
 
-    // --- AUTOMATED LEAD MOVEMENT LOGIC ---
+    // Auto-populate client_doc_form with public session notes link
+    const publicSessionNotesUrl = `https://safestories-dashboard.vercel.app/session-notes/${booking_id}`;
+    await pool.query(`
+      INSERT INTO client_doc_form (booking_id, status, custom_form_link)
+      VALUES ($1, 'pending', $2)
+      ON CONFLICT (booking_id) DO UPDATE SET
+        custom_form_link = EXCLUDED.custom_form_link
+      WHERE (client_doc_form.custom_form_link IS NULL OR client_doc_form.custom_form_link = '')
+    `, [booking_id, publicSessionNotesUrl]);
+
+
     try {
       const inviteePhone = booking.invitee_phone ? booking.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : '';
       const inviteeEmail = booking.invitee_email ? booking.invitee_email.toLowerCase().trim() : '';
@@ -4914,18 +4934,46 @@ app.get('/api/sos-documentation', async (req, res) => {
 // 1. Receive session documentation from N8N
 app.post('/api/session-documentation', async (req, res) => {
   try {
-    const { session_type, client_id, client_name, booking_id, case_history, progress_notes, therapy_goals, consultation_data } = req.body;
+    const { session_type, session_status, client_id, client_name, booking_id, case_history, progress_notes, therapy_goals, consultation_data } = req.body;
+
+    // Map session_status from form to doc_form status value
+    const docFormStatus = session_status
+      ? session_status.toLowerCase().replace(' ', '_') // 'No Show' → 'no_show', 'Completed' → 'completed', 'Cancelled' → 'cancelled'
+      : 'completed';
 
     // If Consultation - store pre-therapy call form data
     if (session_type === 'Consultation' && consultation_data) {
+      const vals = [
+        booking_id,
+        consultation_data.age,
+        Array.isArray(consultation_data.language) ? consultation_data.language : [consultation_data.language || ''],
+        consultation_data.language_other,
+        consultation_data.location, consultation_data.location_manual,
+        Array.isArray(consultation_data.mode_of_session) ? consultation_data.mode_of_session : [consultation_data.mode_of_session || ''],
+        consultation_data.previous_therapy,
+        Array.isArray(consultation_data.concerns) ? consultation_data.concerns : [consultation_data.concerns || ''],
+        consultation_data.concerns_other,
+        consultation_data.clinical_concerns_observed,
+        Array.isArray(consultation_data.clinical_concerns) ? consultation_data.clinical_concerns : [consultation_data.clinical_concerns || ''],
+        consultation_data.psychiatric_treatment,
+        consultation_data.suicidal_thoughts, consultation_data.suicidal_current, consultation_data.suicidal_ideation_1m, consultation_data.suicidal_attempt_1m,
+        consultation_data.preferred_therapy_approach, consultation_data.preferred_therapy_text,
+        consultation_data.consent_explained, consultation_data.consent_no_reason, consultation_data.scope_explained,
+        consultation_data.preferred_price, consultation_data.preferred_price_other,
+        Array.isArray(consultation_data.readiness) ? consultation_data.readiness : [consultation_data.readiness || ''],
+        consultation_data.readiness_other,
+        consultation_data.consented_followup, consultation_data.followup_mode,
+        consultation_data.client_questions, consultation_data.source, consultation_data.source_other,
+        consultation_data.consultation_outcome, consultation_data.close_reason
+      ];
       await pool.query(`
         INSERT INTO pretherapy_call_forms (
-          booking_id, client_id, therapist_id,
-          age, languages_preferred, language_other,
+          booking_id,
+          age, language, language_other,
           location, location_manual, mode_of_session,
-          history_prev_therapy, presenting_concerns, concerns_other,
+          previous_therapy, concerns, concerns_other,
           clinical_concerns_observed, clinical_concerns,
-          history_psych_diagnosis, history_medication,
+          psychiatric_treatment,
           suicidal_thoughts, suicidal_current, suicidal_ideation_1m, suicidal_attempt_1m,
           preferred_therapy_approach, preferred_therapy_text,
           consent_explained, consent_no_reason, scope_explained,
@@ -4934,27 +4982,11 @@ app.post('/api/session-documentation', async (req, res) => {
           consented_followup, followup_mode,
           client_questions, source, source_other,
           consultation_outcome, close_reason
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
-        ON CONFLICT (booking_id) DO UPDATE SET
-          consultation_outcome = EXCLUDED.consultation_outcome,
-          updated_at = NOW()
-      `, [
-        booking_id, client_id, 'Safestories',
-        consultation_data.age, Array.isArray(consultation_data.language) ? consultation_data.language.join(', ') : (consultation_data.language || ''), consultation_data.language_other,
-        consultation_data.location, consultation_data.location_manual, Array.isArray(consultation_data.mode_of_session) ? consultation_data.mode_of_session.join(', ') : (consultation_data.mode_of_session || ''),
-        consultation_data.previous_therapy, Array.isArray(consultation_data.concerns) ? consultation_data.concerns.join(', ') : (consultation_data.concerns || ''), consultation_data.concerns_other,
-        consultation_data.clinical_concerns_observed, Array.isArray(consultation_data.clinical_concerns) ? consultation_data.clinical_concerns.join(', ') : (consultation_data.clinical_concerns || ''),
-        consultation_data.psychiatric_treatment, '', // Medications placeholder or same as psych treatment
-        consultation_data.suicidal_thoughts, consultation_data.suicidal_current, consultation_data.suicidal_ideation_1m, consultation_data.suicidal_attempt_1m,
-        consultation_data.preferred_therapy_approach, consultation_data.preferred_therapy_text,
-        consultation_data.consent_explained, consultation_data.consent_no_reason, consultation_data.scope_explained,
-        consultation_data.preferred_price, consultation_data.preferred_price_other,
-        Array.isArray(consultation_data.readiness) ? consultation_data.readiness.join(', ') : (consultation_data.readiness || ''), consultation_data.readiness_other,
-        consultation_data.consented_followup, consultation_data.followup_mode,
-        consultation_data.client_questions, consultation_data.source, consultation_data.source_other,
-        consultation_data.consultation_outcome, consultation_data.close_reason
-      ]);
-      console.log('✅ Consultation lead form data stored');
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+        ON CONFLICT (booking_id) WHERE booking_id IS NOT NULL DO UPDATE SET
+          consultation_outcome = EXCLUDED.consultation_outcome
+      `, vals);
+      console.log('✅ Consultation form data stored');
     }
 
     // If First Session - store case history
@@ -4969,12 +5001,11 @@ app.post('/api/session-documentation', async (req, res) => {
           family_history, genogram_url, developmental_history,
           medical_history, medications, previous_mental_health, insight_level
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
-        ON CONFLICT (client_id) DO UPDATE SET
+        ON CONFLICT (booking_id) WHERE booking_id IS NOT NULL DO UPDATE SET
           age = EXCLUDED.age,
           gender_identity = EXCLUDED.gender_identity,
           education = EXCLUDED.education,
-          occupation = EXCLUDED.occupation,
-          updated_at = NOW()
+          occupation = EXCLUDED.occupation
       `, [
         client_id, client_name, booking_id,
         case_history.age, case_history.gender_identity, case_history.education,
@@ -4991,7 +5022,7 @@ app.post('/api/session-documentation', async (req, res) => {
     }
 
     // If Follow-up Session - store progress notes
-    if (session_type === 'Follow-up Session' && progress_notes) {
+    if ((session_type === 'Follow-up Session' || session_type === 'First Session') && progress_notes) {
       await pool.query(`
         INSERT INTO client_progress_notes (
           client_id, client_name, booking_id, session_number, session_date,
@@ -5039,7 +5070,7 @@ app.post('/api/session-documentation', async (req, res) => {
           updated_at = NOW()
       `, [
         client_id, client_name, booking_id,
-        progress_notes.session_number, progress_notes.session_date,
+        progress_notes.session_number, progress_notes.session_date || null,
         progress_notes.session_duration, progress_notes.session_mode,
         progress_notes.client_report, progress_notes.direct_quotes,
         progress_notes.client_presentation, progress_notes.presentation_tags,
@@ -5049,7 +5080,7 @@ app.post('/api/session-documentation', async (req, res) => {
         progress_notes.self_harm_mention, progress_notes.self_harm_details, progress_notes.risk_level,
         progress_notes.risk_factors, progress_notes.protective_factors, progress_notes.safety_plan,
         progress_notes.future_interventions, progress_notes.session_frequency,
-        progress_notes.therapist_name, progress_notes.therapist_signature, progress_notes.signature_date
+        progress_notes.therapist_name, progress_notes.therapist_signature, progress_notes.signature_date || null
       ]);
     }
 
@@ -5075,9 +5106,9 @@ app.post('/api/session-documentation', async (req, res) => {
     // Update documentation form status
     await pool.query(`
       UPDATE client_doc_form 
-      SET status = 'completed'
+      SET status = $1
       WHERE booking_id = $2
-    `, [booking_id]);
+    `, [docFormStatus, booking_id]);
 
     res.json({ success: true, message: 'Session documentation stored successfully' });
   } catch (error) {
@@ -5089,21 +5120,31 @@ app.post('/api/session-documentation', async (req, res) => {
 // 2. Get case history
 app.get('/api/case-history', async (req, res) => {
   try {
-    const { client_id } = req.query;
+    const { client_id, booking_id } = req.query;
 
-    if (!client_id) {
-      return res.status(400).json({ error: 'client_id is required' });
+    if (!client_id && !booking_id) {
+      return res.status(400).json({ error: 'client_id or booking_id is required' });
     }
 
-    const result = await pool.query(
-      'SELECT * FROM client_case_history WHERE client_id = $1',
-      [client_id]
-    );
+    let result;
+    if (booking_id) {
+      result = await pool.query('SELECT * FROM client_case_history WHERE booking_id = $1', [booking_id]);
+    } else {
+      result = await pool.query(
+        `SELECT * FROM client_case_history 
+         WHERE client_id = $1
+            OR booking_id IN (
+              SELECT booking_id FROM bookings 
+              WHERE invitee_email = $1 OR invitee_phone = $1
+            )
+         ORDER BY created_at DESC LIMIT 1`,
+        [client_id]
+      );
+    }
 
     if (result.rows.length === 0) {
       return res.json({ success: true, data: null });
     }
-
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error fetching case history:', error);

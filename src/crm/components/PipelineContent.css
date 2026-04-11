@@ -395,3 +395,10 @@
 .stage-search-input::placeholder {
   color: #94a3b8;
 }
+
+/* Touch drag-over highlight for iPad drag-and-drop */
+.kanban-column.touch-drag-over {
+  background-color: #f0fdfa;
+  border: 2px dashed #0d9488;
+  border-radius: 12px;
+}

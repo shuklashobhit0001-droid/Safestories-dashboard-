@@ -88,6 +88,68 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
   const [feedbackTarget, setFeedbackTarget] = useState<Appointment | null>(null);
   const [isSendingFeedback, setIsSendingFeedback] = useState(false);
 
+  // Multi-select feedback state
+  const [selectedForFeedback, setSelectedForFeedback] = useState<Set<number>>(new Set());
+  const [showBulkFeedbackModal, setShowBulkFeedbackModal] = useState(false);
+  const [isSendingBulkFeedback, setIsSendingBulkFeedback] = useState(false);
+  const [bulkFeedbackProgress, setBulkFeedbackProgress] = useState(0);
+
+  const isFeedbackTab = activeTab === 'completed' || activeTab === 'pending_notes';
+
+  const toggleSelectForFeedback = (bookingId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedForFeedback(prev => {
+      const next = new Set(prev);
+      next.has(bookingId) ? next.delete(bookingId) : next.add(bookingId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const eligibleIds = paginatedAppointments
+      .filter(a => a.booking_id != null)
+      .map(a => a.booking_id as number);
+    const allSelected = eligibleIds.every(id => selectedForFeedback.has(id));
+    if (allSelected) {
+      setSelectedForFeedback(new Set());
+    } else {
+      setSelectedForFeedback(new Set(eligibleIds));
+    }
+  };
+
+  const sendFeedbackWebhook = async (apt: Appointment) => {
+    const response = await fetch('https://n8n.srv1169280.hstgr.cloud/webhook/6e110a22-ddc7-487b-8995-233b94ecb2c5', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookingId: apt.booking_id,
+        clientName: apt.invitee_name,
+        clientEmail: apt.invitee_email,
+        clientPhone: apt.invitee_phone,
+        therapistName: apt.booking_host_name,
+        sessionName: apt.booking_resource_name,
+        sessionDate: apt.booking_start_at,
+      }),
+    });
+    return response.ok;
+  };
+
+  const handleBulkFeedbackSend = async () => {
+    const targets = filteredAppointments.filter(a => a.booking_id != null && selectedForFeedback.has(a.booking_id as number));
+    setIsSendingBulkFeedback(true);
+    setBulkFeedbackProgress(0);
+    let successCount = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const ok = await sendFeedbackWebhook(targets[i]);
+      if (ok) successCount++;
+      setBulkFeedbackProgress(i + 1);
+    }
+    setIsSendingBulkFeedback(false);
+    setShowBulkFeedbackModal(false);
+    setSelectedForFeedback(new Set());
+    setToast({ message: `Feedback request sent to ${successCount} of ${targets.length} client(s)`, type: successCount === targets.length ? 'success' : 'error' });
+  };
+
   const fetchAppointments = () => {
     setLoading(true);
     fetch('/api/appointments')
@@ -386,6 +448,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
             onClick={() => {
               setActiveTab(tab.id);
               setCurrentPage(1);
+              setSelectedForFeedback(new Set());
             }}
             className={`pb-2 font-medium ${activeTab === tab.id
                 ? 'text-teal-700 border-b-2 border-teal-700'
@@ -423,10 +486,38 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
         <Loader />
       ) : (
         <div className="bg-white rounded-lg border flex-1 flex flex-col">
+          {/* Bulk feedback bar */}
+          {isFeedbackTab && selectedForFeedback.size > 0 && (
+            <div className="flex items-center gap-4 px-6 py-3 bg-teal-50 border-b border-teal-200">
+              <span className="text-sm font-medium text-teal-800">{selectedForFeedback.size} selected</span>
+              <button
+                onClick={() => setShowBulkFeedbackModal(true)}
+                className="px-4 py-1.5 bg-teal-700 text-white rounded-lg text-sm font-semibold hover:bg-teal-800 flex items-center gap-2"
+              >
+                ⭐ Request Feedback ({selectedForFeedback.size})
+              </button>
+              <button
+                onClick={() => setSelectedForFeedback(new Set())}
+                className="text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                Clear
+              </button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full" ref={appointmentActionsRef}>
               <thead className="bg-gray-50 border-b">
                 <tr>
+                  {isFeedbackTab && (
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        className="rounded border-gray-300 text-teal-600 cursor-pointer"
+                        checked={paginatedAppointments.length > 0 && paginatedAppointments.filter(a => a.booking_id != null).every(a => selectedForFeedback.has(a.booking_id as number))}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
+                  )}
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Timings</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Session Name</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
@@ -443,7 +534,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                   </tr>
                 ) : filteredAppointments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-gray-400 py-8">No bookings found</td>
+                    <td colSpan={isFeedbackTab ? 8 : 7} className="text-center text-gray-400 py-8">No bookings found</td>
                   </tr>
                 ) : (
                   paginatedAppointments.map((apt, index) => (
@@ -453,6 +544,17 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                           }`}
                         onClick={() => setSelectedRowIndex(selectedRowIndex === index ? null : index)}
                       >
+                        {isFeedbackTab && (
+                          <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              className="rounded border-gray-300 text-teal-600 cursor-pointer"
+                              checked={apt.booking_id != null && selectedForFeedback.has(apt.booking_id)}
+                              onChange={e => toggleSelectForFeedback(apt.booking_id as number, e as any)}
+                              onClick={e => e.stopPropagation()}
+                            />
+                          </td>
+                        )}
                         <td className="px-6 py-4 text-sm">{apt.booking_start_at}</td>
                         <td className="px-6 py-4 text-sm">{getSessionName(apt)}</td>
                         <td className="px-6 py-4 text-sm whitespace-nowrap">
@@ -493,7 +595,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                       </tr>
                       {selectedRowIndex === index && (
                         <tr className="bg-gray-100">
-                          <td colSpan={7} className="px-6 py-4">
+                          <td colSpan={isFeedbackTab ? 8 : 7} className="px-6 py-4">
                             <div className="flex gap-2 justify-center items-center">
                               <button
                                 onClick={() => copyAppointmentDetails(apt)}
@@ -552,8 +654,8 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                                   }}
                                   className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 bg-white text-teal-700 border border-teal-700 hover:bg-teal-50 whitespace-nowrap"
                                 >
-                                  <MessageCircle size={13} />
-                                  Give Feedback
+                                  ⭐
+                                  Request Feedback
                                 </button>
                               )}
                             </div>
@@ -594,10 +696,9 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
       {showFeedbackModal && feedbackTarget && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-xl font-bold mb-4">Send Feedback Request</h3>
+            <h3 className="text-xl font-bold mb-4">Request Feedback</h3>
             <p className="text-gray-600 mb-6 font-medium">
-              This will send a feedback to the client <span className="text-teal-700"> {feedbackTarget.invitee_name} </span>. 
-              Would you like to proceed?
+              This will send a feedback reminder to <span className="text-teal-700">{feedbackTarget.invitee_name}</span> asking them to rate their session. Would you like to proceed?
             </p>
             <div className="flex gap-3">
               <button 
@@ -642,6 +743,48 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
               <button 
                 onClick={() => { setShowFeedbackModal(false); setFeedbackTarget(null); }} 
                 className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Feedback Confirmation Modal */}
+      {showBulkFeedbackModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-xl font-bold mb-4">Request Feedback</h3>
+            <p className="text-gray-600 mb-6 font-medium">
+              This will send a feedback reminder to <span className="text-teal-700">{selectedForFeedback.size} client{selectedForFeedback.size > 1 ? 's' : ''}</span> asking them to rate their session. Would you like to proceed?
+            </p>
+            {isSendingBulkFeedback && (
+              <div className="mb-4">
+                <div className="flex justify-between text-sm text-gray-600 mb-1">
+                  <span>Sending...</span>
+                  <span>{bulkFeedbackProgress} / {selectedForFeedback.size}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-teal-600 h-2 rounded-full transition-all"
+                    style={{ width: `${(bulkFeedbackProgress / selectedForFeedback.size) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={handleBulkFeedbackSend}
+                disabled={isSendingBulkFeedback}
+                className="flex-1 px-4 py-2.5 bg-teal-700 text-white rounded-lg hover:bg-teal-800 font-semibold disabled:opacity-50"
+              >
+                {isSendingBulkFeedback ? 'Sending...' : 'Yes, Send All'}
+              </button>
+              <button
+                onClick={() => setShowBulkFeedbackModal(false)}
+                disabled={isSendingBulkFeedback}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold disabled:opacity-50"
               >
                 No
               </button>

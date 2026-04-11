@@ -121,6 +121,7 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
   const [clientEndDate, setClientEndDate] = useState('');
   const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents' | 'caseHistory' | 'progressNotes' | 'goalTracking'>('overview');
   const [isCaseHistoryVisible, setIsCaseHistoryVisible] = useState(false);
+  const [caseHistoryData, setCaseHistoryData] = useState<any>(null);
   const [showCaseHistoryPasswordModal, setShowCaseHistoryPasswordModal] = useState(false);
 
   // Bulk action states
@@ -318,6 +319,7 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
     setShowClientCustomCalendar(false);
     setShowCalendarView(false);
     setIsCaseHistoryVisible(false);
+    setCaseHistoryData(null);
     setShowCaseHistoryPasswordModal(false);
     setCaseHistoryPassword('');
     setCaseHistoryPasswordError('');
@@ -363,6 +365,14 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
         setCaseHistoryPassword('');
         setCaseHistoryPasswordError('');
         setShowPassword(false);
+        // Fetch case history from client_case_history table
+        try {
+          const chRes = await fetch(`/api/case-history?client_id=${encodeURIComponent(selectedClient.client_phone)}`);
+          const chData = await chRes.json();
+          if (chData.success) setCaseHistoryData(chData.data);
+        } catch (e) {
+          console.error('Failed to fetch case history', e);
+        }
       } else {
         setCaseHistoryPasswordError('Incorrect password');
       }
@@ -2005,8 +2015,8 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
                                       }}
                                       className="px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 border border-teal-600 text-teal-600 hover:bg-white"
                                     >
-                                      <MessageCircle size={13} />
-                                      Give Feedback
+                                      ⭐
+                                      Request Feedback
                                     </button>
                                   )}
                                 </div>
@@ -2332,12 +2342,20 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
                     {clientSessionType.hasPaidSessions ? (
                       // Show case history for paid sessions
                       isCaseHistoryVisible ? (
-                        selectedClient.clinical_profile ? (
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedClient.clinical_profile}</p>
+                        caseHistoryData ? (
+                          <div className="space-y-2 text-sm text-gray-700">
+                            {caseHistoryData.age && <p><span className="font-medium">Age:</span> {caseHistoryData.age}</p>}
+                            {caseHistoryData.gender_identity && <p><span className="font-medium">Gender:</span> {caseHistoryData.gender_identity}</p>}
+                            {caseHistoryData.presenting_concerns && <p><span className="font-medium">Presenting Concerns:</span> {caseHistoryData.presenting_concerns}</p>}
+                            {caseHistoryData.medical_history && <p><span className="font-medium">Medical History:</span> {caseHistoryData.medical_history}</p>}
+                            {caseHistoryData.previous_mental_health && <p><span className="font-medium">Previous Mental Health:</span> {caseHistoryData.previous_mental_health}</p>}
+                            {caseHistoryData.insight_level && <p><span className="font-medium">Insight Level:</span> {caseHistoryData.insight_level}</p>}
+                            {!caseHistoryData.age && !caseHistoryData.presenting_concerns && (
+                              <p className="text-gray-400 italic">Case history form not yet filled</p>
+                            )}
+                          </div>
                         ) : (
-                          <button className="text-teal-600 text-sm hover:text-teal-700 flex items-center gap-2">
-                            <span>+ add case history</span>
-                          </button>
+                          <p className="text-gray-400 text-sm italic">No case history found. Fill the session form to add.</p>
                         )
                       ) : (
                         <div className="flex items-center justify-center h-20">
@@ -3352,8 +3370,8 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
                                           }}
                                           className="px-3 py-1.5 rounded-lg text-xs flex items-center whitespace-nowrap gap-1.5 border border-teal-600 text-teal-600 hover:bg-white"
                                         >
-                                          <MessageCircle size={13} />
-                                          Give Feedback
+                                          ⭐
+                                          Request Feedback
                                         </button>
                                       </div>
                                     </td>
@@ -3660,10 +3678,9 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
       {showFeedbackModal && feedbackTarget && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]">
           <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-xl font-bold mb-4">Send Feedback Request</h3>
+            <h3 className="text-xl font-bold mb-4">Request Feedback</h3>
             <p className="text-gray-600 mb-6 font-medium">
-              This will send a feedback to the client <span className="text-teal-700"> {formatClientName(feedbackTarget.client_name)} </span>. 
-              Would you like to proceed?
+              This will send a feedback reminder to <span className="text-teal-700">{formatClientName(feedbackTarget.client_name)}</span> asking them to rate their session. Would you like to proceed?
             </p>
             <div className="flex gap-3">
               <button 

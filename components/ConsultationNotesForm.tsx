@@ -191,7 +191,6 @@ export function ConsultationNotesForm({ sessionInfo, onClose, onSubmit }: Consul
         <div className="mb-12">
           <Logo />
         </div>
-        
         <div className="w-full max-w-lg flex flex-col items-center">
           <h1 className="text-2xl font-bold text-gray-800 mb-8">
             Client Pre-therapy Session Status
@@ -235,22 +234,7 @@ export function ConsultationNotesForm({ sessionInfo, onClose, onSubmit }: Consul
     <div className="min-h-screen bg-white">
       {/* Header */}
       <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-xl mx-auto px-6 h-16 flex items-center justify-between">
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <ArrowLeft size={20} />
-          </button>
-          <div className="flex flex-col items-center">
-            <Logo />
-          </div>
-          <div className="w-5" />
-        </div>
-        {/* Progress Bar */}
-        <div className="h-1 bg-gray-100 w-full">
-          <div 
-            className="h-full bg-[#21615D] transition-all duration-500"
-            style={{ width: `${(step / totalSteps) * 100}%` }}
-          />
-        </div>
+        <div className="max-w-xl mx-auto px-6 h-4" />
       </div>
 
       <div className="max-w-xl mx-auto px-6 py-8 pb-32">

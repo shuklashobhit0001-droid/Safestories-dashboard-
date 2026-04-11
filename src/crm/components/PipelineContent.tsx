@@ -88,6 +88,9 @@ const PipelineContent = ({ currentUser, setCurrentPage }: PipelineContentProps) 
 
   const [draggedLead, setDraggedLead] = useState<{ lead: Lead; fromStageId: string } | null>(null)
   const [editingSalesAssignment, setEditingSalesAssignment] = useState<string | null>(null)
+  const touchDragRef = useRef<{ lead: Lead; fromStageId: string } | null>(null)
+  const [touchDragOverStage, setTouchDragOverStage] = useState<string | null>(null)
+  const touchGhostRef = useRef<HTMLDivElement | null>(null)
   const kanbanRef = useRef<HTMLDivElement>(null)
   const scrollAnimRef = useRef<number | null>(null)
 
@@ -245,6 +248,81 @@ const PipelineContent = ({ currentUser, setCurrentPage }: PipelineContentProps) 
     setDraggedLead(null)
   }
 
+  // ── Touch drag-and-drop (iPad / mobile) ──────────────────────────────────
+  const handleTouchStart = (e: React.TouchEvent, lead: Lead, stageId: string) => {
+    if (!canActOnLead(lead)) return
+    touchDragRef.current = { lead, fromStageId: stageId }
+
+    // Create a ghost element that follows the finger
+    const ghost = document.createElement('div')
+    ghost.textContent = lead.name
+    ghost.style.cssText = `
+      position: fixed; z-index: 9999; pointer-events: none;
+      background: #fff; border: 2px solid #0d9488; border-radius: 8px;
+      padding: 8px 14px; font-size: 13px; font-weight: 600; color: #0d9488;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18); opacity: 0.92;
+    `
+    document.body.appendChild(ghost)
+    touchGhostRef.current = ghost
+
+    const touch = e.touches[0]
+    ghost.style.left = `${touch.clientX - 60}px`
+    ghost.style.top = `${touch.clientY - 20}px`
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchDragRef.current) return
+    e.preventDefault() // prevent page scroll while dragging
+
+    const touch = e.touches[0]
+
+    // Move ghost
+    if (touchGhostRef.current) {
+      touchGhostRef.current.style.left = `${touch.clientX - 60}px`
+      touchGhostRef.current.style.top = `${touch.clientY - 20}px`
+    }
+
+    // Auto-scroll kanban board horizontally
+    if (kanbanRef.current) {
+      const board = kanbanRef.current.getBoundingClientRect()
+      const EDGE = 80
+      if (touch.clientX < board.left + EDGE) startAutoScroll('left')
+      else if (touch.clientX > board.right - EDGE) startAutoScroll('right')
+      else stopAutoScroll()
+    }
+
+    // Detect which column the finger is over
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    const col = el?.closest('[data-stage-id]') as HTMLElement | null
+    setTouchDragOverStage(col ? col.dataset.stageId || null : null)
+  }
+
+  const handleTouchEnd = () => {
+    stopAutoScroll()
+    if (touchGhostRef.current) {
+      document.body.removeChild(touchGhostRef.current)
+      touchGhostRef.current = null
+    }
+
+    const dragging = touchDragRef.current
+    touchDragRef.current = null
+
+    if (!dragging || !touchDragOverStage) {
+      setTouchDragOverStage(null)
+      return
+    }
+
+    const { lead, fromStageId } = dragging
+    const toStageId = touchDragOverStage
+    setTouchDragOverStage(null)
+
+    if (fromStageId === toStageId) return
+    if (!isForwardMove(fromStageId, toStageId)) return
+
+    setPendingDrop({ lead, fromStageId, toStageId })
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const handleDrop = (toStageId: string) => {
     stopAutoScroll()
     if (!draggedLead) return
@@ -388,7 +466,8 @@ const PipelineContent = ({ currentUser, setCurrentPage }: PipelineContentProps) 
             {stages.map(stage => (
               <div
                 key={stage.id}
-                className="kanban-column"
+                className={`kanban-column${touchDragOverStage === stage.id ? ' touch-drag-over' : ''}`}
+                data-stage-id={stage.id}
                 onDragOver={handleDragOver}
                 onDrop={() => handleDrop(stage.id)}
               >
@@ -443,6 +522,9 @@ const PipelineContent = ({ currentUser, setCurrentPage }: PipelineContentProps) 
                             handleDragStart(lead, stage.id)
                           }}
                           onDragEnd={handleDragEnd}
+                          onTouchStart={(e) => handleTouchStart(e, lead, stage.id)}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={handleTouchEnd}
                         >
                         <div className="lead-card-header">
                           <h4

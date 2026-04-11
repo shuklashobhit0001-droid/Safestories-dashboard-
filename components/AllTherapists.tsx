@@ -90,6 +90,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [clientViewTab, setClientViewTab] = useState<'overview' | 'sessions' | 'documents' | 'caseHistory'>('overview');
   const [clientStats, setClientStats] = useState({ bookings: 0, sessionsCompleted: 0, noShows: 0, cancelled: 0 });
   const [isCaseHistoryVisible, setIsCaseHistoryVisible] = useState(false);
+  const [caseHistoryData, setCaseHistoryData] = useState<any>(null);
   const [showCaseHistoryPasswordModal, setShowCaseHistoryPasswordModal] = useState(false);
   const [caseHistoryPassword, setCaseHistoryPassword] = useState('');
   const [caseHistoryPasswordError, setCaseHistoryPasswordError] = useState('');
@@ -477,6 +478,14 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
         setCaseHistoryPassword('');
         setCaseHistoryPasswordError('');
         setShowPassword(false);
+        // Fetch case history from client_case_history table
+        try {
+          const chRes = await fetch(`/api/case-history?client_id=${encodeURIComponent(selectedClient.client_phone || selectedClient.invitee_phone || '')}`);
+          const chData = await chRes.json();
+          if (chData.success) setCaseHistoryData(chData.data);
+        } catch (e) {
+          console.error('Failed to fetch case history', e);
+        }
       } else {
         setCaseHistoryPasswordError('Incorrect password');
       }
@@ -989,12 +998,20 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                 {clientSessionType.hasPaidSessions ? (
                   // Show case history for paid sessions
                   isCaseHistoryVisible ? (
-                    selectedClient.clinical_profile ? (
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedClient.clinical_profile}</p>
+                    caseHistoryData ? (
+                      <div className="space-y-2 text-sm text-gray-700">
+                        {caseHistoryData.age && <p><span className="font-medium">Age:</span> {caseHistoryData.age}</p>}
+                        {caseHistoryData.gender_identity && <p><span className="font-medium">Gender:</span> {caseHistoryData.gender_identity}</p>}
+                        {caseHistoryData.presenting_concerns && <p><span className="font-medium">Presenting Concerns:</span> {caseHistoryData.presenting_concerns}</p>}
+                        {caseHistoryData.medical_history && <p><span className="font-medium">Medical History:</span> {caseHistoryData.medical_history}</p>}
+                        {caseHistoryData.previous_mental_health && <p><span className="font-medium">Previous Mental Health:</span> {caseHistoryData.previous_mental_health}</p>}
+                        {caseHistoryData.insight_level && <p><span className="font-medium">Insight Level:</span> {caseHistoryData.insight_level}</p>}
+                        {!caseHistoryData.age && !caseHistoryData.presenting_concerns && (
+                          <p className="text-gray-400 italic">Case history form not yet filled</p>
+                        )}
+                      </div>
                     ) : (
-                      <button className="text-teal-600 text-sm hover:text-teal-700 flex items-center gap-2">
-                        <span>+ add case history</span>
-                      </button>
+                      <p className="text-gray-400 text-sm italic">No case history found. Fill the session form to add.</p>
                     )
                   ) : (
                     <div className="flex items-center justify-center h-20">

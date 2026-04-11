@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import './EditEvent.css';
 import { Toast } from './Toast';
+import ScheduleCalendarGrid from './ScheduleCalendarGrid';
 
 interface EditEventProps {
   event: {
@@ -395,7 +396,7 @@ const EditEvent: React.FC<EditEventProps> = ({ event, therapistId, onBack, onSav
                 </div>
               </div>
 
-              {/* Weekly Availability */}
+              {/* Weekly Availability — drag-to-select calendar grid */}
               <div className="availability-grid">
                 <span className="section-label">Weekly Availability</span>
                 {loadingSchedule ? (
@@ -409,102 +410,17 @@ const EditEvent: React.FC<EditEventProps> = ({ event, therapistId, onBack, onSav
                     <p>{error}</p>
                     <button onClick={fetchSchedule} className="retry-btn">Retry</button>
                   </div>
-                ) : ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((dayName, idx) => {
-                  const avail = scheduleData?.availability?.find((a: any) => {
-                    const apiDay = a.day.toUpperCase();
-                    return apiDay === dayName || apiDay.startsWith(dayName);
-                  });
-                  // Use finding by day name instead of direct index map to handle deleted days from API
-                  const isAvailable = avail ? avail.is_available : false;
-                  const times = avail ? avail.times : [{ start: '09:00', end: '17:00' }];
-
-                  return (
-                    <div key={dayName} className="day-row">
-                      <span className="day-label">{dayName}</span>
-                      {!isAvailable ? (
-                        <>
-                          <span className="unavailable-text">Unavailable</span>
-                          <div className="spacer" />
-                          <div
-                            className="toggle-switch off"
-                            onClick={() => toggleDayAvailabilityByName(dayName)}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <div className="time-range">
-                            {times.map((time: any, tIdx: number) => (
-                              <React.Fragment key={tIdx}>
-                                {tIdx > 0 && <div style={{ width: '100%', height: 0 }} />}
-                                <div className="time-input-wrap" onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActivePicker({ dayIdx: idx, tIdx, field: 'start', type: 'weekly' });
-                                }}>
-                                  <input
-                                    className="time-input"
-                                    type="text"
-                                    value={time.start}
-                                    readOnly
-                                  />
-                                  <Clock size={13} className="time-icon" />
-                                  {activePicker?.type === 'weekly' && activePicker.dayIdx === idx && activePicker.tIdx === tIdx && activePicker.field === 'start' && (
-                                    <TimePicker
-                                      current={time.start}
-                                      onSelect={(val) => {
-                                        updateTimeRangeByName(dayName, tIdx, 'start', val);
-                                        setActivePicker(null);
-                                      }}
-                                    />
-                                  )}
-                                </div>
-                                <span className="to-label">to</span>
-                                <div className="time-input-wrap" onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActivePicker({ dayIdx: idx, tIdx, field: 'end', type: 'weekly' });
-                                }}>
-                                  <input
-                                    className="time-input"
-                                    type="text"
-                                    value={time.end}
-                                    readOnly
-                                  />
-                                  <Clock size={13} className="time-icon" />
-                                  {activePicker?.type === 'weekly' && activePicker.dayIdx === idx && activePicker.tIdx === tIdx && activePicker.field === 'end' && (
-                                    <TimePicker
-                                      current={time.end}
-                                      onSelect={(val) => {
-                                        updateTimeRangeByName(dayName, tIdx, 'end', val);
-                                        setActivePicker(null);
-                                      }}
-                                    />
-                                  )}
-                                </div>
-                                {times.length > 1 && (
-                                  <button
-                                    className="icon-btn remove-slot-btn"
-                                    title="Remove this slot"
-                                    onClick={(e) => { e.stopPropagation(); removeTimeSlotByName(dayName, tIdx); }}
-                                  >
-                                    ×
-                                  </button>
-                                )}
-                              </React.Fragment>
-                            ))}
-                            <button
-                              className="icon-btn"
-                              title="Add time slot"
-                              onClick={(e) => { e.stopPropagation(); addTimeSlotByName(dayName); }}
-                            >+</button>
-                          </div>
-                          <div
-                            className="toggle-switch on"
-                            onClick={() => toggleDayAvailabilityByName(dayName)}
-                          />
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
+                ) : (
+                  <ScheduleCalendarGrid
+                    availability={scheduleData?.availability || []}
+                    onChange={(newAvail) => {
+                      setScheduleData((prev: any) => ({
+                        ...prev,
+                        availability: newAvail,
+                      }));
+                    }}
+                  />
+                )}
               </div>
             </div>
 
