@@ -855,22 +855,25 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
   };
 
   const isMeetingStarted = (apt: any) => {
-    const timeMatch = apt.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+    const timeMatch = apt.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
     if (timeMatch) {
       const [, dateStr, startTimeStr] = timeMatch;
       const startDateTime = new Date(`${dateStr} ${startTimeStr}`);
-      return new Date() >= startDateTime;
+      if (!isNaN(startDateTime.getTime())) return new Date() >= startDateTime;
     }
+    // Fallback: if session is in the past based on booking_date
+    if (apt.booking_date) return new Date() >= new Date(apt.booking_date);
     return false;
   };
 
   const isMeetingEnded = (apt: any) => {
-    const timeMatch = apt.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M) IST/);
+    const timeMatch = apt.session_timings?.match(/(\w+, \w+ \d+, \d+) at (\d+:\d+ [AP]M) - (\d+:\d+ [AP]M)/);
     if (timeMatch) {
       const [, dateStr, , endTimeStr] = timeMatch;
       const endDateTime = new Date(`${dateStr} ${endTimeStr}`);
-      return new Date() > endDateTime;
+      if (!isNaN(endDateTime.getTime())) return new Date() > endDateTime;
     }
+    if (apt.booking_date) return new Date() > new Date(apt.booking_date);
     return false;
   };
 
