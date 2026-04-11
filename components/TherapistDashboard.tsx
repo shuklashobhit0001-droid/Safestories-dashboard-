@@ -1192,23 +1192,8 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
 
   const handleFillSessionNotes = async (appointment: any) => {
     setSelectedAppointmentIndex(null);
-
-    try {
-      const response = await fetch(`/api/paperform-link?booking_id=${appointment.booking_id}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.paperform_link) {
-          window.open(data.paperform_link, '_blank');
-        } else {
-          setToast({ message: 'No session notes form available for this appointment', type: 'error' });
-        }
-      } else {
-        setToast({ message: 'Failed to get session notes form link', type: 'error' });
-      }
-    } catch (error) {
-      console.error('Error fetching paperform link:', error);
-      setToast({ message: 'Error opening session notes form', type: 'error' });
-    }
+    const link = `https://safestories-dashboard.vercel.app/session-notes/${appointment.booking_id}`;
+    window.open(link, '_blank');
   };
 
   const handleViewSessionNotes = async (appointment: any) => {
