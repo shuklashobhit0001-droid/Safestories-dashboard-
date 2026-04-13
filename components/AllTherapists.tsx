@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ArrowLeft, User, Mail, Calendar as CalendarIcon, List, Eye, EyeOff, Edit, X, Upload, Link, ChevronDown, Copy, ExternalLink } from 'lucide-react';
+import { Search, ArrowLeft, User, Mail, Calendar as CalendarIcon, List, Eye, EyeOff, Edit, X, Upload, Link, ChevronDown, Copy, ExternalLink, Pencil, Check } from 'lucide-react';
 import { Loader } from './Loader';
 import { Toast } from './Toast';
 import { TherapistCalendar } from './TherapistCalendar';
@@ -142,6 +142,9 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
   const [selectedModeFilter, setSelectedModeFilter] = useState<'all' | 'online' | 'in-person'>('all');
   const [selectedSessionTypeFilter, setSelectedSessionTypeFilter] = useState<'all' | 'individual' | 'couples' | 'free_consultation'>('all');
   const [openBookingLinksId, setOpenBookingLinksId] = useState<string | null>(null);
+  const [editingClientContact, setEditingClientContact] = useState<Client | null>(null);
+  const [isClientEditMode, setIsClientEditMode] = useState(false);
+  const [clientContactEdit, setClientContactEdit] = useState({ name: '', phone: '', email: '', saving: false });
 
   const toggleTherapistFilter = (therapistName: string) => {
     setSelectedTherapistFilters(prev =>
@@ -901,6 +904,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
 
   if (selectedClient) {
     return (
+      <>
       <div className="p-8 h-full overflow-auto">
         {/* Header with Back Button */}
         <div className="flex items-center gap-4 mb-6">
@@ -924,6 +928,61 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               {getClientStatus(selectedClient, clientAppointments) === 'active' ? 'Active' :
                 getClientStatus(selectedClient, clientAppointments) === 'drop-out' ? 'Drop-out' : 'Inactive'}
             </span>
+            <button
+              onClick={() => {
+                if (isClientEditMode) {
+                  setIsClientEditMode(false);
+                } else {
+                  setClientContactEdit({ name: selectedClient.invitee_name, phone: selectedClient.invitee_phone || '', email: selectedClient.invitee_email || '', saving: false });
+                  setIsClientEditMode(true);
+                }
+              }}
+              className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                isClientEditMode
+                  ? 'bg-orange-500 text-white hover:bg-orange-600'
+                  : 'text-teal-700 border border-teal-200 hover:bg-teal-50'
+              }`}
+            >
+              <Pencil size={14} />
+              {isClientEditMode ? 'Exit Edit Mode' : 'Edit Mode'}
+            </button>
+            {isClientEditMode && (
+              <button
+                onClick={async () => {
+                  setClientContactEdit(prev => ({ ...prev, saving: true }));
+                  try {
+                    const res = await fetch('/api/clients/update-contact', {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        old_phone: selectedClient.invitee_phone || undefined,
+                        old_email: selectedClient.invitee_email || undefined,
+                        new_name: clientContactEdit.name !== selectedClient.invitee_name ? clientContactEdit.name : undefined,
+                        new_phone: clientContactEdit.phone !== selectedClient.invitee_phone ? clientContactEdit.phone : undefined,
+                        new_email: clientContactEdit.email !== selectedClient.invitee_email ? clientContactEdit.email : undefined,
+                        _audit_user: JSON.parse(localStorage.getItem('user') || '{}')
+                      })
+                    });
+                    if (res.ok) {
+                      setSelectedClient(prev => prev ? { ...prev, invitee_name: clientContactEdit.name, invitee_phone: clientContactEdit.phone, invitee_email: clientContactEdit.email } : prev);
+                      setToast({ message: 'Client updated successfully', type: 'success' });
+                      setIsClientEditMode(false);
+                    } else {
+                      setToast({ message: 'Failed to save', type: 'error' });
+                    }
+                  } catch {
+                    setToast({ message: 'Network error', type: 'error' });
+                  } finally {
+                    setClientContactEdit(prev => ({ ...prev, saving: false }));
+                  }
+                }}
+                disabled={clientContactEdit.saving}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-teal-700 text-white rounded-lg hover:bg-teal-800 disabled:opacity-50"
+              >
+                <Check size={14} />
+                {clientContactEdit.saving ? 'Saving...' : 'Save'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -937,11 +996,19 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-sm">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                  <span className="text-gray-700">{selectedClient.invitee_phone || 'N/A'}</span>
+                  {isClientEditMode ? (
+                    <input type="tel" value={clientContactEdit.phone} onChange={e => setClientContactEdit(prev => ({ ...prev, phone: e.target.value }))} className="flex-1 px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" placeholder="Phone" />
+                  ) : (
+                    <span className="text-gray-700">{selectedClient.invitee_phone || 'N/A'}</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 text-sm">
                   <Mail size={18} />
-                  <span className="text-gray-700">{selectedClient.invitee_email || 'N/A'}</span>
+                  {isClientEditMode ? (
+                    <input type="email" value={clientContactEdit.email} onChange={e => setClientContactEdit(prev => ({ ...prev, email: e.target.value }))} className="flex-1 px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" placeholder="Email" />
+                  ) : (
+                    <span className="text-gray-700">{selectedClient.invitee_email || 'N/A'}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1625,10 +1692,12 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
           </div>
         )}
       </div>
+      {isClientEditMode && false && editingClientContact && (
+        <span />
+      )}
+      </>
     );
   }
-
-  // Edit Mode - Full Screen (check this BEFORE selectedTherapist)
   if (showEditMode && selectedTherapist) {
     return (
       <EditTherapistForm

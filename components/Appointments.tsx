@@ -23,6 +23,7 @@ interface Appointment {
   paperform_link?: string;
   booking_status?: string;
   duration?: number;
+  client_rating?: string | null;
 }
 
 // Returns a clean session name — falls back to booking_subject if resource_name is just a location string
@@ -647,16 +648,21 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                                 </button>
                               )}
                                {(activeTab === 'completed' || activeTab === 'pending_notes') && (
-                                <button
-                                  onClick={() => {
-                                    setFeedbackTarget(apt);
-                                    setShowFeedbackModal(true);
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 bg-white text-teal-700 border border-teal-700 hover:bg-teal-50 whitespace-nowrap"
-                                >
-                                  ⭐
-                                  Request Feedback
-                                </button>
+                                apt.client_rating ? (
+                                  <span className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 bg-yellow-50 border border-yellow-200 text-yellow-700 whitespace-nowrap">
+                                    ⭐ {apt.client_rating}/5
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setFeedbackTarget(apt);
+                                      setShowFeedbackModal(true);
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 bg-white text-teal-700 border border-teal-700 hover:bg-teal-50 whitespace-nowrap"
+                                  >
+                                    ⭐ Request Feedback
+                                  </button>
+                                )
                               )}
                             </div>
                           </td>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, Plus } from 'lucide-react';
+import { Search, Download, Plus, Pencil, Check, X } from 'lucide-react';
 import { SendBookingModal } from '../../../components/SendBookingModal';
 import { Loader } from '../../../components/Loader';
 import { Toast } from '../../../components/Toast';
@@ -28,6 +28,10 @@ const PreTherapyBookings: React.FC<PreTherapyBookingsProps> = ({ currentUser, se
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [prefilledClientData, setPrefilledClientData] = useState<{ name: string; phone: string; email: string } | undefined>(undefined);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  // rowEdits: keyed by invitee_phone, stores { name, phone, email, saving }
+  const [rowEdits, setRowEdits] = useState<Record<string, { name: string; phone: string; email: string; saving: boolean }>>({});
   
   const itemsPerPage = 10;
 
@@ -114,6 +118,51 @@ const PreTherapyBookings: React.FC<PreTherapyBookingsProps> = ({ currentUser, se
     setIsModalOpen(true);
   };
 
+  const toggleEditMode = () => {
+    if (isEditMode) {
+      setRowEdits({});
+    } else {
+      // Pre-populate all rows
+      const edits: Record<string, { name: string; phone: string; email: string; saving: boolean }> = {};
+      clients.forEach(c => {
+        edits[c.invitee_phone] = { name: c.invitee_name, phone: c.invitee_phone, email: c.invitee_email, saving: false };
+      });
+      setRowEdits(edits);
+    }
+    setIsEditMode(prev => !prev);
+  };
+
+  const saveRow = async (client: Client) => {
+    const edit = rowEdits[client.invitee_phone];
+    if (!edit) return;
+    setRowEdits(prev => ({ ...prev, [client.invitee_phone]: { ...prev[client.invitee_phone], saving: true } }));
+    try {
+      const res = await fetch('/api/clients/update-contact', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          old_phone: client.invitee_phone || undefined,
+          old_email: client.invitee_email || undefined,
+          new_name: edit.name !== client.invitee_name ? edit.name : undefined,
+          new_phone: edit.phone !== client.invitee_phone ? edit.phone : undefined,
+          new_email: edit.email !== client.invitee_email ? edit.email : undefined,
+          _audit_user: { id: currentUser?.id, name: currentUser?.full_name || currentUser?.username || 'Admin' }
+        })
+      });
+      if (res.ok) {
+        const refreshed = await fetch('/api/clients').then(r => r.json());
+        if (Array.isArray(refreshed)) setClients(refreshed);
+        setToast({ message: 'Client info updated successfully!', type: 'success' });
+      } else {
+        setToast({ message: 'Failed to save', type: 'error' });
+      }
+    } catch {
+      setToast({ message: 'Network error', type: 'error' });
+    } finally {
+      setRowEdits(prev => ({ ...prev, [client.invitee_phone]: { ...prev[client.invitee_phone], saving: false } }));
+    }
+  };
+
   return (
     <div className="p-8 h-full flex flex-col relative w-full overflow-y-auto">
       {/* Header */}
@@ -122,6 +171,17 @@ const PreTherapyBookings: React.FC<PreTherapyBookingsProps> = ({ currentUser, se
           <h1 className="text-3xl font-bold mb-1">Pre-Therapy Bookings</h1>
           <p className="text-gray-600">View your Pre-Therapy clients and assign therapists</p>
         </div>
+        <button
+          onClick={toggleEditMode}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+            isEditMode
+              ? 'bg-orange-500 text-white hover:bg-orange-600'
+              : 'bg-teal-700 text-white hover:bg-teal-800'
+          }`}
+        >
+          <Pencil size={16} />
+          {isEditMode ? 'Exit Edit Mode' : 'Edit Mode'}
+        </button>
       </div>
 
       <div className="relative mb-6 flex gap-4">
@@ -167,31 +227,54 @@ const PreTherapyBookings: React.FC<PreTherapyBookingsProps> = ({ currentUser, se
                     </td>
                   </tr>
                 ) : (
-                  paginatedClients.map((client, index) => (
+                  paginatedClients.map((client, index) => {
+                    const edit = rowEdits[client.invitee_phone];
+                    return (
                     <tr key={index} className="border-b hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                        <button 
-                          onClick={() => {
-                            const navigateId = client.lead_id || `temp:${client.invitee_id || client.invitee_phone || client.invitee_email || 'unknown'}`;
-                            console.log('[DEBUG] Navigating to Pre-Therapy Client Profile:', { 
-                              client_name: client.invitee_name, 
-                              lead_id: client.lead_id, 
-                              invitee_id: client.invitee_id,
-                              phone: client.invitee_phone,
-                              email: client.invitee_email,
-                              navigateId 
-                            });
-                            setCurrentPage?.(`lead-profile:${navigateId}`);
-                          }}
-                          className="text-teal-600 hover:text-teal-700 hover:underline cursor-pointer transition-colors text-left font-bold"
-                          title={client.lead_id ? "View Lead Profile" : "View Booking Details"}
-                        >
-                          {formatClientName(client.invitee_name)}
-                        </button>
+                        {isEditMode && edit ? (
+                          <input
+                            type="text"
+                            value={edit.name}
+                            onChange={e => setRowEdits(prev => ({ ...prev, [client.invitee_phone]: { ...prev[client.invitee_phone], name: e.target.value } }))}
+                            className="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const navigateId = client.lead_id || `temp:${client.invitee_id || client.invitee_phone || client.invitee_email || 'unknown'}`;
+                              setCurrentPage?.(`lead-profile:${navigateId}`);
+                            }}
+                            className="text-teal-600 hover:text-teal-700 hover:underline cursor-pointer transition-colors text-left font-bold"
+                          >
+                            {formatClientName(client.invitee_name)}
+                          </button>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm">
-                        <div className="text-gray-900">{client.invitee_phone}</div>
-                        <div className="text-gray-500 text-xs">{client.invitee_email}</div>
+                        {isEditMode && edit ? (
+                          <div className="flex flex-col gap-1">
+                            <input
+                              type="tel"
+                              value={edit.phone}
+                              onChange={e => setRowEdits(prev => ({ ...prev, [client.invitee_phone]: { ...prev[client.invitee_phone], phone: e.target.value } }))}
+                              className="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                              placeholder="Phone"
+                            />
+                            <input
+                              type="email"
+                              value={edit.email}
+                              onChange={e => setRowEdits(prev => ({ ...prev, [client.invitee_phone]: { ...prev[client.invitee_phone], email: e.target.value } }))}
+                              className="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                              placeholder="Email"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-gray-900">{client.invitee_phone}</div>
+                            <div className="text-gray-500 text-xs">{client.invitee_email}</div>
+                          </>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {formatPreTherapyDate(client.latest_booking_date)}
@@ -200,18 +283,30 @@ const PreTherapyBookings: React.FC<PreTherapyBookingsProps> = ({ currentUser, se
                         {standardizeTherapistName(client.booking_host_name)}
                       </td>
                       <td className="px-6 py-4 text-sm">
-                        <div className="flex justify-center">
-                          <button
-                            onClick={() => handleAssignTherapist(client)}
-                            className="flex items-center gap-1 text-sm font-medium text-teal-600 hover:text-teal-700"
-                          >
-                            <Plus size={16} />
-                            Assign a Therapist
-                          </button>
+                        <div className="flex justify-center gap-3">
+                          {isEditMode && edit ? (
+                            <button
+                              onClick={() => saveRow(client)}
+                              disabled={edit.saving}
+                              className="flex items-center gap-1 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 px-3 py-1 rounded-lg hover:bg-teal-100 disabled:opacity-50"
+                            >
+                              <Check size={14} />
+                              {edit.saving ? 'Saving...' : 'Save'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleAssignTherapist(client)}
+                              className="flex items-center gap-1 text-sm font-medium text-teal-600 hover:text-teal-700"
+                            >
+                              <Plus size={16} />
+                              Assign a Therapist
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

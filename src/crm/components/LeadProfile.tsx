@@ -349,6 +349,9 @@ const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser }: LeadProfil
     const handleEditToggle = () => {
         if (!isEditing && lead) {
             setEditForm({
+                name: lead.name || '',
+                phone: lead.phone || '',
+                email: lead.email || '',
                 created_at: lead.created_at,
                 source: lead.source || '',
                 sales_agent_id: lead.sales_agent_id ? Number(lead.sales_agent_id) : null,
@@ -371,6 +374,9 @@ const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser }: LeadProfil
         if (!lead) return
         // Only include fields that actually changed
         const changes: Partial<Lead> = {}
+        if (editForm.name !== (lead.name || '')) changes.name = editForm.name
+        if (editForm.phone !== (lead.phone || '')) changes.phone = editForm.phone
+        if (editForm.email !== (lead.email || '')) changes.email = editForm.email
         if (editForm.created_at !== lead.created_at) changes.created_at = editForm.created_at
         if (editForm.source !== (lead.source || '')) changes.source = editForm.source
         // Use loose equality for IDs to handle string/number mismatches
@@ -388,7 +394,10 @@ const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser }: LeadProfil
         // Final safety: remove any undefined keys and check if anything remains
         Object.keys(changes).forEach(key => (changes[key as keyof Lead] === undefined) && delete changes[key as keyof Lead])
 
-        const body = JSON.stringify(changes)
+        const body = JSON.stringify({
+            ...changes,
+            _audit_user: { id: currentUser?.id, name: currentUser?.full_name || currentUser?.username }
+        })
         if (body === '{}') {
             setToast({ message: 'No changes detected to save.', type: 'error' })
             setIsEditing(false)
@@ -486,7 +495,18 @@ const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser }: LeadProfil
                         </svg>
                     </button>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <h1 className="lp-name">{lead.name}</h1>
+                        {isEditing ? (
+                            <input
+                                type="text"
+                                className="lp-edit-input"
+                                value={editForm.name || ''}
+                                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                placeholder="Lead name"
+                                style={{ fontSize: '1.25rem', fontWeight: 700, minWidth: 200 }}
+                            />
+                        ) : (
+                            <h1 className="lp-name">{lead.name}</h1>
+                        )}
                         {lead.is_virtual && (
                             <span className="lp-virtual-badge" style={{ background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', border: '1px solid #fde68a' }}>
                                 Temporary Profile
@@ -566,14 +586,22 @@ const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser }: LeadProfil
                         <svg className="lp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
                         </svg>
-                        <span className="lp-contact-text">{lead.phone || 'N/A'}</span>
+                        {isEditing ? (
+                            <input type="tel" className="lp-edit-input" value={editForm.phone || ''} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="Phone number" />
+                        ) : (
+                            <span className="lp-contact-text">{lead.phone || 'N/A'}</span>
+                        )}
                     </div>
                     <div className="lp-contact-item">
                         <svg className="lp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
                             <polyline points="22,6 12,13 2,6" />
                         </svg>
-                        <span className="lp-contact-text">{lead.email || 'N/A'}</span>
+                        {isEditing ? (
+                            <input type="email" className="lp-edit-input" value={editForm.email || ''} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="Email address" />
+                        ) : (
+                            <span className="lp-contact-text">{lead.email || 'N/A'}</span>
+                        )}
                     </div>
                 </div>
 

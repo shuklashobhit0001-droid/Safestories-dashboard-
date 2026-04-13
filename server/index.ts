@@ -1948,6 +1948,80 @@ app.get('/api/dashboard/bookings', async (req, res) => {
   }
 });
 
+
+// Update client contact info across all bookings
+app.patch('/api/clients/update-contact', async (req: any, res: any) => {
+  const { old_phone, old_email, new_name, new_phone, new_email, _audit_user } = req.body;
+
+  if (!old_phone && !old_email) {
+    return res.status(400).json({ error: 'Must provide old_phone or old_email to identify client' });
+  }
+
+  try {
+    const currentRes = await pool.query(
+      `SELECT DISTINCT invitee_name, invitee_phone, invitee_email FROM bookings
+       WHERE ($1::text IS NULL OR invitee_phone = $1) AND ($2::text IS NULL OR invitee_email = $2)
+       LIMIT 1`,
+      [old_phone || null, old_email || null]
+    );
+    const current = currentRes.rows[0];
+
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (new_name !== undefined) { setClauses.push(`invitee_name = $${idx++}`); values.push(new_name); }
+    if (new_phone !== undefined) { setClauses.push(`invitee_phone = $${idx++}`); values.push(new_phone); }
+    if (new_email !== undefined) { setClauses.push(`invitee_email = $${idx++}`); values.push(new_email); }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    let whereClause: string;
+    if (old_phone && old_email) {
+      whereClause = `(invitee_phone = $${idx} OR invitee_email = $${idx + 1})`;
+      values.push(old_phone, old_email);
+    } else if (old_phone) {
+      whereClause = `invitee_phone = $${idx}`;
+      values.push(old_phone);
+    } else {
+      whereClause = `invitee_email = $${idx}`;
+      values.push(old_email);
+    }
+
+    const result = await pool.query(
+      `UPDATE bookings SET ${setClauses.join(', ')} WHERE ${whereClause}`,
+      values
+    );
+
+    // Audit log - wrapped in try/catch so it doesn't fail the main update
+    try {
+    if (_audit_user) {
+      const changes: string[] = [];
+      if (new_name !== undefined) changes.push('name updated to "' + new_name + '"');
+      if (new_phone !== undefined && new_phone !== current.invitee_phone) changes.push('phone: "' + current.invitee_phone + '" -> "' + new_phone + '"');
+      if (new_email !== undefined && new_email !== current.invitee_email) changes.push('email: "' + current.invitee_email + '" -> "' + new_email + '"');
+      if (changes.length > 0) {
+        await pool.query(
+          `INSERT INTO audit_logs (therapist_id, therapist_name, action_type, action_description, client_name, timestamp, is_visible)
+           VALUES ($1, $2, $3, $4, $5, $6, true)`,
+          [null, _audit_user.name || 'Unknown', 'client_contact_edit',
+           'Client contact updated: ' + changes.join('; '), current.invitee_name, getCurrentISTTimestamp()]
+        );
+      }
+    }
+
+    } catch (auditErr) {
+      console.error('Audit log failed (non-critical):', auditErr);
+    }
+    res.json({ success: true, rowsUpdated: result.rowCount });
+  } catch (err) {
+    console.error('Error updating client contact:', err);
+    res.status(500).json({ error: 'Failed to update client contact' });
+  }
+});
+
 // Get all clients
 app.get('/api/clients', async (req, res) => {
   try {
@@ -3030,7 +3104,7 @@ app.get('/api/therapist-stats', async (req, res) => {
 
     const avgRating = await pool.query(
       `SELECT ROUND(AVG(client_rating::numeric), 1) as avg_rating FROM bookings WHERE booking_host_name ILIKE $1 AND client_rating IS NOT NULL`,
-      [\`%\${therapistFirstName}%\`]
+      [`%${therapistFirstName}%`]
     );
 
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Search, Download, ChevronDown, ChevronRight, ArrowRightLeft, Plus, Send } from 'lucide-react';
+import { MessageCircle, Search, Download, ChevronDown, ChevronRight, ArrowRightLeft, Plus, Send, Pencil, Check } from 'lucide-react';
 import { SendBookingModal } from './SendBookingModal';
 import { TransferClientModal } from './TransferClientModal';
 import { Loader } from './Loader';
@@ -53,6 +53,9 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
   const [showBulkBookingConfirmModal, setShowBulkBookingConfirmModal] = useState(false);
   const [isBulkSending, setIsBulkSending] = useState(false);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [rowEdits, setRowEdits] = useState<Record<string, { name: string; phone: string; email: string; saving: boolean }>>({});
 
   const formatClientName = (name: string): string => {
     if (!name) return name;
@@ -514,6 +517,53 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     setIsModalOpen(true);
   };
 
+  const getClientKey = (c: Client) => `${c.invitee_phone}||${c.invitee_email}`;
+
+  const toggleEditMode = () => {
+    if (isEditMode) {
+      setRowEdits({});
+    } else {
+      const edits: Record<string, { name: string; phone: string; email: string; saving: boolean }> = {};
+      clients.forEach(c => {
+        edits[getClientKey(c)] = { name: c.invitee_name, phone: c.invitee_phone, email: c.invitee_email, saving: false };
+      });
+      setRowEdits(edits);
+    }
+    setIsEditMode(prev => !prev);
+  };
+
+  const saveRow = async (client: Client) => {
+    const key = getClientKey(client);
+    const edit = rowEdits[key];
+    if (!edit) return;
+    setRowEdits(prev => ({ ...prev, [key]: { ...prev[key], saving: true } }));
+    try {
+      const res = await fetch('/api/clients/update-contact', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          old_phone: client.invitee_phone || undefined,
+          old_email: client.invitee_email || undefined,
+          new_name: edit.name !== client.invitee_name ? edit.name : undefined,
+          new_phone: edit.phone !== client.invitee_phone ? edit.phone : undefined,
+          new_email: edit.email !== client.invitee_email ? edit.email : undefined,
+          _audit_user: { id: adminUser?.id, name: adminUser?.full_name || adminUser?.username || 'Admin' }
+        })
+      });
+      if (res.ok) {
+        const refreshed = await fetch('/api/clients').then(r => r.json());
+        if (Array.isArray(refreshed)) setClients(refreshed);
+        setToast({ message: 'Client info updated successfully!', type: 'success' });
+      } else {
+        setToast({ message: 'Failed to save', type: 'error' });
+      }
+    } catch {
+      setToast({ message: 'Network error', type: 'error' });
+    } finally {
+      setRowEdits(prev => ({ ...prev, [key]: { ...prev[key], saving: false } }));
+    }
+  };
+
   return (
     <div className="p-8 h-full flex flex-col">
       {/* Header */}
@@ -522,6 +572,15 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
           <h1 className="text-3xl font-bold mb-1">All Clients</h1>
           <p className="text-gray-600">View Client Details, Sessions and more...</p>
         </div>
+        <button
+          onClick={toggleEditMode}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+            isEditMode ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-teal-700 text-white hover:bg-teal-800'
+          }`}
+        >
+          <Pencil size={16} />
+          {isEditMode ? 'Exit Edit Mode' : 'Edit Mode'}
+        </button>
       </div>
 
       {/* Tabs */}
@@ -660,8 +719,8 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                       />
                     </th>
                   )}
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Client Name</th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Contact Info</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600" style={isEditMode ? { minWidth: 160 } : {}}>Client Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-600" style={isEditMode ? { minWidth: 220 } : {}}>Contact Info</th>
                   {activeTab === 'clients' && (
                     <>
                       <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">No. of Bookings</th>
@@ -714,30 +773,69 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
                               />
                             </td>
                           )}
-                          <td className="px-6 py-4 text-sm whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (onClientClick) {
-                                      onClientClick({
-                                        invitee_name: client.invitee_name,
-                                        invitee_email: client.invitee_email,
-                                        invitee_phone: client.invitee_phone
-                                      });
-                                    }
-                                  }}
-                                  className="text-teal-700 hover:underline font-medium"
-                                >
-                                  {formatClientName(client.invitee_name)}
-                                </button>
-                              </span>
-                            </div>
+                          <td className={`px-6 py-4 text-sm ${isEditMode ? '' : 'whitespace-nowrap'}`} style={isEditMode ? { minWidth: 160 } : {}}>
+                            {isEditMode ? (
+                              <input
+                                type="text"
+                                value={rowEdits[getClientKey(client)]?.name ?? client.invitee_name}
+                                onChange={e => setRowEdits(prev => ({ ...prev, [getClientKey(client)]: { ...prev[getClientKey(client)], name: e.target.value } }))}
+                                className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                onClick={e => e.stopPropagation()}
+                              />
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (onClientClick) {
+                                        onClientClick({
+                                          invitee_name: client.invitee_name,
+                                          invitee_email: client.invitee_email,
+                                          invitee_phone: client.invitee_phone
+                                        });
+                                      }
+                                    }}
+                                    className="text-teal-700 hover:underline font-medium"
+                                  >
+                                    {formatClientName(client.invitee_name)}
+                                  </button>
+                                </span>
+                              </div>
+                            )}
                           </td>
-                          <td className="px-6 py-4 text-sm">
-                            <div>{client.invitee_phone}</div>
-                            <div className="text-gray-500 text-xs">{client.invitee_email}</div>
+                          <td className="px-6 py-4 text-sm" style={isEditMode ? { minWidth: 220 } : {}}>
+                            {isEditMode ? (
+                              <div className="flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
+                                <input
+                                  type="tel"
+                                  value={rowEdits[getClientKey(client)]?.phone ?? client.invitee_phone}
+                                  onChange={e => setRowEdits(prev => ({ ...prev, [getClientKey(client)]: { ...prev[getClientKey(client)], phone: e.target.value } }))}
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                  placeholder="Phone"
+                                />
+                                <input
+                                  type="email"
+                                  value={rowEdits[getClientKey(client)]?.email ?? client.invitee_email}
+                                  onChange={e => setRowEdits(prev => ({ ...prev, [getClientKey(client)]: { ...prev[getClientKey(client)], email: e.target.value } }))}
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                  placeholder="Email"
+                                />
+                                <button
+                                  onClick={e => { e.stopPropagation(); saveRow(client); }}
+                                  disabled={rowEdits[getClientKey(client)]?.saving}
+                                  className="flex items-center gap-1 text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-100 disabled:opacity-50 w-fit"
+                                >
+                                  <Check size={13} />
+                                  {rowEdits[getClientKey(client)]?.saving ? 'Saving...' : 'Save'}
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <div>{client.invitee_phone}</div>
+                                <div className="text-gray-500 text-xs">{client.invitee_email}</div>
+                              </>
+                            )}
                           </td>
                           {activeTab === 'clients' && (
                             <>
@@ -901,7 +999,22 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
         onTransferSuccess={handleTransferSuccess}
         adminUser={adminUser}
       />
-      {toast && (
+      {editingClient && (
+        <EditClientContactModal
+          isOpen={!!editingClient}
+          client={{ name: editingClient.invitee_name, phone: editingClient.invitee_phone, email: editingClient.invitee_email }}
+          onClose={() => setEditingClient(null)}
+          onSaved={(updated) => {
+            setClients(prev => prev.map(c =>
+              c.invitee_phone === editingClient.invitee_phone && c.invitee_email === editingClient.invitee_email
+                ? { ...c, invitee_name: updated.name, invitee_phone: updated.phone, invitee_email: updated.email }
+                : c
+            ));
+            setEditingClient(null);
+          }}
+          adminUser={adminUser}
+        />
+      )}      {toast && (
         <Toast
           message={toast.message}
           type={toast.type}
