@@ -34,7 +34,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     setLoading(true);
 
     // Detect portal based on URL
-    const portal = window.location.pathname.includes('/crm') ? 'crm' : 'dashboard';
+    const portal = window.location.hostname.includes('crm') ? 'crm' : 'dashboard';
 
     try {
       const response = await fetch('/api/login', {
