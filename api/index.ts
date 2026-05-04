@@ -56,7 +56,16 @@ const TIMESTAMP_COLUMN_MAP: Record<string, string> = {
 };
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://panel.safestories.in',
+    'https://crm.safestories.in',
+    'https://safestories-dashboard.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // Login endpoint
