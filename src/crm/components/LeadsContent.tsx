@@ -48,6 +48,9 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('All Time')
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set())
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const fetchLeads = async () => {
     try {
@@ -176,6 +179,44 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
     XLSX.writeFile(wb, `crm_leads_${new Date().toISOString().split('T')[0]}.xlsx`)
   };
 
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedLeads(new Set(filteredLeads.map(l => l.id)))
+    } else {
+      setSelectedLeads(new Set())
+    }
+  }
+
+  const handleSelectLead = (leadId: string) => {
+    const newSelected = new Set(selectedLeads)
+    if (newSelected.has(leadId)) {
+      newSelected.delete(leadId)
+    } else {
+      newSelected.add(leadId)
+    }
+    setSelectedLeads(newSelected)
+  }
+
+  const handleDeleteSelected = async () => {
+    setDeleting(true)
+    try {
+      const deletePromises = Array.from(selectedLeads).map(leadId =>
+        fetch(`/api/leads/${leadId}`, { method: 'DELETE' })
+      )
+      await Promise.all(deletePromises)
+      
+      // Refresh leads list
+      await fetchLeads()
+      setSelectedLeads(new Set())
+      setShowDeleteConfirm(false)
+    } catch (error) {
+      console.error('Failed to delete leads:', error)
+      alert('Failed to delete some leads. Please try again.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="leads-content relative min-h-full">
       {loading ? (
@@ -210,6 +251,18 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
             className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
+        {selectedLeads.size > 0 && (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700 whitespace-nowrap text-sm font-medium"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            Delete ({selectedLeads.size})
+          </button>
+        )}
         <button
           onClick={exportToCSV}
           className="bg-teal-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800 whitespace-nowrap text-sm"
@@ -237,6 +290,14 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
         <table className="leads-table">
           <thead>
             <tr>
+              <th style={{ width: '40px' }}>
+                <input
+                  type="checkbox"
+                  checked={filteredLeads.length > 0 && selectedLeads.size === filteredLeads.length}
+                  onChange={handleSelectAll}
+                  style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#0f766e' }}
+                />
+              </th>
               <th>Lead Name</th>
               <th>Contact Info</th>
               <th>Source</th>
@@ -248,7 +309,7 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
           <tbody>
             {filteredLeads.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                   No leads in this stage
                 </td>
               </tr>
@@ -258,6 +319,15 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
                   key={lead.id}
                   className="lead-table-row"
                 >
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedLeads.has(lead.id)}
+                      onChange={() => handleSelectLead(lead.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#0f766e' }}
+                    />
+                  </td>
                   <td className="lead-name">
                     <span 
                       onClick={() => setCurrentPage && setCurrentPage(`lead-profile:${lead.id}:leads`)}
@@ -300,6 +370,74 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
         onClose={() => setIsModalOpen(false)}
         onAdd={fetchLeads}
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => !deleting && setShowDeleteConfirm(false)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4 mb-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Delete {selectedLeads.size} Lead{selectedLeads.size > 1 ? 's' : ''}?
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Are you sure you want to delete {selectedLeads.size === 1 ? 'this lead' : `these ${selectedLeads.size} leads`}? This action cannot be undone.
+                </p>
+                {selectedLeads.size <= 5 && (
+                  <div className="bg-gray-50 rounded p-3 mb-4">
+                    <p className="text-xs font-medium text-gray-700 mb-2">Leads to be deleted:</p>
+                    <ul className="text-xs text-gray-600 space-y-1">
+                      {Array.from(selectedLeads).map(id => {
+                        const lead = leads.find(l => l.id === id)
+                        return lead ? <li key={id}>• {lead.name} ({lead.phone})</li> : null
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </>
       )}
     </div>
