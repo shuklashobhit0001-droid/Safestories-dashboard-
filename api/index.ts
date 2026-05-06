@@ -1093,6 +1093,28 @@ app.post('/api/leads', async (req, res) => {
     }
 });
 
+// Delete lead endpoint
+app.delete('/api/leads/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Check if lead exists
+    const checkLead = await pool.query('SELECT id FROM leads WHERE id::text = $1', [id]);
+    
+    if (checkLead.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Delete the lead
+    await pool.query('DELETE FROM leads WHERE id::text = $1', [id]);
+    
+    res.status(200).json({ success: true, message: 'Lead deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting lead:', err);
+    res.status(500).json({ error: 'Failed to delete lead' });
+  }
+});
+
 app.post('/api/pretherapy-form', async (req, res) => {
   try {
     const {
