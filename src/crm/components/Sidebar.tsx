@@ -93,6 +93,18 @@ const Sidebar = ({ currentPage, setCurrentPage, currentUser, onLogout }: Sidebar
           <ClipboardCheck className="w-5 h-5 flex-shrink-0" />
           <span className={currentPage === 'pretherapy' ? 'text-teal-700' : 'text-gray-700'}>Pre-therapy Bookings</span>
         </div>
+        <div
+          className={`rounded-lg px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer ${
+            currentPage === 'audit-logs' ? 'text-teal-700' : 'text-gray-700 hover:bg-gray-100'
+          }`}
+          style={{ backgroundColor: currentPage === 'audit-logs' ? '#2D75795C' : 'transparent' }}
+          onClick={() => setCurrentPage('audit-logs')}
+        >
+          <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+          </svg>
+          <span className={currentPage === 'audit-logs' ? 'text-teal-700' : 'text-gray-700'}>Audit Logs</span>
+        </div>
       </nav>
 
       <div className="p-4 border-t relative" ref={profileMenuRef}>
