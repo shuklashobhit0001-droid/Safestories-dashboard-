@@ -241,6 +241,8 @@ const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser, source }: Le
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [prefilledClientData, setPrefilledClientData] = useState<{ name: string, phone: string, email: string } | undefined>()
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [deleting, setDeleting] = useState(false)
 
     // Custom dropdown states
     const [isSourceOpen, setIsSourceOpen] = useState(false)
@@ -457,6 +459,27 @@ const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser, source }: Le
         setIsEditingForm(false)
     }
 
+    const handleDeleteLead = async () => {
+        setDeleting(true)
+        try {
+            const res = await fetch(`/api/leads/${leadId}`, { method: 'DELETE' })
+            if (res.ok) {
+                setToast({ message: 'Lead deleted successfully!', type: 'success' })
+                setTimeout(() => {
+                    onBack() // Go back to leads list
+                }, 1500)
+            } else {
+                setToast({ message: 'Failed to delete lead.', type: 'error' })
+            }
+        } catch (error) {
+            console.error('Failed to delete lead:', error)
+            setToast({ message: 'Error deleting lead.', type: 'error' })
+        } finally {
+            setDeleting(false)
+            setShowDeleteConfirm(false)
+        }
+    }
+
     const formatDateObj = (dateString?: string) => {
         if (!dateString) return ''
         const date = new Date(dateString)
@@ -565,7 +588,16 @@ const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser, source }: Le
                                         >
                                             Edit Lead Info
                                         </button>
-
+                                        <button 
+                                            className="lp-dropdown-item" 
+                                            onClick={() => {
+                                                setShowDeleteConfirm(true)
+                                                setShowDropdown(false)
+                                            }}
+                                            style={{ color: '#dc2626' }}
+                                        >
+                                            Delete Lead
+                                        </button>
                                     </div>
                                 )}
                             </div>
@@ -952,6 +984,64 @@ const LeadProfile = ({ leadId, onBack, setCurrentPage, currentUser, source }: Le
                 }}
                 prefilledClient={prefilledClientData}
             />
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+                    onClick={() => !deleting && setShowDeleteConfirm(false)}
+                >
+                    <div 
+                        className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-start gap-4 mb-4">
+                            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                    Delete Lead?
+                                </h3>
+                                <p className="text-sm text-gray-600 mb-4">
+                                    Are you sure you want to delete "{lead?.name}"? This action cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowDeleteConfirm(false)}
+                                disabled={deleting}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDeleteLead}
+                                disabled={deleting}
+                                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {deleting ? (
+                                    <>
+                                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    'Delete'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {toast && (
                 <Toast
                     message={toast.message}

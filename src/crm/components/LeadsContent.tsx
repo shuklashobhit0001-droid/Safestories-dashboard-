@@ -51,8 +51,6 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set())
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false)
-  const [showActionsMenu, setShowActionsMenu] = useState(false)
 
   const fetchLeads = async () => {
     try {
@@ -100,18 +98,6 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
   useEffect(() => {
     fetchLeads()
   }, [])
-
-  // Close actions menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement
-      if (showActionsMenu && !target.closest('.actions-menu-container')) {
-        setShowActionsMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showActionsMenu])
 
   const filteredLeads = leads
     .filter(l => activeTab === 'all' || l.stage === activeTab)
@@ -223,23 +209,12 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
       await fetchLeads()
       setSelectedLeads(new Set())
       setShowDeleteConfirm(false)
-      setIsMultiSelectMode(false) // Exit multi-select mode after deletion
     } catch (error) {
       console.error('Failed to delete leads:', error)
       alert('Failed to delete some leads. Please try again.')
     } finally {
       setDeleting(false)
     }
-  }
-
-  const handleEnableMultiSelect = () => {
-    setIsMultiSelectMode(true)
-    setShowActionsMenu(false)
-  }
-
-  const handleCancelMultiSelect = () => {
-    setIsMultiSelectMode(false)
-    setSelectedLeads(new Set())
   }
 
   return (
@@ -256,93 +231,18 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <MonthFilter selectedMonth={selectedMonth} onChange={setSelectedMonth} />
           
-          {/* Three Dots Actions Menu */}
-          <div style={{ position: 'relative' }} className="actions-menu-container">
-            <button
-              onClick={() => setShowActionsMenu(!showActionsMenu)}
-              className="bg-teal-700 text-white px-3 py-3 rounded-lg hover:bg-teal-800 transition-colors"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="1"></circle>
-                <circle cx="12" cy="5" r="1"></circle>
-                <circle cx="12" cy="19" r="1"></circle>
-              </svg>
-            </button>
-
-            {showActionsMenu && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 8,
-                  background: 'white',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 8,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  minWidth: 180,
-                  zIndex: 50,
-                  overflow: 'hidden'
-                }}
-              >
-                <button
-                  onClick={() => {
-                    setIsModalOpen(true)
-                    setShowActionsMenu(false)
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    background: 'none',
-                    border: 'none',
-                    textAlign: 'left',
-                    fontSize: 14,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    color: '#0f766e',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f0fdfa')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                  Add Lead
-                </button>
-                
-                <button
-                  onClick={handleEnableMultiSelect}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    background: 'none',
-                    border: 'none',
-                    textAlign: 'left',
-                    fontSize: 14,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    color: '#dc2626',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#fef2f2')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
-                  Delete Leads
-                </button>
-              </div>
-            )}
-          </div>
+          {/* Add New Lead Button */}
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-teal-700 text-white px-4 py-3 rounded-lg hover:bg-teal-800 transition-colors flex items-center gap-2"
+            style={{ fontWeight: 500, fontSize: 14 }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add New Lead
+          </button>
         </div>
       </header>
 
@@ -358,27 +258,17 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
           />
         </div>
         
-        {isMultiSelectMode ? (
-          <>
-            {selectedLeads.size > 0 && (
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700 whitespace-nowrap text-sm font-medium"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-                Delete ({selectedLeads.size})
-              </button>
-            )}
-            <button
-              onClick={handleCancelMultiSelect}
-              className="bg-gray-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-gray-600 whitespace-nowrap text-sm font-medium"
-            >
-              Cancel
-            </button>
-          </>
+        {selectedLeads.size > 0 ? (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700 whitespace-nowrap text-sm font-medium"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            Delete ({selectedLeads.size})
+          </button>
         ) : (
           <button
             onClick={exportToCSV}
@@ -408,16 +298,14 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
         <table className="leads-table">
           <thead>
             <tr>
-              {isMultiSelectMode && (
-                <th style={{ width: '40px' }}>
-                  <input
-                    type="checkbox"
-                    checked={filteredLeads.length > 0 && selectedLeads.size === filteredLeads.length}
-                    onChange={handleSelectAll}
-                    style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#0f766e' }}
-                  />
-                </th>
-              )}
+              <th style={{ width: '40px' }}>
+                <input
+                  type="checkbox"
+                  checked={filteredLeads.length > 0 && selectedLeads.size === filteredLeads.length}
+                  onChange={handleSelectAll}
+                  style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#0f766e' }}
+                />
+              </th>
               <th>Lead Name</th>
               <th>Contact Info</th>
               <th>Source</th>
@@ -429,7 +317,7 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
           <tbody>
             {filteredLeads.length === 0 ? (
               <tr>
-                <td colSpan={isMultiSelectMode ? 7 : 6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                   No leads in this stage
                 </td>
               </tr>
@@ -439,17 +327,15 @@ const LeadsContent = ({ setCurrentPage }: LeadsContentProps) => {
                   key={lead.id}
                   className="lead-table-row"
                 >
-                  {isMultiSelectMode && (
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedLeads.has(lead.id)}
-                        onChange={() => handleSelectLead(lead.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#0f766e' }}
-                      />
-                    </td>
-                  )}
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedLeads.has(lead.id)}
+                      onChange={() => handleSelectLead(lead.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#0f766e' }}
+                    />
+                  </td>
                   <td className="lead-name">
                     <span 
                       onClick={() => setCurrentPage && setCurrentPage(`lead-profile:${lead.id}:leads`)}

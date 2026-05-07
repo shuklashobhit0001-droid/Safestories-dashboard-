@@ -464,7 +464,7 @@ const PipelineContent = ({ currentUser, setCurrentPage }: PipelineContentProps) 
   }
 
   const isPostPreTherapy = (stageId: string): boolean =>
-    [].includes(stageId)
+    ['booked-first-session'].includes(stageId)
 
   const getLeadInquireCardStyle = (lead: Lead): React.CSSProperties => {
     if (!lead.stage_lead_inquire_at) return {}
@@ -705,32 +705,11 @@ const PipelineContent = ({ currentUser, setCurrentPage }: PipelineContentProps) 
                             {isPostPreTherapy(stage.id) && (
                               <div className="lead-assignment">
                                 <div className="assignment-label">Therapist:</div>
-                                {lead.assignedTherapist && lead.assignedTherapist !== 'Unassigned' ? (
-                                  <div className="assignment-value therapist">{lead.assignedTherapist}</div>
-                                ) : (
-                                  canAct && (
-                                    <TherapistAssignmentDropdown 
-                                      leadId={lead.id}
-                                      currentTherapist={lead.assignedTherapist}
-                                      onAssign={(therapistId, therapistName) => {
-                                        setStages(prev =>
-                                          prev.map(s => {
-                                            if (s.id !== stage.id) return s
-                                            return {
-                                              ...s,
-                                              leads: s.leads.map(l =>
-                                                l.id === lead.id
-                                                  ? { ...l, assignedTherapist: therapistName }
-                                                  : l
-                                              ),
-                                            }
-                                          })
-                                        )
-                                        setToast({ message: 'Therapist assigned successfully', type: 'success' })
-                                      }}
-                                    />
-                                  )
-                                )}
+                                <div className="assignment-value therapist">
+                                  {lead.assignedTherapist && lead.assignedTherapist !== 'Unassigned' 
+                                    ? lead.assignedTherapist 
+                                    : 'Unassigned'}
+                                </div>
                               </div>
                             )}
 
