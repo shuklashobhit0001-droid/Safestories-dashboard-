@@ -1198,12 +1198,12 @@ app.patch('/api/leads/:id', async (req, res) => {
 app.post('/api/leads', async (req, res) => {
   const { name, phone, email, city, age, source, sales_agent_id, general_remarks } = req.body;
 
-  if (!name || !phone || !source) {
+  if (!name || !source) {
     return res.status(400).json({ error: 'Missing defined required fields' });
   }
 
   try {
-    const normalizedPhone = phone.replace(/[\s\-\(\)\+]/g, '');
+    const normalizedPhone = phone ? phone.replace(/[\s\-\(\)\+]/g, '') : '';
     const normalizedEmail = email ? email.toLowerCase().trim() : '';
 
     // Check for existing bookings to determine correct starting stage
