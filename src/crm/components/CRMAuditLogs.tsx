@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
-import { Loader } from '../../../components/Loader';
 
 interface CRMAuditLog {
   log_id: number;
@@ -115,8 +114,11 @@ export const CRMAuditLogs: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-lg border flex-1 flex items-center justify-center">
-          <Loader />
+        <div className="bg-white rounded-lg border flex-1 flex items-center justify-center relative">
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
+            <p className="text-gray-500">Loading audit logs...</p>
+          </div>
         </div>
       ) : (
       <div className="bg-white rounded-lg border flex-1 flex flex-col">
