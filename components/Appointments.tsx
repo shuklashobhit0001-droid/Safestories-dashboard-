@@ -680,6 +680,9 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapist Name</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Mode</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                  {isFeedbackTab && (
+                    <th className="px-6 py-3 text-center text-sm font-medium text-gray-600">Feedback</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -689,7 +692,7 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                   </tr>
                 ) : filteredAppointments.length === 0 ? (
                   <tr>
-                    <td colSpan={isFeedbackTab ? 8 : 7} className="text-center text-gray-400 py-8">No bookings found</td>
+                    <td colSpan={isFeedbackTab ? 9 : 7} className="text-center text-gray-400 py-8">No bookings found</td>
                   </tr>
                 ) : (
                   paginatedAppointments.map((apt, index) => (
@@ -747,10 +750,31 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                                 getAppointmentStatus(apt).charAt(0).toUpperCase() + getAppointmentStatus(apt).slice(1)}
                           </span>
                         </td>
+                        {isFeedbackTab && (
+                          <td className="px-6 py-4 text-sm" onClick={e => e.stopPropagation()}>
+                            <div className="flex justify-center">
+                              {apt.client_rating ? (
+                                <span className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 bg-yellow-50 border border-yellow-200 text-yellow-700 whitespace-nowrap font-medium">
+                                  ⭐ {apt.client_rating}/5
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setFeedbackTarget(apt);
+                                    setShowFeedbackModal(true);
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 bg-white text-teal-700 border border-teal-700 hover:bg-teal-50 whitespace-nowrap font-medium"
+                                >
+                                  ⭐ Request
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                       {selectedRowIndex === index && (
                         <tr className="bg-gray-100">
-                          <td colSpan={isFeedbackTab ? 8 : 7} className="px-6 py-4">
+                          <td colSpan={isFeedbackTab ? 9 : 7} className="px-6 py-4">
                             <div className="flex gap-2 justify-center items-center">
                               <button
                                 onClick={() => copyAppointmentDetails(apt)}
@@ -800,23 +824,6 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                                   <X size={13} />
                                   Cancel Booking
                                 </button>
-                              )}
-                               {(activeTab === 'completed' || activeTab === 'pending_notes') && (
-                                apt.client_rating ? (
-                                  <span className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 bg-yellow-50 border border-yellow-200 text-yellow-700 whitespace-nowrap">
-                                    ⭐ {apt.client_rating}/5
-                                  </span>
-                                ) : (
-                                  <button
-                                    onClick={() => {
-                                      setFeedbackTarget(apt);
-                                      setShowFeedbackModal(true);
-                                    }}
-                                    className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 bg-white text-teal-700 border border-teal-700 hover:bg-teal-50 whitespace-nowrap"
-                                  >
-                                    ⭐ Request Feedback
-                                  </button>
-                                )
                               )}
                             </div>
                           </td>
