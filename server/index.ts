@@ -5513,11 +5513,34 @@ app.post('/api/session-documentation', async (req, res) => {
           family_history, genogram_url, developmental_history,
           medical_history, medications, previous_mental_health, insight_level
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
-        ON CONFLICT (booking_id) WHERE booking_id IS NOT NULL DO UPDATE SET
+        ON CONFLICT (client_id) DO UPDATE SET
+          booking_id = EXCLUDED.booking_id,
           age = EXCLUDED.age,
           gender_identity = EXCLUDED.gender_identity,
           education = EXCLUDED.education,
-          occupation = EXCLUDED.occupation
+          occupation = EXCLUDED.occupation,
+          marital_status = EXCLUDED.marital_status,
+          children = EXCLUDED.children,
+          religion = EXCLUDED.religion,
+          socio_economic_status = EXCLUDED.socio_economic_status,
+          city_state = EXCLUDED.city_state,
+          presenting_concerns = EXCLUDED.presenting_concerns,
+          duration_onset = EXCLUDED.duration_onset,
+          triggers_factors = EXCLUDED.triggers_factors,
+          sleep = EXCLUDED.sleep,
+          appetite = EXCLUDED.appetite,
+          energy_levels = EXCLUDED.energy_levels,
+          weight_changes = EXCLUDED.weight_changes,
+          libido = EXCLUDED.libido,
+          menstrual_history = EXCLUDED.menstrual_history,
+          family_history = EXCLUDED.family_history,
+          genogram_url = EXCLUDED.genogram_url,
+          developmental_history = EXCLUDED.developmental_history,
+          medical_history = EXCLUDED.medical_history,
+          medications = EXCLUDED.medications,
+          previous_mental_health = EXCLUDED.previous_mental_health,
+          insight_level = EXCLUDED.insight_level,
+          updated_at = NOW()
       `, [
         client_id, client_name, booking_id,
         case_history.age, case_history.gender_identity, case_history.education,
