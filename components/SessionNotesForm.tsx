@@ -277,6 +277,7 @@ export function SessionNotesForm({ sessionInfo, onClose, onSubmit }: SessionNote
   const handleSubmit = () => {
     const signature = canvasRef.current?.toDataURL() || '';
     onSubmit({
+      booking_id: sessionInfo.bookingId,  // Add booking_id here
       session_type: sessionType,
       session_status: sessionStatus,
       client_id: sessionInfo.clientId,

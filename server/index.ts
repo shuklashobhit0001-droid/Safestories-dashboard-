@@ -5445,6 +5445,7 @@ app.get('/api/sos-documentation', async (req, res) => {
 // 1. Receive session documentation from N8N
 app.post('/api/session-documentation', async (req, res) => {
   try {
+    console.log('📝 Received session documentation request:', JSON.stringify(req.body, null, 2));
     const { session_type, session_status, client_id, client_name, booking_id, case_history, progress_notes, therapy_goals, consultation_data } = req.body;
 
     // Map session_status from form to doc_form status value
@@ -5624,7 +5625,9 @@ app.post('/api/session-documentation', async (req, res) => {
     res.json({ success: true, message: 'Session documentation stored successfully' });
   } catch (error) {
     console.error('❌ Error storing session documentation:', error);
-    res.status(500).json({ success: false, error: 'Failed to store session documentation' });
+    console.error('Error details:', error instanceof Error ? error.message : error);
+    console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+    res.status(500).json({ success: false, error: 'Failed to store session documentation', details: error instanceof Error ? error.message : String(error) });
   }
 });
 
