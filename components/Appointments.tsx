@@ -62,7 +62,9 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
   // Filter panel
   const [selectedMonth, setSelectedMonth] = useState('All Time');
   const [selectedTherapist, setSelectedTherapist] = useState('All Therapists');
+  const [selectedRating, setSelectedRating] = useState('All Ratings');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const filterRef = React.useRef<HTMLDivElement>(null);
 
   const generateMonthOptions = () => {
@@ -79,7 +81,8 @@ export const Appointments: React.FC<{ onClientClick?: (client: any) => void; onC
   const monthOptions = generateMonthOptions();
 
   const therapistOptions = ['All Therapists', ...Array.from(new Set(appointments.map(a => a.booking_host_name).filter(Boolean).filter(n => n.trim().toLowerCase() !== 'safestories'))).sort()];
-  const isFilterActive = selectedMonth !== 'All Time' || selectedTherapist !== 'All Therapists';
+  const ratingOptions = ['All Ratings', '5 Stars', '4 Stars', '3 Stars', '2 Stars', '1 Star', 'No Rating'];
+  const isFilterActive = selectedMonth !== 'All Time' || selectedTherapist !== 'All Therapists' || selectedRating !== 'All Ratings';
 
   // Reschedule state
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -443,6 +446,20 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
     // Therapist filter
     if (selectedTherapist !== 'All Therapists' && apt.booking_host_name !== selectedTherapist) return false;
 
+    // Rating filter (only apply in feedback tabs)
+    if (isFeedbackTab && selectedRating !== 'All Ratings') {
+      const rating = apt.client_rating;
+      if (selectedRating === 'No Rating') {
+        if (rating) return false; // Has rating, exclude
+      } else {
+        // Extract number from "5 Stars" -> "5"
+        const filterRating = selectedRating.split(' ')[0];
+        // Check if rating matches (handle both "4" and "4/5" formats)
+        const ratingValue = rating ? rating.toString().split('/')[0] : null;
+        if (ratingValue !== filterRating) return false;
+      }
+    }
+
     if (activeTab === 'all') return true;
     return getAppointmentStatus(apt) === activeTab;
   }).sort((a, b) => {
@@ -533,6 +550,10 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
                 setActiveTab(tab.id);
                 setCurrentPage(1);
                 setSelectedForFeedback(new Set());
+                // Reset rating filter when switching tabs
+                if (tab.id !== 'completed' && tab.id !== 'pending_notes') {
+                  setSelectedRating('All Ratings');
+                }
               }}
               className={`pb-2 font-medium flex items-center gap-1.5 ${activeTab === tab.id
                   ? 'text-teal-700 border-b-2 border-teal-700'
@@ -575,50 +596,115 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
           </button>
 
           {isFilterOpen && (
-            <div className="absolute right-0 top-full mt-1 bg-white border rounded-lg shadow-lg z-50 w-64 p-4">
-              {/* Month */}
+            <div className="absolute right-0 top-full mt-1 bg-white border rounded-lg shadow-lg z-50 w-72 p-4">
+              {/* Month Dropdown */}
               <div className="mb-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Month</p>
-                <div className="max-h-40 overflow-y-auto flex flex-col gap-0.5">
+                <p className="text-xs font-semibold text-gray-700 mb-2">MONTH</p>
+                <div className="relative">
                   <button
-                    onClick={() => { setSelectedMonth('All Time'); setCurrentPage(1); }}
-                    className={`w-full text-left px-3 py-1.5 rounded text-sm ${selectedMonth === 'All Time' ? 'bg-teal-50 text-teal-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                    onClick={() => setOpenDropdown(openDropdown === 'month' ? null : 'month')}
+                    className="w-full px-4 py-2.5 bg-white border-2 border-gray-300 rounded-lg text-sm text-left flex justify-between items-center hover:border-teal-500 focus:outline-none focus:border-teal-500 transition-colors"
                   >
-                    All Time
+                    <span className="font-medium text-gray-900">{selectedMonth}</span>
+                    <svg className={`w-4 h-4 transition-transform ${openDropdown === 'month' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </button>
-                  {monthOptions.map(m => (
-                    <button
-                      key={m}
-                      onClick={() => { setSelectedMonth(m); setCurrentPage(1); }}
-                      className={`w-full text-left px-3 py-1.5 rounded text-sm ${selectedMonth === m ? 'bg-teal-50 text-teal-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
-                    >
-                      {m}
-                    </button>
-                  ))}
+                  {openDropdown === 'month' && (
+                    <div className="absolute w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-10">
+                      <button
+                        onClick={() => { setSelectedMonth('All Time'); setCurrentPage(1); setOpenDropdown(null); }}
+                        className={`w-full px-4 py-2.5 text-left text-sm hover:bg-teal-50 transition-colors ${selectedMonth === 'All Time' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-gray-700'}`}
+                      >
+                        All Time
+                      </button>
+                      {monthOptions.map(m => (
+                        <button
+                          key={m}
+                          onClick={() => { setSelectedMonth(m); setCurrentPage(1); setOpenDropdown(null); }}
+                          className={`w-full px-4 py-2.5 text-left text-sm hover:bg-teal-50 transition-colors ${selectedMonth === m ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-gray-700'}`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Therapist */}
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Therapist</p>
-                <div className="max-h-40 overflow-y-auto flex flex-col gap-0.5">
-                  {therapistOptions.map(t => (
-                    <button
-                      key={t}
-                      onClick={() => { setSelectedTherapist(t); setCurrentPage(1); }}
-                      className={`w-full text-left px-3 py-1.5 rounded text-sm ${selectedTherapist === t ? 'bg-teal-50 text-teal-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
-                    >
-                      {t}
-                    </button>
-                  ))}
+              {/* Therapist Dropdown */}
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-gray-700 mb-2">THERAPIST</p>
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === 'therapist' ? null : 'therapist')}
+                    className="w-full px-4 py-2.5 bg-white border-2 border-gray-300 rounded-lg text-sm text-left flex justify-between items-center hover:border-teal-500 focus:outline-none focus:border-teal-500 transition-colors"
+                  >
+                    <span className="font-medium text-gray-900">{selectedTherapist}</span>
+                    <svg className={`w-4 h-4 transition-transform ${openDropdown === 'therapist' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {openDropdown === 'therapist' && (
+                    <div className="absolute w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-10">
+                      {therapistOptions.map(t => (
+                        <button
+                          key={t}
+                          onClick={() => { setSelectedTherapist(t); setCurrentPage(1); setOpenDropdown(null); }}
+                          className={`w-full px-4 py-2.5 text-left text-sm hover:bg-teal-50 transition-colors ${selectedTherapist === t ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-gray-700'}`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Clear */}
+              {/* Feedback Rating Dropdown - only show in feedback tabs */}
+              {isFeedbackTab && (
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-gray-700 mb-2">FEEDBACK RATING</p>
+                  <div className="relative">
+                    <button
+                      onClick={() => setOpenDropdown(openDropdown === 'rating' ? null : 'rating')}
+                      className="w-full px-4 py-2.5 bg-white border-2 border-gray-300 rounded-lg text-sm text-left flex justify-between items-center hover:border-teal-500 focus:outline-none focus:border-teal-500 transition-colors"
+                    >
+                      <span className="font-medium text-gray-900">
+                        {selectedRating === 'All Ratings' ? selectedRating : selectedRating === 'No Rating' ? selectedRating : `${selectedRating.split(' ')[0]} ⭐`}
+                      </span>
+                      <svg className={`w-4 h-4 transition-transform ${openDropdown === 'rating' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {openDropdown === 'rating' && (
+                      <div className="absolute w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-10">
+                        {ratingOptions.map(r => (
+                          <button
+                            key={r}
+                            onClick={() => { setSelectedRating(r); setCurrentPage(1); setOpenDropdown(null); }}
+                            className={`w-full px-4 py-2.5 text-left text-sm hover:bg-teal-50 transition-colors ${selectedRating === r ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-gray-700'}`}
+                          >
+                            {r === 'All Ratings' ? r : r === 'No Rating' ? r : `${r.split(' ')[0]} ⭐`}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Clear Filters Button */}
               {isFilterActive && (
                 <button
-                  onClick={() => { setSelectedMonth('All Time'); setSelectedTherapist('All Therapists'); setCurrentPage(1); }}
-                  className="mt-3 w-full text-center text-xs text-red-500 hover:text-red-700"
+                  onClick={() => { 
+                    setSelectedMonth('All Time'); 
+                    setSelectedTherapist('All Therapists'); 
+                    setSelectedRating('All Ratings'); 
+                    setCurrentPage(1); 
+                    setOpenDropdown(null);
+                  }}
+                  className="w-full text-center text-sm text-red-600 hover:text-red-700 font-semibold py-2.5 border-t pt-4 hover:bg-red-50 rounded transition-colors"
                 >
                   Clear all filters
                 </button>
