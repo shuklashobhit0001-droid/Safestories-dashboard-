@@ -59,7 +59,7 @@ const ToDoModal: React.FC<ToDoModalProps> = ({ onViewLead, isFullPage = false, s
       {/* Header */}
       <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
         <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
-          <span>📋</span> To-Do List {isFullPage && <span className="text-sm font-normal text-gray-500 ml-2">(Full View)</span>}
+          To-Do List {isFullPage && <span className="text-sm font-normal text-gray-500 ml-2">(Full View)</span>}
         </h2>
         {isFullPage ? (
           <button 
