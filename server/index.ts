@@ -2880,7 +2880,7 @@ app.get('/api/public/booking/:booking_id', async (req, res) => {
 app.get('/api/appointments', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT 
+      SELECT
         b.booking_id,
         b.booking_invitee_time,
         b.booking_resource_name,
@@ -2895,6 +2895,7 @@ app.get('/api/appointments', async (req, res) => {
         b.booking_checkin_url,
         b.therapist_id,
         b.booking_status,
+        b.client_rating,
         CASE WHEN (csn.note_id IS NOT NULL OR cpn.id IS NOT NULL OR fcn.id IS NOT NULL OR pcf.booking_id IS NOT NULL OR cch.id IS NOT NULL) THEN true ELSE false END as has_session_notes,
         (b.booking_start_at < NOW()) as is_past
       FROM bookings b
@@ -2931,7 +2932,8 @@ app.get('/api/appointments', async (req, res) => {
         therapist_id: row.therapist_id,
         has_session_notes: row.has_session_notes,
         booking_status: status,
-        booking_start_at_raw: row.booking_start_at
+        booking_start_at_raw: row.booking_start_at,
+        client_rating: row.client_rating || null
       };
     });
 

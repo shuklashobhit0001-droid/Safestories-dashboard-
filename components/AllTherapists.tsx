@@ -549,30 +549,14 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
       const response = await fetch(`/api/client-details?${params.toString()}`);
       const data = await response.json();
 
-      // Validate emails before matching - skip invalid emails like "na"
-      const isValidEmail = (email: string | null | undefined) => {
-        if (!email) return false;
-        const normalized = email.toLowerCase().trim();
-        return normalized !== 'na' && normalized !== '' && normalized.includes('@');
-      };
-
-      const clientEmail = normalizedClient.invitee_email?.toLowerCase().trim();
-      const validClientEmail = isValidEmail(clientEmail);
+      // Filter by phone only - most reliable matching
       const clientPhones = normalizedClient.invitee_phone
         ? normalizedClient.invitee_phone.split(',').map(p => p.trim().replace(/[\s\-\(\)\+]/g, ''))
         : [];
 
-      // Filter appointments: match on phone, or valid email if no phone
       let appointments = (data.appointments || []).filter((apt: any) => {
         const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
-        const aptEmail = apt.invitee_email?.toLowerCase().trim();
-        const validAptEmail = isValidEmail(aptEmail);
-
-        // Must match on phone (if client has phone), or valid email if no phone
-        const phoneMatch = aptPhone && clientPhones.some(phone => phone === aptPhone);
-        const emailMatch = validClientEmail && validAptEmail && clientEmail === aptEmail;
-
-        return clientPhones.length > 0 ? phoneMatch : emailMatch;
+        return aptPhone && clientPhones.some(phone => phone === aptPhone);
       });
 
       const appointmentsWithStatus = appointments.map((apt: any) => {
@@ -811,31 +795,17 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Get all client appointments (excluding cancelled)
-    const isValidEmail = (email: string | null | undefined) => {
-      if (!email) return false;
-      const normalized = email.toLowerCase().trim();
-      return normalized !== 'na' && normalized !== '' && normalized.includes('@');
-    };
-
+    // Match using PHONE ONLY - most reliable identifier
     const clientAppointments = appointmentsData.filter(apt => {
-      const clientEmail = client.invitee_email?.toLowerCase().trim();
-      const aptEmail = apt.invitee_email?.toLowerCase().trim();
-
       // Handle multiple phone numbers (comma-separated) or single phone
       const clientPhones = client.invitee_phone
         ? client.invitee_phone.split(',').map(p => p.trim().replace(/[\s\-\(\)\+]/g, ''))
         : [];
       const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
-
-      const validClientEmail = isValidEmail(clientEmail);
-      const validAptEmail = isValidEmail(aptEmail);
-
-      const emailMatch = validClientEmail && validAptEmail && clientEmail === aptEmail;
-      const phoneMatch = aptPhone && clientPhones.some(phone => phone === aptPhone);
       const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
 
-      const isMatched = clientPhones.length > 0 ? phoneMatch : emailMatch;
-      return isMatched && isNotCancelled;
+      const phoneMatch = aptPhone && clientPhones.some(phone => phone === aptPhone);
+      return phoneMatch && isNotCancelled;
     });
 
     if (clientAppointments.length === 0) {
