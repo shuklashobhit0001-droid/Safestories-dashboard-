@@ -2359,17 +2359,20 @@ app.get('/api/clients', async (req, res) => {
       const email = row.invitee_email ? row.invitee_email.toLowerCase().trim() : null;
       const phone = row.invitee_phone ? row.invitee_phone.replace(/[\s\-\(\)\+]/g, '') : null;
 
+      // Validate email - skip invalid ones like "na"
+      const isValidEmail = email && email !== 'na' && email.includes('@');
+
       let key = null;
 
-      // Find existing key by phone (primary) or email (fallback)
+      // Find existing key by phone (primary) or valid email (fallback)
       if (phone && phoneToKey.has(phone)) {
         key = phoneToKey.get(phone);
-        if (email && !emailToKey.has(email)) emailToKey.set(email, key);
-      } else if (email && emailToKey.has(email)) {
+        if (isValidEmail && !emailToKey.has(email)) emailToKey.set(email, key);
+      } else if (isValidEmail && emailToKey.has(email)) {
         key = emailToKey.get(email);
         if (phone && !phoneToKey.has(phone)) phoneToKey.set(phone, key);
       } else {
-        key = phone || email;
+        key = phone || (isValidEmail ? email : null);
       }
 
       if (!key) return;
