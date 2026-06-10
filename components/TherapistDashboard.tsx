@@ -259,17 +259,27 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Get all client appointments (excluding cancelled)
+    const isValidEmail = (email: string | null | undefined) => {
+      if (!email) return false;
+      const normalized = email.toLowerCase().trim();
+      return normalized !== 'na' && normalized !== '' && normalized.includes('@');
+    };
+
     const clientAppointments = appointments.filter(apt => {
       const clientEmail = client.client_email?.toLowerCase().trim();
       const aptEmail = apt.invitee_email?.toLowerCase().trim();
       const clientPhone = client.client_phone?.replace(/[\s\-\(\)\+]/g, '');
       const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
 
-      const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
+      const validClientEmail = isValidEmail(clientEmail);
+      const validAptEmail = isValidEmail(aptEmail);
+
+      const emailMatch = validClientEmail && validAptEmail && clientEmail === aptEmail;
       const phoneMatch = clientPhone && aptPhone && clientPhone === aptPhone;
       const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
 
-      return (emailMatch || phoneMatch) && isNotCancelled;
+      const isMatched = clientPhone ? phoneMatch : emailMatch;
+      return isMatched && isNotCancelled;
     });
 
     if (clientAppointments.length === 0) {
@@ -610,6 +620,30 @@ export function TherapistDashboard({ onLogout, user }: TherapistDashboardProps) 
       if (response.ok) {
         const data = await response.json();
         let filteredAppointments = data.appointments || [];
+
+        // Validate emails before matching - skip invalid emails like "na"
+        const isValidEmail = (email: string | null | undefined) => {
+          if (!email) return false;
+          const normalized = email.toLowerCase().trim();
+          return normalized !== 'na' && normalized !== '' && normalized.includes('@');
+        };
+
+        const clientEmail = client.client_email?.toLowerCase().trim();
+        const validClientEmail = isValidEmail(clientEmail);
+        const clientPhone = client.client_phone?.replace(/[\s\-\(\)\+]/g, '');
+
+        // Filter appointments: match on phone, or valid email if no phone
+        filteredAppointments = filteredAppointments.filter((apt: any) => {
+          const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
+          const aptEmail = apt.invitee_email?.toLowerCase().trim();
+          const validAptEmail = isValidEmail(aptEmail);
+
+          // Must match on phone (if client has phone), or valid email if no phone
+          const phoneMatch = clientPhone && aptPhone && clientPhone === aptPhone;
+          const emailMatch = validClientEmail && validAptEmail && clientEmail === aptEmail;
+
+          return clientPhone ? phoneMatch : emailMatch;
+        });
 
         if (clientDateRange.start && clientDateRange.end) {
           filteredAppointments = filteredAppointments.filter((apt: any) => {

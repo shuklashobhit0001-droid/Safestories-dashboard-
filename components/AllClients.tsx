@@ -121,17 +121,31 @@ export const AllClients: React.FC<{ onClientClick?: (client: any) => void; onCre
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Get all client appointments (excluding cancelled)
+    // Match using PRIMARY/FALLBACK logic: phone is primary, email is fallback
+    // This matches /api/clients grouping to prevent data mismatches
+    const isValidEmail = (email: string | null | undefined) => {
+      if (!email) return false;
+      const normalized = email.toLowerCase().trim();
+      return normalized !== 'na' && normalized !== '' && normalized.includes('@');
+    };
+
     const clientAppointments = appointments.filter(apt => {
       const clientEmail = client.invitee_email?.toLowerCase().trim();
       const aptEmail = apt.invitee_email?.toLowerCase().trim();
       const clientPhone = client.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
       const aptPhone = apt.invitee_phone?.replace(/[\s\-\(\)\+]/g, '');
 
-      const emailMatch = clientEmail && aptEmail && clientEmail === aptEmail;
+      const validClientEmail = isValidEmail(clientEmail);
+      const validAptEmail = isValidEmail(aptEmail);
+
+      const emailMatch = validClientEmail && validAptEmail && clientEmail === aptEmail;
       const phoneMatch = clientPhone && aptPhone && clientPhone === aptPhone;
       const isNotCancelled = apt.booking_status !== 'cancelled' && apt.booking_status !== 'canceled';
 
-      return (emailMatch || phoneMatch) && isNotCancelled;
+      // Phone is primary: if client has phone, must match on phone only
+      // Email is fallback: only use valid email if client has no phone
+      const isMatched = clientPhone ? phoneMatch : emailMatch;
+      return isMatched && isNotCancelled;
     });
 
     if (clientAppointments.length === 0) {
