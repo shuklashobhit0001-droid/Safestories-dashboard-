@@ -2421,6 +2421,11 @@ app.get('/api/clients', async (req, res) => {
             client.booking_mode = row.booking_mode;
           }
         }
+
+        // Also set booking_mode for upcoming sessions
+        if (!client.booking_mode && row.booking_mode) {
+          client.booking_mode = row.booking_mode;
+        }
       }
 
       // Update session name to most recent
@@ -5332,7 +5337,11 @@ app.post('/api/session-documentation', async (req, res) => {
             client_id, client_name, email_id, phone_number, no_of_sessions, therapist_id, assigned_therapist
           ) VALUES ($1, $2, $3, $4, $5, $6, $7)
           ON CONFLICT (client_id) DO UPDATE SET
-            client_name = EXCLUDED.client_name`,
+            client_name = COALESCE(EXCLUDED.client_name, all_clients_table.client_name),
+            email_id = COALESCE(EXCLUDED.email_id, all_clients_table.email_id),
+            phone_number = COALESCE(EXCLUDED.phone_number, all_clients_table.phone_number),
+            therapist_id = COALESCE(EXCLUDED.therapist_id, all_clients_table.therapist_id),
+            assigned_therapist = COALESCE(EXCLUDED.assigned_therapist, all_clients_table.assigned_therapist)`,
           [
             client_id,
             client_name || booking.invitee_name,
@@ -5344,6 +5353,11 @@ app.post('/api/session-documentation', async (req, res) => {
           ]
         );
         console.log(`✅ Client synced to all_clients_table: ${client_id}`);
+
+        // Validation: Check if critical fields exist
+        if (!client_id || !booking.therapist_id || !booking.invitee_email) {
+          console.warn(`⚠️ Critical fields missing after sync for client: ${client_id} (therapist_id: ${booking.therapist_id}, email: ${booking.invitee_email})`);
+        }
       }
     } catch (syncError: any) {
       console.warn(`⚠️  Could not sync client to all_clients_table:`, syncError.message);

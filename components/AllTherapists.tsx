@@ -2659,15 +2659,15 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
             </div>
           ) : (
             <div className="bg-white rounded-lg border h-full flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-auto">
-                <table className="w-full">
+              <div className="flex-1 overflow-x-auto overflow-y-auto">
+                <table className="w-full" style={{ minWidth: '900px' }}>
                   <thead className="bg-gray-50 border-b sticky top-0">
                     <tr>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Therapists Name</th>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Specialization</th>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Total sessions lifetime</th>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Sessions this month</th>
-                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Live Status</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600" style={{ minWidth: '180px' }}>Therapists Name</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600" style={{ minWidth: '200px' }}>Specialization</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600" style={{ minWidth: '140px', whiteSpace: 'nowrap' }}>Total sessions lifetime</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600" style={{ minWidth: '150px', whiteSpace: 'nowrap' }}>Sessions this month</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-600" style={{ minWidth: '100px' }}>Live Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2680,7 +2680,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                     ) : (
                       filteredTherapists.map((therapist, index) => (
                         <tr key={index} className="border-b hover:bg-gray-50">
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4" style={{ minWidth: '180px' }}>
                             <button
                               onClick={() => openTherapistDetails(therapist)}
                               className="text-teal-700 hover:underline font-medium text-left"
@@ -2688,7 +2688,7 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                               {therapist.name}
                             </button>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4" style={{ minWidth: '200px' }}>
                             <div className="flex flex-wrap gap-2">
                               {therapist.specialization && therapist.specialization.split(',').map((spec: string, i: number) => (
                                 <span key={i} className="px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#2D757930', color: '#2D7579' }}>
@@ -2697,9 +2697,9 @@ export const AllTherapists: React.FC<{ selectedClientProp?: any; onBack?: () => 
                               ))}
                             </div>
                           </td>
-                          <td className="px-6 py-4">{therapist.total_sessions_lifetime}</td>
-                          <td className="px-6 py-4">{therapist.sessions_this_month}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4" style={{ minWidth: '140px', whiteSpace: 'nowrap' }}>{therapist.total_sessions_lifetime || 0}</td>
+                          <td className="px-6 py-4" style={{ minWidth: '150px', whiteSpace: 'nowrap' }}>{therapist.sessions_this_month || 0}</td>
+                          <td className="px-6 py-4" style={{ minWidth: '100px' }}>
                             <div className="flex items-center gap-2">
                               <div className={`w-2 h-2 rounded-full ${therapist.isLive ? 'bg-green-500' : 'bg-red-500'}`}></div>
                               <span className={`text-sm font-medium ${therapist.isLive ? 'text-green-700' : 'text-red-700'}`}>

@@ -1135,21 +1135,6 @@ app.patch('/api/leads/:id/assign-therapist', async (req, res) => {
 });
 
 // Get all therapists for dropdown
-app.get('/api/therapists', async (req, res) => {
-  try {
-    const therapists = await pool.query(`
-      SELECT id, name, full_name, therapist_id
-      FROM users 
-      WHERE role = 'therapist' 
-      ORDER BY COALESCE(full_name, name)
-    `);
-    res.json(therapists.rows);
-  } catch (err) {
-    console.error('Error fetching therapists:', err);
-    res.status(500).json({ error: 'Failed to fetch therapists' });
-  }
-});
-
 app.patch('/api/leads/:id', async (req, res) => {
   const { id } = req.params;
   const body = req.body;
@@ -2497,6 +2482,11 @@ app.get('/api/clients', async (req, res) => {
             client.last_session_date_raw = row.latest_booking_date;
             client.booking_mode = row.booking_mode;
           }
+        }
+
+        // Also set booking_mode for upcoming sessions
+        if (!client.booking_mode && row.booking_mode) {
+          client.booking_mode = row.booking_mode;
         }
       }
 
@@ -5446,12 +5436,54 @@ app.get('/api/sos-documentation', async (req, res) => {
 app.post('/api/session-documentation', async (req, res) => {
   try {
     console.log('📝 Received session documentation request:', JSON.stringify(req.body, null, 2));
-    const { session_type, session_status, client_id, client_name, booking_id, case_history, progress_notes, therapy_goals, consultation_data } = req.body;
+    let { session_type, session_status, client_id, client_name, booking_id, case_history, progress_notes, therapy_goals, consultation_data } = req.body;
 
-    // Map session_status from form to doc_form status value
-    const docFormStatus = session_status
-      ? session_status.toLowerCase().replace(' ', '_') // 'No Show' → 'no_show', 'Completed' → 'completed', 'Cancelled' → 'cancelled'
-      : 'completed';
+    // ✅ FIX #3: Auto-generate client_id if NULL
+    if (!client_id) {
+      client_id = 'client_' + booking_id.substring(0, 20);
+      console.log(`⚠️  Generated client_id: ${client_id} (was NULL)`);
+    }
+
+    // ✅ FIX #3: Ensure client exists in all_clients_table
+    try {
+      const bookingData = await pool.query(
+        'SELECT invitee_name, invitee_email, invitee_phone, therapist_id, booking_host_name FROM bookings WHERE booking_id = $1',
+        [booking_id]
+      );
+
+      if (bookingData.rows.length > 0) {
+        const booking = bookingData.rows[0];
+        await pool.query(
+          `INSERT INTO all_clients_table (
+            client_id, client_name, email_id, phone_number, no_of_sessions, therapist_id, assigned_therapist
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (client_id) DO UPDATE SET
+            client_name = COALESCE(EXCLUDED.client_name, all_clients_table.client_name),
+            email_id = COALESCE(EXCLUDED.email_id, all_clients_table.email_id),
+            phone_number = COALESCE(EXCLUDED.phone_number, all_clients_table.phone_number),
+            therapist_id = COALESCE(EXCLUDED.therapist_id, all_clients_table.therapist_id),
+            assigned_therapist = COALESCE(EXCLUDED.assigned_therapist, all_clients_table.assigned_therapist)`,
+          [
+            client_id,
+            client_name || booking.invitee_name,
+            booking.invitee_email,
+            booking.invitee_phone,
+            1,
+            booking.therapist_id,
+            booking.booking_host_name
+          ]
+        );
+        console.log(`✅ Client synced to all_clients_table: ${client_id}`);
+
+        // Validation: Check if critical fields exist
+        if (!client_id || !booking.therapist_id || !booking.invitee_email) {
+          console.warn(`⚠️ Critical fields missing after sync for client: ${client_id} (therapist_id: ${booking.therapist_id}, email: ${booking.invitee_email})`);
+        }
+      }
+    } catch (syncError: any) {
+      console.warn(`⚠️  Could not sync client to all_clients_table:`, syncError.message);
+      // Continue anyway - don't block session notes
+    }
 
     // If Consultation - store pre-therapy call form data
     if (session_type === 'Consultation' && consultation_data) {
@@ -5558,65 +5590,95 @@ app.post('/api/session-documentation', async (req, res) => {
 
     // If Follow-up Session - store progress notes
     if ((session_type === 'Follow-up Session' || session_type === 'First Session') && progress_notes) {
-      await pool.query(`
-        INSERT INTO client_progress_notes (
-          client_id, client_name, booking_id, session_number, session_date,
-          session_duration, session_mode,
-          client_report, direct_quotes,
-          client_presentation, presentation_tags,
-          techniques_used, homework_assigned,
-          client_reaction, reaction_tags, engagement_notes,
-          themes_patterns, progress_regression, clinical_concerns,
-          self_harm_mention, self_harm_details, risk_level,
-          risk_factors, protective_factors, safety_plan,
-          future_interventions, session_frequency,
-          therapist_name, therapist_signature, signature_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
-        ON CONFLICT (booking_id) DO UPDATE SET
-          client_id = EXCLUDED.client_id,
-          client_name = EXCLUDED.client_name,
-          session_number = EXCLUDED.session_number,
-          session_date = EXCLUDED.session_date,
-          session_duration = EXCLUDED.session_duration,
-          session_mode = EXCLUDED.session_mode,
-          client_report = EXCLUDED.client_report,
-          direct_quotes = EXCLUDED.direct_quotes,
-          client_presentation = EXCLUDED.client_presentation,
-          presentation_tags = EXCLUDED.presentation_tags,
-          techniques_used = EXCLUDED.techniques_used,
-          homework_assigned = EXCLUDED.homework_assigned,
-          client_reaction = EXCLUDED.client_reaction,
-          reaction_tags = EXCLUDED.reaction_tags,
-          engagement_notes = EXCLUDED.engagement_notes,
-          themes_patterns = EXCLUDED.themes_patterns,
-          progress_regression = EXCLUDED.progress_regression,
-          clinical_concerns = EXCLUDED.clinical_concerns,
-          self_harm_mention = EXCLUDED.self_harm_mention,
-          self_harm_details = EXCLUDED.self_harm_details,
-          risk_level = EXCLUDED.risk_level,
-          risk_factors = EXCLUDED.risk_factors,
-          protective_factors = EXCLUDED.protective_factors,
-          safety_plan = EXCLUDED.safety_plan,
-          future_interventions = EXCLUDED.future_interventions,
-          session_frequency = EXCLUDED.session_frequency,
-          therapist_name = EXCLUDED.therapist_name,
-          therapist_signature = EXCLUDED.therapist_signature,
-          signature_date = EXCLUDED.signature_date,
-          updated_at = NOW()
-      `, [
-        client_id, client_name, booking_id,
-        progress_notes.session_number, progress_notes.session_date || null,
-        progress_notes.session_duration, progress_notes.session_mode,
-        progress_notes.client_report, progress_notes.direct_quotes,
-        progress_notes.client_presentation, progress_notes.presentation_tags,
-        progress_notes.techniques_used, progress_notes.homework_assigned,
-        progress_notes.client_reaction, progress_notes.reaction_tags, progress_notes.engagement_notes,
-        progress_notes.themes_patterns, progress_notes.progress_regression, progress_notes.clinical_concerns,
-        progress_notes.self_harm_mention, progress_notes.self_harm_details, progress_notes.risk_level,
-        progress_notes.risk_factors, progress_notes.protective_factors, progress_notes.safety_plan,
-        progress_notes.future_interventions, progress_notes.session_frequency,
-        progress_notes.therapist_name, progress_notes.therapist_signature, progress_notes.signature_date || null
-      ]);
+      // ✅ FIX #3: Check if record exists, then INSERT or UPDATE (instead of ON CONFLICT)
+      const existsCheck = await pool.query(
+        'SELECT id FROM client_progress_notes WHERE booking_id = $1',
+        [booking_id]
+      );
+
+      if (existsCheck.rows.length > 0) {
+        // UPDATE existing record
+        await pool.query(`
+          UPDATE client_progress_notes SET
+            client_id = $1,
+            client_name = $2,
+            session_number = $3,
+            session_date = $4,
+            session_duration = $5,
+            session_mode = $6,
+            client_report = $7,
+            direct_quotes = $8,
+            client_presentation = $9,
+            presentation_tags = $10,
+            techniques_used = $11,
+            homework_assigned = $12,
+            client_reaction = $13,
+            reaction_tags = $14,
+            engagement_notes = $15,
+            themes_patterns = $16,
+            progress_regression = $17,
+            clinical_concerns = $18,
+            self_harm_mention = $19,
+            self_harm_details = $20,
+            risk_level = $21,
+            risk_factors = $22,
+            protective_factors = $23,
+            safety_plan = $24,
+            future_interventions = $25,
+            session_frequency = $26,
+            therapist_name = $27,
+            therapist_signature = $28,
+            signature_date = $29,
+            updated_at = NOW()
+          WHERE booking_id = $30
+        `, [
+          client_id, client_name,
+          progress_notes.session_number, progress_notes.session_date || null,
+          progress_notes.session_duration, progress_notes.session_mode,
+          progress_notes.client_report, progress_notes.direct_quotes,
+          progress_notes.client_presentation, progress_notes.presentation_tags,
+          progress_notes.techniques_used, progress_notes.homework_assigned,
+          progress_notes.client_reaction, progress_notes.reaction_tags, progress_notes.engagement_notes,
+          progress_notes.themes_patterns, progress_notes.progress_regression, progress_notes.clinical_concerns,
+          progress_notes.self_harm_mention, progress_notes.self_harm_details, progress_notes.risk_level,
+          progress_notes.risk_factors, progress_notes.protective_factors, progress_notes.safety_plan,
+          progress_notes.future_interventions, progress_notes.session_frequency,
+          progress_notes.therapist_name, progress_notes.therapist_signature, progress_notes.signature_date || null,
+          booking_id
+        ]);
+        console.log(`✅ Progress notes UPDATED for booking: ${booking_id}`);
+      } else {
+        // INSERT new record
+        await pool.query(`
+          INSERT INTO client_progress_notes (
+            client_id, client_name, booking_id, session_number, session_date,
+            session_duration, session_mode,
+            client_report, direct_quotes,
+            client_presentation, presentation_tags,
+            techniques_used, homework_assigned,
+            client_reaction, reaction_tags, engagement_notes,
+            themes_patterns, progress_regression, clinical_concerns,
+            self_harm_mention, self_harm_details, risk_level,
+            risk_factors, protective_factors, safety_plan,
+            future_interventions, session_frequency,
+            therapist_name, therapist_signature, signature_date
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        `, [
+          client_id, client_name, booking_id,
+          progress_notes.session_number, progress_notes.session_date || null,
+          progress_notes.session_duration, progress_notes.session_mode,
+          progress_notes.client_report, progress_notes.direct_quotes,
+          progress_notes.client_presentation, progress_notes.presentation_tags,
+          progress_notes.techniques_used, progress_notes.homework_assigned,
+          progress_notes.client_reaction, progress_notes.reaction_tags, progress_notes.engagement_notes,
+          progress_notes.themes_patterns, progress_notes.progress_regression, progress_notes.clinical_concerns,
+          progress_notes.self_harm_mention, progress_notes.self_harm_details, progress_notes.risk_level,
+          progress_notes.risk_factors, progress_notes.protective_factors, progress_notes.safety_plan,
+          progress_notes.future_interventions, progress_notes.session_frequency,
+          progress_notes.therapist_name, progress_notes.therapist_signature, progress_notes.signature_date || null
+        ]);
+        console.log(`✅ Progress notes INSERTED for booking: ${booking_id}`);
+      }
     }
 
     // Always store/update therapy goals
@@ -5640,10 +5702,10 @@ app.post('/api/session-documentation', async (req, res) => {
 
     // Update documentation form status
     await pool.query(`
-      UPDATE client_doc_form 
-      SET status = $1
-      WHERE booking_id = $2
-    `, [docFormStatus, booking_id]);
+      UPDATE client_doc_form
+      SET status = 'completed'
+      WHERE booking_id = $1
+    `, [booking_id]);
 
     res.json({ success: true, message: 'Session documentation stored successfully' });
   } catch (error) {
