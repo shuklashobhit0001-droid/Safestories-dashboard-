@@ -120,7 +120,7 @@ const DashboardContent = ({ currentUser, setCurrentPage }: DashboardContentProps
   }, [sourceMonth, funnelMonth, statsMonth])
 
   const modules = [
-    { id: 1, title: 'Total Leads', value: totalLeads.toString() },
+    { id: 1, title: 'Leads', value: totalLeads.toString() },
     { id: 2, title: 'Lead to first session conversion', value: conversionCount.toString() },
     { id: 3, title: 'Unresponsive', value: dropouts.toString() },
     { id: 4, title: 'Closed', value: closed.toString() },

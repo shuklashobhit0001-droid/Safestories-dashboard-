@@ -25,13 +25,15 @@ export async function startLeadsBookingSync() {
 
       for (const lead of leads.rows) {
         try {
-          // Check if booking already exists (by email or phone)
+          // Check if booking already exists (match on client email/phone only).
+          // Host name is NOT compared: DaySchedule stores short names ("Ambika")
+          // while users table stores full names ("Ambika Vaidya"), so a host match
+          // would falsely miss real bookings and create phantom duplicates.
           const existingBooking = await pool.query(`
             SELECT invitee_email FROM bookings
-            WHERE (invitee_email = $1 OR invitee_phone = $2)
-            AND booking_host_name = (SELECT name FROM users WHERE id = $3)
+            WHERE invitee_email = $1 OR invitee_phone = $2
             LIMIT 1
-          `, [lead.email, lead.phone, lead.therapist_id]);
+          `, [lead.email, lead.phone]);
 
           if (existingBooking.rows.length > 0) {
             console.log(`⏭️  Booking exists for ${lead.name} (${lead.email})`);
@@ -50,7 +52,8 @@ export async function startLeadsBookingSync() {
 
           const therapistName = therapist.rows[0].name;
 
-          // Insert booking
+          // Insert booking. booking_resource_name is given a default so the row is
+          // never NULL — a NULL there crashes the Appointments page (.toLowerCase()).
           await pool.query(`
             INSERT INTO bookings (
               invitee_name,
@@ -59,8 +62,9 @@ export async function startLeadsBookingSync() {
               booking_host_name,
               booking_status,
               booking_start_at,
-              booking_user_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+              booking_user_id,
+              booking_resource_name
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           `, [
             lead.name,
             lead.phone,
@@ -68,7 +72,8 @@ export async function startLeadsBookingSync() {
             therapistName,
             'confirmed',
             lead.stage_booked_first_session_at,
-            lead.therapist_id
+            lead.therapist_id,
+            'Individual Session'
           ]);
 
           console.log(`✅ Synced: ${lead.name} → ${therapistName}`);

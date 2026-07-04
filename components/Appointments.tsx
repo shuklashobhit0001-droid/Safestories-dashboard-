@@ -420,9 +420,9 @@ ${apt.booking_mode} joining info${apt.booking_joining_link ? `\nVideo call link:
 
     const query = searchQuery.toLowerCase();
     const matchesSearch = (
-      apt.booking_resource_name.toLowerCase().includes(query) ||
-      apt.invitee_name.toLowerCase().includes(query) ||
-      apt.booking_host_name.toLowerCase().includes(query)
+      (apt.booking_resource_name || '').toLowerCase().includes(query) ||
+      (apt.invitee_name || '').toLowerCase().includes(query) ||
+      (apt.booking_host_name || '').toLowerCase().includes(query)
     );
     if (!matchesSearch) return false;
 

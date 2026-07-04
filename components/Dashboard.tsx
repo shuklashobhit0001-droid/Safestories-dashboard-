@@ -350,7 +350,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, user }) => {
           <Logo size="small" />
         </div>
 
-        <nav className="flex-1 px-4">
+        <nav className="flex-1 px-4 overflow-y-auto">
           <div
             className="rounded-xl px-4 py-3 mb-2 flex items-center gap-3 cursor-pointer hover:opacity-90"
             style={{ backgroundColor: '#21615D' }}
