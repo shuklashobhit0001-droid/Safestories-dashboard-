@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import pool from '../lib/db';
 import { convertToIST } from '../lib/timezone';
 import { startDashboardApiBookingSync } from './dashboardApiBookingSync';
+import { startLeadsBookingSync } from './leadsBookingSync';
 import { uploadFile } from '../lib/minio';
 import { sendOTPEmail, sendPasswordResetOTP } from '../lib/email';
 
@@ -6408,6 +6409,7 @@ const PORT = 3002;
 app.listen(PORT, () => {
   console.log(`\n✓ API server running on http://localhost:${PORT}`);
   startDashboardApiBookingSync();
+  startLeadsBookingSync();
 }).on('error', (err: any) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`\n✗ Port ${PORT} is already in use. Please stop other processes or change the port.`);
