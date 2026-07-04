@@ -6,14 +6,16 @@ RETURNS TRIGGER AS $$
 DECLARE
   admin_record RECORD;
   therapist_user_id TEXT;
+  resource_name TEXT;
 BEGIN
+  resource_name := COALESCE(NEW.booking_resource_name, 'Session');
   IF (TG_OP = 'INSERT') THEN
     -- NEW BOOKING: Notify all admins
     FOR admin_record IN SELECT id FROM users WHERE role = 'admin' LOOP
       INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
       VALUES (
         admin_record.id, 'admin', 'new_booking', 'New Booking Created',
-        NEW.invitee_name || ' booked "' || NEW.booking_resource_name || '" with ' || NEW.booking_host_name,
+        NEW.invitee_name || ' booked "' || resource_name || '" with ' || NEW.booking_host_name,
         NEW.booking_id::text
       );
     END LOOP;
@@ -25,7 +27,7 @@ BEGIN
         INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
         VALUES (
           therapist_user_id, 'therapist', 'new_booking', 'New Booking Assigned',
-          'New session "' || NEW.booking_resource_name || '" booked with ' || NEW.invitee_name,
+          'New session "' || resource_name || '" booked with ' || NEW.invitee_name,
           NEW.booking_id::text
         );
       END IF;
@@ -38,7 +40,7 @@ BEGIN
         INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
         VALUES (
           admin_record.id, 'admin', 'booking_cancelled', 'Booking Cancelled',
-          'Session "' || NEW.booking_resource_name || '" with ' || NEW.invitee_name || ' has been cancelled',
+          'Session "' || resource_name || '" with ' || NEW.invitee_name || ' has been cancelled',
           NEW.booking_id::text
         );
       END LOOP;
@@ -49,7 +51,7 @@ BEGIN
           INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
           VALUES (
             therapist_user_id, 'therapist', 'booking_cancelled', 'Session Cancelled',
-            'Your session "' || NEW.booking_resource_name || '" with ' || NEW.invitee_name || ' has been cancelled',
+            'Your session "' || resource_name || '" with ' || NEW.invitee_name || ' has been cancelled',
             NEW.booking_id::text
           );
         END IF;
@@ -62,7 +64,7 @@ BEGIN
         INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
         VALUES (
           admin_record.id, 'admin', 'booking_rescheduled', 'Booking Rescheduled',
-          'Session "' || NEW.booking_resource_name || '" with ' || NEW.invitee_name || ' has been rescheduled',
+          'Session "' || resource_name || '" with ' || NEW.invitee_name || ' has been rescheduled',
           NEW.booking_id::text
         );
       END LOOP;
@@ -73,7 +75,7 @@ BEGIN
           INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
           VALUES (
             therapist_user_id, 'therapist', 'booking_rescheduled', 'Session Rescheduled',
-            'Your session "' || NEW.booking_resource_name || '" with ' || NEW.invitee_name || ' has been rescheduled',
+            'Your session "' || resource_name || '" with ' || NEW.invitee_name || ' has been rescheduled',
             NEW.booking_id::text
           );
         END IF;
@@ -86,7 +88,7 @@ BEGIN
         INSERT INTO notifications (user_id, user_role, notification_type, title, message, related_id)
         VALUES (
           admin_record.id, 'admin', 'no_show', 'Client No-Show',
-          NEW.invitee_name || ' did not show up for session "' || NEW.booking_resource_name || '"',
+          NEW.invitee_name || ' did not show up for session "' || resource_name || '"',
           NEW.booking_id::text
         );
       END LOOP;

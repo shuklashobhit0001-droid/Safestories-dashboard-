@@ -1233,15 +1233,16 @@ app.post('/api/leads', async (req, res) => {
     const normalizedEmail = email ? email.toLowerCase().trim() : '';
 
     // Check for existing bookings to determine correct starting stage
-    const bookingCheck = await pool.query(
-      `SELECT b.booking_resource_name, b.invitee_payment_amount, u.id as user_id
+    // Check all matching bookings to detect duplicates
+    const allBookingsCheck = await pool.query(
+      `SELECT b.booking_resource_name, b.invitee_payment_amount, b.booking_host_name, b.booking_start_at, u.id as user_id, COUNT(*) OVER() as total_matches
              FROM bookings b
              LEFT JOIN therapists t ON b.booking_host_name ILIKE '%' || SPLIT_PART(t.name, ' ', 1) || '%'
              LEFT JOIN users u ON u.therapist_id = t.therapist_id AND u.role = 'therapist'
-             WHERE (RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(b.invitee_phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10) = RIGHT($1, 10) 
+             WHERE (RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(b.invitee_phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10) = RIGHT($1, 10)
                 OR (LOWER(TRIM(b.invitee_email)) = $2 AND $2 <> ''))
              AND b.booking_status NOT IN ('cancelled', 'canceled', 'no-show')
-             ORDER BY b.booking_start_at DESC LIMIT 1`,
+             ORDER BY b.booking_start_at DESC`,
       [normalizedPhone, normalizedEmail]
     );
 
@@ -1249,8 +1250,10 @@ app.post('/api/leads', async (req, res) => {
     let therapistId = null;
     let timestampCol = 'stage_lead_inquire_at';
 
-    if (bookingCheck.rows.length > 0) {
-      const booking = bookingCheck.rows[0];
+    if (allBookingsCheck.rows.length > 0) {
+      const booking = allBookingsCheck.rows[0];
+      const totalMatches = parseInt(allBookingsCheck.rows[0].total_matches);
+
       const isFree = (booking.booking_resource_name || '').toLowerCase().includes('free consultation') ||
         parseFloat(booking.invitee_payment_amount || '0') === 0;
 
@@ -1263,18 +1266,20 @@ app.post('/api/leads', async (req, res) => {
       }
 
       // Resolve internal therapist ID
-      const therapistExtId = booking.therapist_id || booking.booking_host_user_id?.toString();
-      if (therapistExtId) {
-        const uRes = await pool.query(
-          'SELECT id FROM users WHERE therapist_id = $1 OR CAST(id AS TEXT) = $1',
-          [therapistExtId]
+      if (booking.user_id) {
+        const userCheck = await pool.query(
+          'SELECT id FROM users WHERE id = $1 AND role = "therapist"',
+          [booking.user_id]
         );
-        if (uRes.rows.length > 0) {
-          therapistId = uRes.rows[0].id;
+        if (userCheck.rows.length > 0) {
+          therapistId = booking.user_id;
         }
       }
 
-      console.log(`ℹ️ [Lead creation] Auto-routing ${name} to ${pipelineStage} based on booking history (Therapist: ${therapistId || 'N/A'}).`);
+      const matchInfo = totalMatches > 1 ? ` (${totalMatches} bookings matched, using most recent)` : '';
+      console.log(`ℹ️ [Lead creation] Auto-routing ${name} to ${pipelineStage}${matchInfo} | Booking: ${booking.booking_host_name} | Therapist: ${therapistId || 'N/A'}`);
+    } else {
+      console.log(`ℹ️ [Lead creation] No existing bookings - starting ${name} at lead-inquire`);
     }
 
     const insertQuery = `
