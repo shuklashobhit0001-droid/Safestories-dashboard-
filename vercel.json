@@ -3,8 +3,8 @@
   "outputDirectory": "public",
   "redirects": [
     {
-      "source": "/(.*)",
-      "destination": "https://panel.safestories.in/$1",
+      "source": "/:path*",
+      "destination": "https://panel.safestories.in/:path*",
       "permanent": true
     }
   ]
