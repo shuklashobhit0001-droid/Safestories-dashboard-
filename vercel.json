@@ -1,11 +1,8 @@
 {
-  "buildCommand": "mkdir -p public && echo 'redirecting' > public/index.html",
-  "outputDirectory": "public",
-  "redirects": [
+  "rewrites": [
     {
-      "source": "/:path*",
-      "destination": "https://panel.safestories.in/:path*",
-      "permanent": true
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
