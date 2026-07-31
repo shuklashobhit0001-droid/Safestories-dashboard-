@@ -13,6 +13,10 @@ import { SessionNotesPage } from './components/SessionNotesPage';
 import CRMApp from './src/crm/App';
 import { Monitor } from 'lucide-react';
 
+if (window.location.hostname.includes('safestories-dashboard.vercel.app')) {
+  window.location.replace('https://panel.safestories.in' + window.location.pathname + window.location.search + window.location.hash);
+}
+
 // Public routes — no auth needed
 const renderPublicRoute = (path: string) => {
   const sosMatch = path.match(/^\/sos-view\/(.+)$/);
