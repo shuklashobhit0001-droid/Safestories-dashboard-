@@ -1,9 +1,9 @@
 {
   "redirects": [
     {
-      "source": "/:path*",
-      "destination": "https://panel.safestories.in/:path*",
-      "permanent": true
+      "source": "/(.*)",
+      "destination": "https://panel.safestories.in/$1",
+      "statusCode": 301
     }
   ],
   "rewrites": [
