@@ -2797,8 +2797,12 @@ app.post('/api/bookings/cancel', async (req, res) => {
   }
 });
 
-// Get refunds and cancellations
-app.get('/api/refunds', async (req, res) => {
+// Root route for basic health check
+app.get('/api/test-deploy', (req, res) => {
+  res.send('DEPLOY_SUCCESS_' + Date.now());
+});
+
+app.get('/api/health', (req, res) => {
   try {
     const { status } = req.query;
     const statusStr = typeof status === 'string' ? status : '';
