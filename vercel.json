@@ -3,12 +3,12 @@
     {
       "source": "/book/:slug",
       "destination": "https://panel.safestories.in/book/:slug",
-      "statusCode": 301
+      "permanent": true
     },
     {
       "source": "/:match*",
       "destination": "https://panel.safestories.in/:match*",
-      "statusCode": 301
+      "permanent": true
     }
   ],
   "rewrites": [
