@@ -1,8 +1,8 @@
 {
   "redirects": [
     {
-      "source": "/(.*)",
-      "destination": "https://panel.safestories.in/$1",
+      "source": "/:match*",
+      "destination": "https://panel.safestories.in/:match*",
       "permanent": true
     }
   ]
