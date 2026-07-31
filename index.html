@@ -32,13 +32,26 @@
     </style>
   </head>
   <body>
-    <div id="root">
-      <div>
-        <div class="loader"></div>
-        <h1>Redirecting to the new dashboard...</h1>
-        <p>If you are not redirected automatically, <a id="fallback-link" href="https://panel.safestories.in">click here</a>.</p>
-      </div>
+    <div>
+      <div class="loader"></div>
+      <h1>Redirecting to the new dashboard...</h1>
+      <p>If you are not redirected automatically, <a id="fallback-link" href="https://panel.safestories.in">click here</a>.</p>
     </div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Perform client-side redirect preserving the path
+      var currentPath = window.location.pathname;
+      var currentSearch = window.location.search;
+      var destination = "https://panel.safestories.in" + currentPath + currentSearch;
+      
+      var link = document.getElementById('fallback-link');
+      if (link) {
+        link.href = destination;
+      }
+
+      // Attempt the redirect
+      setTimeout(function() {
+        window.location.replace(destination);
+      }, 500);
+    </script>
   </body>
 </html>
