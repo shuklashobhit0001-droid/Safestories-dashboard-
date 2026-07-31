@@ -1,5 +1,5 @@
 {
-  "buildCommand": "mkdir -p public",
+  "buildCommand": "mkdir -p public && echo 'redirecting' > public/index.html",
   "outputDirectory": "public",
   "redirects": [
     {
