@@ -943,7 +943,7 @@ app.patch('/api/leads/:id/stage', async (req, res) => {
 
         // Create audit log for stage change
         try {
-          const leadData = result.rows[0];
+          const leadData: any = result.rows[0];
           const stageNames: Record<string, string> = {
             'lead-inquire': 'Lead Inquire',
             'followup-1': 'Follow Up',
@@ -1039,7 +1039,7 @@ app.patch('/api/leads/:id', async (req, res) => {
 
         // Create audit log for lead update
         try {
-          const leadData = result.rows[0];
+          const leadData: any = result.rows[0];
           const updatedFields = Object.keys(body).filter(k => k in fieldMap).join(', ');
           await pool.query(
             `INSERT INTO crm_audit_logs (user_id, user_name, action_type, action_description, lead_id, lead_name)
@@ -1129,7 +1129,7 @@ app.post('/api/leads', async (req, res) => {
 
         // Create audit log for lead creation
         try {
-          const leadData = result.rows[0];
+          const leadData: any = result.rows[0];
           await pool.query(
             `INSERT INTO crm_audit_logs (user_id, user_name, action_type, action_description, lead_id, lead_name)
              VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -1158,7 +1158,7 @@ app.delete('/api/leads/:id', async (req, res) => {
       return res.status(404).json({ error: 'Lead not found' });
     }
 
-    const leadData = checkLead.rows[0];
+    const leadData: any = checkLead.rows[0];
 
     // Create audit log before deletion
     try {
