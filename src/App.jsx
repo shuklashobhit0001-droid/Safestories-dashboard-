@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Loader } from './components/Loader.jsx';
 
 function App() {
   useEffect(() => {
@@ -6,22 +7,13 @@ function App() {
     const currentSearch = window.location.search;
     const destination = `https://panel.safestories.in${currentPath}${currentSearch}`;
     
+    // Attempt the redirect
     setTimeout(() => {
       window.location.replace(destination);
     }, 500);
   }, []);
 
-  return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      height: '100vh',
-      fontFamily: 'sans-serif'
-    }}>
-      <h1>Redirecting to the new dashboard...</h1>
-    </div>
-  );
+  return <Loader />;
 }
 
 export default App;
