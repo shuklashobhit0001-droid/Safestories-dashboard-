@@ -7,48 +7,95 @@ import { Dashboard } from './components/Dashboard';
 import { TherapistDashboard } from './components/TherapistDashboard';
 import { MaintenancePage } from './components/MaintenancePage';
 import { SOSDocumentationView } from './components/SOSDocumentationView';
+import { PublicBookingContainer } from './components/PublicBookingContainer';
+import { BookingConfirmation } from './components/BookingConfirmation';
+import { SessionNotesPage } from './components/SessionNotesPage';
+import CRMApp from './src/crm/App';
 import { Monitor } from 'lucide-react';
 
+if (window.location.hostname.includes('safestories-dashboard.vercel.app')) {
+  window.location.replace('https://panel.safestories.in' + window.location.pathname + window.location.search + window.location.hash);
+}
+
+// Public routes — no auth needed
+const renderPublicRoute = (path: string) => {
+  const sosMatch = path.match(/^\/sos-view\/(.+)$/);
+  if (sosMatch) return <SOSDocumentationView token={sosMatch[1]} />;
+
+  const bookMatch = path.match(/^\/book\/(.+)$/);
+  if (bookMatch) return <PublicBookingContainer slug={bookMatch[1]} />;
+
+  const confirmMatch = path.match(/^\/booking-confirmation\/(.+)$/);
+  if (confirmMatch) return <BookingConfirmation bookingId={confirmMatch[1]} />;
+
+  const notesMatch = path.match(/^\/session-notes\/(.+)$/);
+  if (notesMatch) return <SessionNotesPage bookingId={notesMatch[1]} />;
+
+  return null;
+};
+
+const getPathForRole = (user: any): string => {
+  if (user?.role === 'sales') return '/crm';
+  if (user?.role === 'therapist') return '/therapist';
+  return '/';
+};
+
+const loadSavedUser = () => {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Clear stale sessions with old sales_role field
+    if ('sales_role' in parsed) {
+      localStorage.clear();
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
 const App: React.FC = () => {
-  // Check if this is an SOS documentation view (public route)
   const path = window.location.pathname;
-  const sosViewMatch = path.match(/^\/sos-view\/(.+)$/);
-  
-  if (sosViewMatch) {
-    const token = sosViewMatch[1];
-    return <SOSDocumentationView token={token} />;
-  }
 
-  // Show maintenance page only on Vercel (production)
-  const isVercel = import.meta.env.VITE_VERCEL === '1';
-  
-  if (isVercel) {
-    return <MaintenancePage />;
-  }
+  // Handle public routes before any state
+  const publicRoute = renderPublicRoute(path);
+  if (publicRoute) return publicRoute;
 
+  // Maintenance mode (Vercel/production)
+  if (import.meta.env.VITE_VERCEL === '1') return <MaintenancePage />;
+
+  const [user, setUser] = useState<any>(loadSavedUser);
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('isLoggedIn') === 'true';
-  });
-  const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('user');
-    return savedUser ? JSON.parse(savedUser) : null;
+    return !!loadSavedUser() && localStorage.getItem('isLoggedIn') === 'true';
   });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('isLoggedIn', isLoggedIn.toString());
-    if (user) {
-      localStorage.setItem('user', JSON.stringify(user));
+  const handleLogin = (userData: any) => {
+    setUser(userData);
+    setIsLoggedIn(true);
+    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('isLoggedIn', 'true');
+    const dest = getPathForRole(userData);
+    if (window.location.pathname !== dest) {
+      window.history.pushState({}, '', dest);
     }
-  }, [isLoggedIn, user]);
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setIsLoggedIn(false);
+    localStorage.removeItem('user');
+    localStorage.removeItem('isLoggedIn');
+    window.history.pushState({}, '', '/');
+  };
 
   if (isMobile) {
     return (
@@ -67,50 +114,38 @@ const App: React.FC = () => {
     );
   }
 
-  const handleLogin = (userData: any) => {
-    console.log('Login user data:', userData);
-    setUser(userData);
-    setIsLoggedIn(true);
-  };
+  if (isLoggedIn && user) {
+    const role = user.role?.toLowerCase();
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setUser(null);
-    localStorage.removeItem('isLoggedIn');
-    localStorage.removeItem('user');
-  };
-
-  if (isLoggedIn) {
-    console.log('User role:', user?.role);
-    // Role-based dashboard redirect
-    if (user?.role?.toLowerCase() === 'therapist') {
-      return <TherapistDashboard onLogout={handleLogout} user={user} />;
+    // Keep URL in sync with role
+    const correctPath = getPathForRole(user);
+    if (path !== correctPath) {
+      window.history.replaceState({}, '', correctPath);
     }
-    
-    // Default admin dashboard
+
+    if (role === 'sales') {
+      return <CRMApp user={user} onLogout={handleLogout} />;
+    }
+    if (role === 'therapist') return <TherapistDashboard onLogout={handleLogout} user={user} />;
     return <Dashboard onLogout={handleLogout} user={user} />;
   }
 
+  // Login page
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row bg-white overflow-hidden">
-      {/* Left Section - Form */}
       <div className="w-full md:w-1/2 flex flex-col justify-between p-8 md:p-12 lg:p-16 relative">
         <div className="flex-none">
           <Logo />
         </div>
-        
         <div className="flex-grow flex items-center justify-center py-10">
           <div className="w-full max-w-md">
             <LoginForm onLogin={handleLogin} />
           </div>
         </div>
-
         <div className="flex-none flex justify-center">
-            <Footer />
+          <Footer />
         </div>
       </div>
-
-      {/* Right Section - Hero Panel */}
       <div className="hidden md:flex md:w-1/2 p-4 h-screen">
         <HeroPanel />
       </div>
