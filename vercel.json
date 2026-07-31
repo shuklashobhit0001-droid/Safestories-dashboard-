@@ -3,7 +3,7 @@
     {
       "source": "/:path*",
       "destination": "https://panel.safestories.in/:path*",
-      "permanent": 301
+      "permanent": true
     }
   ],
   "rewrites": [
